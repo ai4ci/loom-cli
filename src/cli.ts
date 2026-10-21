@@ -1,8 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { Command } from "commander";
-import { absolute, loadConfig, type Config } from "./config.ts";
-import { DesignDocsError } from "./diagnostics.ts";
+import { absolute, loadConfig, RESERVED_SCHEMES, type Config } from "./config.ts";
+import { DesignDocsError, error, summarise } from "./diagnostics.ts";
 import { getLinksBlock, parseInstance } from "./document.ts";
+import { validateInstance } from "./instance.ts";
+import { loadModel } from "./model/load.ts";
 import { serialise, type OutputFormat } from "./output.ts";
 import { canonicalise, formatUri, fsExists, parseUri, resolveUri } from "./uri.ts";
 
@@ -12,13 +14,15 @@ export interface CliRun {
   err: string;
 }
 
+/** A command returns data to emit and, optionally, a non-zero exit code. */
+interface CommandOutput {
+  value: unknown;
+  code?: number;
+}
+
 interface GlobalOptions {
   json?: boolean;
   cwd?: string;
-}
-
-function formatOf(options: GlobalOptions): OutputFormat {
-  return options.json ? "json" : "yaml";
 }
 
 function resolveTarget(raw: string, cfg: Config) {
@@ -27,42 +31,78 @@ function resolveTarget(raw: string, cfg: Config) {
   return { uri, resolved, absolutePath: absolute(cfg, resolved.path) };
 }
 
-function resolveCommand(raw: string, cfg: Config) {
+function resolveCommand(cfg: Config, raw: string): CommandOutput {
   const { uri, resolved, absolutePath } = resolveTarget(raw, cfg);
   return {
-    uri: formatUri(canonicalise(resolved.path, cfg, uri.anchor)),
-    scheme: uri.scheme,
-    path: resolved.path,
-    absolutePath,
-    ...(uri.anchor === undefined ? {} : { anchor: uri.anchor }),
-    candidates: resolved.candidates,
-    ambiguous: resolved.ambiguous,
-    exists: existsSync(absolutePath),
+    value: {
+      uri: formatUri(canonicalise(resolved.path, cfg, uri.anchor)),
+      scheme: uri.scheme,
+      path: resolved.path,
+      absolutePath,
+      ...(uri.anchor === undefined ? {} : { anchor: uri.anchor }),
+      candidates: resolved.candidates,
+      ambiguous: resolved.ambiguous,
+      exists: existsSync(absolutePath),
+    },
   };
 }
 
-function showCommand(raw: string, cfg: Config) {
+function readInstance(raw: string, cfg: Config) {
   const { uri, resolved, absolutePath } = resolveTarget(raw, cfg);
   if (!existsSync(absolutePath)) {
-    throw new DesignDocsError({
-      severity: "error",
-      code: "instance/not-found",
+    throw new DesignDocsError(error("instance/not-found", `no file at ${resolved.path}`, {
       uri: formatUri(uri),
-      message: `no file at ${resolved.path}`,
-    });
+    }));
   }
-
-  const file = parseInstance(readFileSync(absolutePath, "utf8"));
   return {
-    uri: formatUri(canonicalise(resolved.path, cfg, uri.anchor)),
+    canonical: canonicalise(resolved.path, cfg, uri.anchor),
     path: resolved.path,
-    frontmatter: file.frontmatter === null ? null : file.frontmatter.toJS(),
-    links: getLinksBlock(file.markdown),
-    markdown: file.markdown,
+    file: parseInstance(readFileSync(absolutePath, "utf8")),
   };
 }
 
-export function buildProgram(emit: (text: string) => void): Command {
+function showCommand(cfg: Config, raw: string): CommandOutput {
+  const { canonical, path, file } = readInstance(raw, cfg);
+  return {
+    value: {
+      uri: formatUri(canonical),
+      path,
+      frontmatter: file.frontmatter === null ? null : file.frontmatter.toJS(),
+      links: getLinksBlock(file.markdown),
+      markdown: file.markdown,
+    },
+  };
+}
+
+function modelCheckCommand(cfg: Config, override?: string): CommandOutput {
+  const model = loadModel(cfg, override);
+  const report = summarise(model.diagnostics);
+  return { value: { model: model.path, ...report }, code: report.ok ? 0 : 1 };
+}
+
+function validateCommand(cfg: Config, raw: string, override?: string): CommandOutput {
+  const { schema } = loadModel(cfg, override);
+  const { canonical, path, file } = readInstance(raw, cfg);
+
+  if (RESERVED_SCHEMES.has(canonical.scheme)) {
+    throw new DesignDocsError(error(
+      "uri/not-a-class",
+      `${path} is not under any class root, so it has no class to validate against`,
+      { uri: formatUri(canonical) },
+    ));
+  }
+
+  const data = (file.frontmatter?.toJS() ?? {}) as Record<string, unknown>;
+  const uri = formatUri({ scheme: canonical.scheme, path: canonical.path });
+  const report = summarise(validateInstance(schema, cfg, {
+    uri,
+    className: canonical.scheme,
+    data,
+  }));
+  return { value: { uri, ...report }, code: report.ok ? 0 : 1 };
+}
+
+export function buildProgram(emit: (text: string) => void, setCode: (code: number) => void): Command {
   const program = new Command();
 
   program
@@ -71,23 +111,43 @@ export function buildProgram(emit: (text: string) => void): Command {
     .option("--json", "emit JSON instead of YAML")
     .option("--cwd <dir>", "directory to resolve configuration from");
 
-  const withConfig = (action: (raw: string, cfg: Config) => unknown) => (raw: string) => {
-    const options = program.opts<GlobalOptions>();
-    const cfg = loadConfig(options.cwd ?? process.cwd());
-    emit(serialise(action(raw, cfg), formatOf(options)));
-  };
+  const runWith = (action: (cfg: Config, ...args: string[]) => CommandOutput) =>
+    (...args: unknown[]) => {
+      const options = program.opts<GlobalOptions>();
+      const cfg = loadConfig(options.cwd ?? process.cwd());
+      // commander passes the Command object last; command options second-last.
+      const positional = args.slice(0, -2) as string[];
+      const commandOptions = (args.at(-2) ?? {}) as { model?: string };
+      const result = action(cfg, ...positional, ...(commandOptions.model === undefined ? [] : [commandOptions.model]));
+      emit(serialise(result.value, options.json ? "json" : ("yaml" as OutputFormat)));
+      if (result.code) setCode(result.code);
+    };
 
   program
     .command("resolve")
     .argument("<uri>", "design uri to resolve")
     .description("resolve a uri to a repo-relative path")
-    .action(withConfig(resolveCommand));
+    .action(runWith(resolveCommand));
 
   program
     .command("show")
     .argument("<uri>", "design uri of an instance")
     .description("show an instance's frontmatter, links and markdown")
-    .action(withConfig(showCommand));
+    .action(runWith(showCommand));
+
+  const model = program.command("model").description("document model commands");
+  model
+    .command("check")
+    .option("--model <path>", "check a proposed model instead of the installed one")
+    .description("parse and validate the document model")
+    .action(runWith(modelCheckCommand));
+
+  program
+    .command("validate")
+    .argument("<uri>", "design uri of an instance")
+    .option("--model <path>", "validate against a proposed model")
+    .description("validate one instance against the document model")
+    .action(runWith(validateCommand));
 
   return program;
 }
@@ -95,10 +155,16 @@ export function buildProgram(emit: (text: string) => void): Command {
 export function run(argv: string[]): CliRun {
   let out = "";
   let err = "";
+  let code = 0;
 
-  const program = buildProgram((text) => {
-    out += text;
-  });
+  const program = buildProgram(
+    (text) => {
+      out += text;
+    },
+    (next) => {
+      code = next;
+    },
+  );
   program.exitOverride();
   program.configureOutput({
     writeOut: (text) => {
@@ -111,14 +177,13 @@ export function run(argv: string[]): CliRun {
 
   try {
     program.parse(argv, { from: "user" });
-    return { code: 0, out, err };
+    return { code, out, err };
   } catch (cause) {
     if (cause instanceof DesignDocsError) {
       return { code: 1, out, err: `${cause.diagnostic.code}: ${cause.message}\n` };
     }
-    // commander throws for --help and usage errors, carrying its own exit code.
-    const code = (cause as { exitCode?: number }).exitCode;
-    if (typeof code === "number") return { code, out, err };
+    const exitCode = (cause as { exitCode?: number }).exitCode;
+    if (typeof exitCode === "number") return { code: exitCode, out, err };
     return { code: 2, out, err: `${(cause as Error).message}\n` };
   }
 }

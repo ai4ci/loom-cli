@@ -36,3 +36,21 @@ export function error(code: string, message: string, rest: Partial<Diagnostic> =
 export function warning(code: string, message: string, rest: Partial<Diagnostic> = {}): Diagnostic {
   return { severity: "warning", code, message, ...rest };
 }
+
+export interface Report {
+  ok: boolean;
+  errors: number;
+  warnings: number;
+  diagnostics: Diagnostic[];
+}
+
+/** Warnings do not fail a run; errors do (plan §1.4). */
+export function summarise(diagnostics: Diagnostic[]): Report {
+  const errors = diagnostics.filter((d) => d.severity === "error").length;
+  return {
+    ok: errors === 0,
+    errors,
+    warnings: diagnostics.length - errors,
+    diagnostics,
+  };
+}
