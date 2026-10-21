@@ -1,0 +1,22 @@
+{
+  "name": "design-docs",
+  "version": "0.1.0",
+  "description": "Configurable in-project design documentation",
+  "type": "module",
+  "license": "MIT",
+  "bin": { "design-docs": "./dist/cli.js" },
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test 'test/**/*.test.ts'"
+  },
+  "dependencies": {
+    "commander": "^14.0.2",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "typescript": "^5.9.3"
+  }
+}
