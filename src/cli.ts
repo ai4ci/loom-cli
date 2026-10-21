@@ -6,6 +6,7 @@ import { parse as parseYaml } from "yaml";
 import { readFileSync as readTextFile } from "node:fs";
 import { type Op, parseChangeset } from "./changeset.ts";
 import { unifiedDiff } from "./diff.ts";
+import { databasePath, query, rebuild } from "./duckdb.ts";
 import { getLinksBlock, parseInstance } from "./document.ts";
 import { applyFixes } from "./fix.ts";
 import { commit, planChangeset } from "./mutate.ts";
@@ -188,6 +189,18 @@ function applyOps(cfg: Config, ops: Op[], options: { dryRun?: boolean }): Comman
   };
 }
 
+async function rebuildCommand(cfg: Config): Promise<CommandOutput> {
+  const { schema } = loadModel(cfg);
+  const { graph } = loadGraph(cfg, schema);
+  return { value: await rebuild(graph) };
+}
+
+async function queryCommand(cfg: Config, sql: string): Promise<CommandOutput> {
+  // A missing database is a stale cache, not a user error: rebuild it.
+  if (!existsSync(absolute(cfg, databasePath(cfg)))) await rebuildCommand(cfg);
+  return { value: await query(cfg, sql) };
+}
+
 function applyCommand(cfg: Config, file: string, options: { dryRun?: boolean }): CommandOutput {
   const { ops, diagnostics } = parseChangeset(readTextFile(file, "utf8"));
   if (diagnostics.length > 0) return { value: summarise(diagnostics), code: 1 };
@@ -250,7 +263,7 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
       if (result.code) setCode(result.code);
     });
 
-  const finish = (result: CommandOutput) => {
+  const finish = (result: CommandOutput): void => {
     const options = program.opts<GlobalOptions>();
     emit(serialise(result.value, options.json ? "json" : ("yaml" as OutputFormat)));
     if (result.code) setCode(result.code);
@@ -314,10 +327,25 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
       finish(applyOps(configNow(), [{ op: "delete", uri }], {}));
     });
 
+  program
+    .command("rebuild")
+    .description("rebuild the derived database from the files")
+    .action(async () => {
+      finish(await rebuildCommand(configNow()));
+    });
+
+  program
+    .command("query")
+    .argument("<sql>", "sql to run against the derived database")
+    .description("query the derived database")
+    .action(async (sql: string) => {
+      finish(await queryCommand(configNow(), sql));
+    });
+
   return program;
 }
 
-export function run(argv: string[]): CliRun {
+export async function run(argv: string[]): Promise<CliRun> {
   let out = "";
   let err = "";
   let code = 0;
@@ -341,7 +369,7 @@ export function run(argv: string[]): CliRun {
   });
 
   try {
-    program.parse(argv, { from: "user" });
+    await program.parseAsync(argv, { from: "user" });
     return { code, out, err };
   } catch (cause) {
     if (cause instanceof DesignDocsError) {
@@ -357,7 +385,7 @@ const invokedDirectly = process.argv[1] !== undefined
   && import.meta.filename.replace(/\.ts$/, ".js") === process.argv[1].replace(/\.ts$/, ".js");
 
 if (invokedDirectly) {
-  const result = run(process.argv.slice(2));
+  const result = await run(process.argv.slice(2));
   if (result.out) process.stdout.write(result.out);
   if (result.err) process.stderr.write(result.err);
   process.exit(result.code);
