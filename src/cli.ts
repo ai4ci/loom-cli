@@ -3,8 +3,11 @@ import { Command } from "commander";
 import { absolute, loadConfig, RESERVED_SCHEMES, type Config } from "./config.ts";
 import { DesignDocsError, error, summarise } from "./diagnostics.ts";
 import { getLinksBlock, parseInstance } from "./document.ts";
+import { applyFixes } from "./fix.ts";
+import { loadGraph, validateGraph } from "./graph.ts";
 import { validateInstance } from "./instance.ts";
 import { loadModel } from "./model/load.ts";
+import { writeReport } from "./report.ts";
 import { serialise, type OutputFormat } from "./output.ts";
 import { canonicalise, formatUri, fsExists, parseUri, resolveUri } from "./uri.ts";
 
@@ -80,7 +83,7 @@ function modelCheckCommand(cfg: Config, override?: string): CommandOutput {
   return { value: { model: model.path, ...report }, code: report.ok ? 0 : 1 };
 }
 
-function validateCommand(cfg: Config, raw: string, override?: string): CommandOutput {
+function validateOneCommand(cfg: Config, raw: string, override?: string): CommandOutput {
   const { schema } = loadModel(cfg, override);
   const { canonical, path, file } = readInstance(raw, cfg);
 
@@ -100,6 +103,40 @@ function validateCommand(cfg: Config, raw: string, override?: string): CommandOu
     data,
   }));
   return { value: { uri, ...report }, code: report.ok ? 0 : 1 };
+}
+
+function validateAllCommand(
+  cfg: Config,
+  options: { model?: string; fix?: boolean },
+): CommandOutput {
+  const { schema } = loadModel(cfg, options.model);
+
+  const check = () => {
+    const { graph, diagnostics } = loadGraph(cfg, schema);
+    return { graph, report: summarise([...diagnostics, ...validateGraph(graph)]) };
+  };
+
+  let { graph, report } = check();
+  let fixed: string[] | undefined;
+
+  if (options.fix) {
+    fixed = applyFixes(graph);
+    // Re-read from disk so the reported state is the state on disk.
+    ({ graph, report } = check());
+  }
+
+  // A proposed model is a what-if, so it must not overwrite the report.
+  const reportPath = options.model === undefined ? writeReport(cfg, report) : undefined;
+
+  return {
+    value: {
+      instances: graph.instances.size,
+      ...(reportPath === undefined ? {} : { report: reportPath }),
+      ...(fixed === undefined ? {} : { fixed }),
+      ...report,
+    },
+    code: report.ok ? 0 : 1,
+  };
 }
 
 export function buildProgram(emit: (text: string) => void, setCode: (code: number) => void): Command {
@@ -144,10 +181,19 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
 
   program
     .command("validate")
-    .argument("<uri>", "design uri of an instance")
+    .argument("[uri]", "design uri of an instance; omit to check the whole repository")
     .option("--model <path>", "validate against a proposed model")
-    .description("validate one instance against the document model")
-    .action(runWith(validateCommand));
+    .option("--fix", "apply the unambiguous repairs")
+    .description("validate the repository, or one instance, against the document model")
+    .action((uri: string | undefined, commandOptions: { model?: string; fix?: boolean }) => {
+      const options = program.opts<GlobalOptions>();
+      const cfg = loadConfig(options.cwd ?? process.cwd());
+      const result = uri === undefined
+        ? validateAllCommand(cfg, commandOptions)
+        : validateOneCommand(cfg, uri, commandOptions.model);
+      emit(serialise(result.value, options.json ? "json" : ("yaml" as OutputFormat)));
+      if (result.code) setCode(result.code);
+    });
 
   return program;
 }

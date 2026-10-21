@@ -55,7 +55,11 @@ export function classRootsFor(cfg: Config, className: string): string[] {
       error("config/reserved-scheme", `"${className}" is a reserved scheme, not a class`),
     );
   }
-  return cfg.classRoots[className] ?? [`${cfg.designRoot}/${className}`];
+  const configured = cfg.classRoots[className];
+  if (configured !== undefined) return configured;
+  // Scope §IA.9: src maps to the source tree, not under the design folder.
+  if (className === "src") return ["src"];
+  return [`${cfg.designRoot}/${className}`];
 }
 
 /** Absolute path for a repo-relative path. */

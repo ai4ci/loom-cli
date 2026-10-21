@@ -24,3 +24,26 @@ export const MODEL = `classDiagram
     issue "0..*" --> "0..*" issue : blocks
     issue "1" --> "0..*" src : implemented-by
 `;
+
+/** A model with cross-file constraints: inbound cardinality, resources, paths. */
+export const GRAPH_MODEL = `classDiagram
+    class issue {
+        +string title
+        +IssueStatus status
+        +path spec?
+    }
+
+    class decision {
+        +string title
+    }
+
+    class IssueStatus {
+        <<enumeration>>
+        open
+        closed
+    }
+
+    issue "0..1" --> "0..*" decision : decided-by
+    issue "0..*" --> "0..*" issue : blocks
+    issue "0..*" --> "0..*" resource : attachment
+`;
