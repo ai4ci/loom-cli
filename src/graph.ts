@@ -24,6 +24,8 @@ export interface InstanceNode {
   path: string;
   data: Record<string, unknown>;
   file: InstanceFile;
+  /** File content as read, so a mutation can tell what actually changed. */
+  source: string;
 }
 
 export interface Edge {
@@ -116,34 +118,50 @@ export function loadGraph(
 
         const id = repoRelative.slice(root.length + 1);
         const uri = formatUri({ scheme: className, path: id });
-        instances.set(uri, { uri, className, id, path: repoRelative, data, file });
+        instances.set(uri, {
+          uri,
+          className,
+          id,
+          path: repoRelative,
+          data,
+          file,
+          source: readFileSync(absolutePath, "utf8"),
+        });
       }
     }
   }
 
+  const graph: Graph = { cfg, schema, instances, edges: [] };
+  rebuildEdges(graph);
+  return { graph, diagnostics };
+}
+
+/** Recompute the triples from the yaml. Call after any in-memory mutation. */
+export function rebuildEdges(graph: Graph): void {
   const edges: Edge[] = [];
-  for (const node of instances.values()) {
-    for (const relation of effectiveRelations(schema, node.className)) {
+  for (const node of graph.instances.values()) {
+    for (const relation of effectiveRelations(graph.schema, node.className)) {
       for (const raw of asList(node.data[relation.name])) {
         if (typeof raw !== "string") continue;
-        let target: string;
         try {
           const parsed = parseUri(raw);
           // Store the canonical spelling so the triple store is consistent
           // however the author wrote it.
-          target = formatUri(canonicalise(resolvePath(parsed, cfg), cfg, parsed.anchor));
+          edges.push({
+            from: node.uri,
+            relation: relation.name,
+            to: formatUri(canonicalise(resolvePath(parsed, graph.cfg), graph.cfg, parsed.anchor)),
+          });
         } catch {
-          continue; // reported by validateInstance
+          // reported by validateInstance
         }
-        edges.push({ from: node.uri, relation: relation.name, to: target });
       }
     }
   }
-
-  return { graph: { cfg, schema, instances, edges }, diagnostics };
+  graph.edges = edges;
 }
 
-function resolvePath(parsed: { scheme: string; path: string }, cfg: Config): string {
+export function resolvePath(parsed: { scheme: string; path: string }, cfg: Config): string {
   if (parsed.scheme === "repo") return parsed.path;
   if (parsed.scheme === "design") return `${cfg.designRoot}/${parsed.path}`;
   return `${classRootsFor(cfg, parsed.scheme)[0]!}/${parsed.path}`;

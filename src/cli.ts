@@ -2,8 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { Command } from "commander";
 import { absolute, loadConfig, RESERVED_SCHEMES, type Config } from "./config.ts";
 import { DesignDocsError, error, summarise } from "./diagnostics.ts";
+import { parse as parseYaml } from "yaml";
+import { readFileSync as readTextFile } from "node:fs";
+import { type Op, parseChangeset } from "./changeset.ts";
+import { unifiedDiff } from "./diff.ts";
 import { getLinksBlock, parseInstance } from "./document.ts";
 import { applyFixes } from "./fix.ts";
+import { commit, planChangeset } from "./mutate.ts";
 import { loadGraph, validateGraph } from "./graph.ts";
 import { validateInstance } from "./instance.ts";
 import { loadModel } from "./model/load.ts";
@@ -139,6 +144,56 @@ function validateAllCommand(
   };
 }
 
+/** `key=value` pairs, with the value read as a yaml scalar. */
+function parseAssignments(pairs: string[]): Record<string, unknown> {
+  const attrs: Record<string, unknown> = {};
+  for (const pair of pairs) {
+    const split = pair.indexOf("=");
+    if (split < 0) {
+      throw new DesignDocsError(error("cli/bad-assignment", `expected key=value, got ${pair}`));
+    }
+    attrs[pair.slice(0, split)] = parseYaml(pair.slice(split + 1));
+  }
+  return attrs;
+}
+
+function applyOps(cfg: Config, ops: Op[], options: { dryRun?: boolean }): CommandOutput {
+  const { schema } = loadModel(cfg);
+  const plan = planChangeset(cfg, schema, ops);
+  const report = summarise(plan.diagnostics);
+
+  if (!report.ok) return { value: report, code: 1 };
+
+  if (options.dryRun) {
+    return {
+      value: {
+        dryRun: true,
+        changes: plan.writes.map((write) => ({
+          path: write.path,
+          action: write.content === null ? "delete" : write.before === null ? "create" : "update",
+          diff: unifiedDiff(write.before ?? "", write.content ?? ""),
+        })),
+        ...report,
+      },
+    };
+  }
+
+  commit(cfg, plan.writes);
+  return {
+    value: {
+      written: plan.writes.filter((w) => w.content !== null).map((w) => w.path),
+      removed: plan.writes.filter((w) => w.content === null).map((w) => w.path),
+      ...report,
+    },
+  };
+}
+
+function applyCommand(cfg: Config, file: string, options: { dryRun?: boolean }): CommandOutput {
+  const { ops, diagnostics } = parseChangeset(readTextFile(file, "utf8"));
+  if (diagnostics.length > 0) return { value: summarise(diagnostics), code: 1 };
+  return applyOps(cfg, ops, options);
+}
+
 export function buildProgram(emit: (text: string) => void, setCode: (code: number) => void): Command {
   const program = new Command();
 
@@ -193,6 +248,70 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
         : validateOneCommand(cfg, uri, commandOptions.model);
       emit(serialise(result.value, options.json ? "json" : ("yaml" as OutputFormat)));
       if (result.code) setCode(result.code);
+    });
+
+  const finish = (result: CommandOutput) => {
+    const options = program.opts<GlobalOptions>();
+    emit(serialise(result.value, options.json ? "json" : ("yaml" as OutputFormat)));
+    if (result.code) setCode(result.code);
+  };
+  const configNow = () => loadConfig(program.opts<GlobalOptions>().cwd ?? process.cwd());
+
+  program
+    .command("apply")
+    .argument("<changeset>", "path to a changeset yaml file")
+    .option("--dry-run", "show what would be written without writing it")
+    .description("apply a changeset transactionally")
+    .action((file: string, options: { dryRun?: boolean }) => {
+      finish(applyCommand(configNow(), file, options));
+    });
+
+  program
+    .command("rename")
+    .argument("<from>", "current uri")
+    .argument("<to>", "new uri")
+    .option("--dry-run", "show what would be written without writing it")
+    .description("move an instance and rewrite every inbound uri")
+    .action((from: string, to: string, options: { dryRun?: boolean }) => {
+      finish(applyOps(configNow(), [{ op: "rename", from, to }], options));
+    });
+
+  program
+    .command("create")
+    .argument("<uri>", "uri of the new instance")
+    .argument("[assignments...]", "key=value attributes")
+    .description("create an instance")
+    .action((uri: string, assignments: string[]) => {
+      finish(applyOps(configNow(), [{ op: "create", uri, attrs: parseAssignments(assignments) }], {}));
+    });
+
+  program
+    .command("set")
+    .argument("<uri>", "uri of the instance")
+    .argument("<assignments...>", "key=value attributes")
+    .description("set attributes on an instance")
+    .action((uri: string, assignments: string[]) => {
+      finish(applyOps(configNow(), [{ op: "set", uri, attrs: parseAssignments(assignments) }], {}));
+    });
+
+  for (const verb of ["link", "unlink"] as const) {
+    program
+      .command(verb)
+      .argument("<from>", "source instance uri")
+      .argument("<relation>", "relation name")
+      .argument("<to>", "target uri")
+      .description(`${verb} two instances`)
+      .action((from: string, rel: string, to: string) => {
+        finish(applyOps(configNow(), [{ op: verb, from, rel, to }], {}));
+      });
+  }
+
+  program
+    .command("delete")
+    .argument("<uri>", "uri of the instance")
+    .description("delete an instance")
+    .action((uri: string) => {
+      finish(applyOps(configNow(), [{ op: "delete", uri }], {}));
     });
 
   return program;
