@@ -517,7 +517,7 @@ New diagnostic codes introduced by this document:
 | Drift tier §6.1 (candidate suggestion) | **Built** |
 | Broken anchor detection (`graph/missing-symbol`) | **Built**, detection only |
 | `refs` reverse lookup | **Built** |
-| `ls`, `locate` | Specified |
+| `ls`, `locate` | **Built** |
 | Annotation writing (`link` on a `src://` subject) | Specified |
 | Drift tier §6.2 (git rename inference) | Specified |
 | Body fingerprints §6.3 | Deferred |

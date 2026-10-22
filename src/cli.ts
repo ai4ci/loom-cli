@@ -5,6 +5,7 @@ import { DesignDocsError, error, summarise } from "./diagnostics.ts";
 import { parse as parseYaml } from "yaml";
 import { readFileSync as readTextFile } from "node:fs";
 import { type Op, parseChangeset } from "./changeset.ts";
+import { listUri, locateLine } from "./browse.ts";
 import { unifiedDiff } from "./diff.ts";
 import { databasePath, query, rebuild } from "./duckdb.ts";
 import { cosineSimilarity, embedder } from "./embeddings.ts";
@@ -291,6 +292,30 @@ function applyCommand(cfg: Config, file: string, options: { dryRun?: boolean }):
   return applyOps(cfg, ops, options);
 }
 
+function lsCommand(
+  cfg: Config,
+  raw: string,
+  options: { depth?: string; kind?: string; linked?: boolean; unlinked?: boolean },
+): CommandOutput {
+  const { schema } = loadModel(cfg);
+  const { graph } = loadGraph(cfg, schema);
+  return {
+    value: listUri(cfg, graph, raw, {
+      depth: options.depth === undefined ? 1 : Number(options.depth),
+      ...(options.kind === undefined ? {} : { kinds: options.kind.split(",").map((k) => k.trim()) }),
+      ...(options.linked ? { linked: true } : {}),
+      ...(options.unlinked ? { unlinked: true } : {}),
+    }),
+  };
+}
+
+function locateCommand(cfg: Config, raw: string, options: { line?: string }): CommandOutput {
+  if (options.line === undefined) {
+    throw new DesignDocsError(error("cli/missing-option", "locate needs --line <n>"));
+  }
+  return { value: locateLine(cfg, raw, Number(options.line)) };
+}
+
 function refsCommand(cfg: Config, raw: string): CommandOutput {
   const { schema } = loadModel(cfg);
   const { graph } = loadGraph(cfg, schema);
@@ -459,6 +484,27 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .description("find design documents referencing a source symbol")
     .action((srcUri: string) => {
       finish(refsCommand(configNow(), srcUri));
+    });
+
+  program
+    .command("ls")
+    .argument("<uri>", "class, directory, file or anchor to list below")
+    .option("--depth <n>", "how far to descend", "1")
+    .option("--kind <kinds>", "comma-separated structure kinds to keep")
+    .option("--linked", "only entries a design document already points at")
+    .option("--unlinked", "only entries nothing points at")
+    .description("list what can be linked to")
+    .action((uri: string, options: { depth?: string; kind?: string; linked?: boolean; unlinked?: boolean }) => {
+      finish(lsCommand(configNow(), uri, options));
+    });
+
+  program
+    .command("locate")
+    .argument("<uri>", "source file uri")
+    .option("--line <n>", "line number to locate")
+    .description("the address of a line: its innermost linkable ancestor")
+    .action((uri: string, options: { line?: string }) => {
+      finish(locateCommand(configNow(), uri, options));
     });
 
   program

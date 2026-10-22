@@ -157,7 +157,7 @@ markdown: "\nProse.\n"  # everything after the frontmatter, verbatim
 
 Exits 1 with `instance/not-found` when the file is missing.
 
-### △ specified: `ls [uri]`
+### `ls <uri>`
 
 List what can be linked to. The uri space is one hierarchy in which `#anchor`
 is a deeper level than the path, so `ls` is directory descent and needs no mode
@@ -194,7 +194,7 @@ What counts as a linkable anchor is a configured policy over the language
 pack's normalised structure kinds — see source-linkage §2.1. If `ls` does not
 list it, it is not linkable.
 
-### △ specified: `locate <uri> --line <n>`
+### `locate <uri> --line <n>`
 
 The address of a line: the reverse of `resolve`.
 
@@ -487,15 +487,16 @@ Codes are stable identifiers; match on these rather than on message text.
 
 | Namespace | Raised by | Meaning |
 |---|---|---|
-| `cli/` | argument parsing | `bad-assignment` |
+| `cli/` | argument parsing | `bad-assignment`, `missing-option` |
 | `config/` | configuration | `reserved-scheme` |
 | `uri/` | uri handling | `malformed`, `escapes-root`, `not-a-class` |
 | `model/` | model parsing and validation | see below |
 | `instance/` | one instance against the model | see below |
 | `graph/` | cross-file checks | see below |
-| `source/` | source code addressing and reverse links | `dangling-reverse-link`, `invalid-reverse-relation`; **△** `ambiguous-anchor`, `not-annotatable`, `unsupported-language`, `verification-failed` |
+| `source/` | source code addressing and reverse links | `dangling-reverse-link`, `invalid-reverse-relation`, `ambiguous-anchor`, `unsupported-language`; **△** `not-annotatable`, `verification-failed` |
 | `changeset/` | changeset parsing and application | see below |
 | `query/` | derived database | `no-database`, `failed` |
+| `ls/` | discovery | `not-found`, `not-a-class`, `not-a-directory` |
 
 **`model/`** — `syntax`, `unknown-type`, `untyped-attribute`,
 `malformed-member`, `duplicate-class`, `unknown-class`, `name-collision`,
@@ -545,21 +546,13 @@ single-element `diagnostics` array.
 field, so a document literally named `text` would be ambiguous. Harmless today;
 a `mode: text | uri` field would be cleaner.
 
-**A bare anchor silently takes the first match.** With `class Alpha { run() }`
-and `class Beta { run() }`, `src://x.ts#run` resolves to `Alpha.run` with no
-indication the choice was arbitrary. Fixed by the uniqueness invariant in
-source-linkage §2.2, which is specified but not yet built.
-
 **Global options must precede the command.** Commander's default behaviour, but
 an easy mistake — `design-docs validate --json` silently ignores `--json`.
 
 ## 9. Not built
 
-Commands marked **△ specified** above — `ls`, `locate`, and the source-writing
-half of `link`/`unlink` — are designed in
-[source-linkage.md](./source-linkage.md) and not yet implemented, along with the
-anchor-kind policy, the uniqueness invariant and overload qualification that
-they depend on.
+The source-writing half of `link`/`unlink`, marked **△ specified** above, is
+designed in [source-linkage.md](./source-linkage.md) and not yet implemented.
 
 Deferred deliberately; see implementation-plan for the reasoning.
 
