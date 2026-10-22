@@ -1,6 +1,6 @@
 {
   "name": "design-docs",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Configurable in-project design documentation",
   "type": "module",
   "license": "MIT",

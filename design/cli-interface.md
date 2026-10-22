@@ -258,6 +258,7 @@ With `--fix`, a `fixed` array lists the paths rewritten.
 **What `--fix` repairs**, and only this:
 - a protected link block that disagrees with the yaml (`graph/stale-links`)
 - a uri that is not in its most compact form (`graph/non-canonical-uri`)
+- a source anchor whose declaration was renamed since HEAD (`graph/renamed-symbol`)
 
 Everything else is reported. A dangling link is a judgement call — the tool
 does not guess whether to create the target or drop the reference.
@@ -515,7 +516,7 @@ Codes are stable identifiers; match on these rather than on message text.
 
 **`graph/`** — `orphan-file`, `dangling-link`, `inbound-cardinality`,
 `missing-path`, `missing-resource`, `missing-source-file`, `missing-symbol`,
-`stale-links`, `non-canonical-uri`.
+`renamed-symbol`, `stale-links`, `non-canonical-uri`.
 
 **`changeset/`** — `unparseable`, `no-ops`, `malformed-op`, `unknown-op`,
 `missing-field`, `not-found`, `already-exists`, `not-instantiable`,

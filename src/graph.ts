@@ -19,6 +19,7 @@ import {
   isSubclassOf,
 } from "./model/schema.ts";
 import type { Cardinality, SchemaIR } from "./model/types.ts";
+import { contentAtHead, inferRename } from "./drift.ts";
 import { similarity } from "./similarity.ts";
 import { canonicalise, formatUri, parseUri } from "./uri.ts";
 
@@ -330,11 +331,26 @@ export function validateGraph(graph: Graph): Diagnostic[] {
               { uri: edge.from, fix: `qualify it: ${resolved.candidates.join(" | ")}` },
             ));
           } else if (!resolved.ok) {
-            found.push(error(
-              "graph/missing-symbol",
-              `symbol "${parsed.anchor}" not found in ${res}`,
-              { uri: edge.from, ...suggestNearest(code, lang, parsed.anchor, cfg.anchorPolicy) },
-            ));
+            // Tier 2 first: a rename inferred from HEAD is a repair, not a guess.
+            const previous = contentAtHead(cfg, res);
+            const renamed = previous === null
+              ? null
+              : inferRename(previous, code, lang, cfg.anchorPolicy, parsed.anchor);
+
+            if (renamed !== null) {
+              const to = formatUri({ scheme: parsed.scheme, path: parsed.path, anchor: renamed.to });
+              found.push(error(
+                "graph/renamed-symbol",
+                `"${parsed.anchor}" appears to have been renamed to "${renamed.to}" in ${res}`,
+                { uri: edge.from, fix: `rewrite as ${to}` },
+              ));
+            } else {
+              found.push(error(
+                "graph/missing-symbol",
+                `symbol "${parsed.anchor}" not found in ${res}`,
+                { uri: edge.from, ...suggestNearest(code, lang, parsed.anchor, cfg.anchorPolicy) },
+              ));
+            }
           }
         }
       }

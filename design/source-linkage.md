@@ -455,7 +455,14 @@ report it as auto-fixable and let `--fix` rewrite the anchor.
 
 This is the tier that actually catches refactors. Cost is one `git show HEAD:<path>`
 and a second parse per broken anchor — paid only when something is already
-wrong. The tool already assumes a git repository.
+wrong. Outside a repository, or before the first commit, `git show` fails and
+the check is skipped; the anchor is still reported as missing.
+
+A match needs the same structure kind, a name that did not already exist
+before, and a body still recognisably the same (whitespace-collapsed similarity
+above 0.9). A changed body means the declaration was rewritten rather than
+moved, and is reported as `graph/missing-symbol` rather than guessed at.
+`validate --fix` rewrites an inferred rename in place.
 
 ### 6.3 Body fingerprints — deferred
 
@@ -519,7 +526,7 @@ New diagnostic codes introduced by this document:
 | `refs` reverse lookup | **Built** |
 | `ls`, `locate` | **Built** |
 | Annotation writing (`link` on a `src://` subject) | **Built** |
-| Drift tier §6.2 (git rename inference) | Specified |
+| Drift tier §6.2 (git rename inference) | **Built** |
 | Body fingerprints §6.3 | Deferred |
 
 The R adapter now carries `braced_expression` through as `bodySpan`, names
