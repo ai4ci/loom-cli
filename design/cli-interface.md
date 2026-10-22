@@ -5,10 +5,8 @@ codes against; [implementation-plan.md](./implementation-plan.md) says *why*
 each piece exists, [source-linkage.md](./source-linkage.md) settles how source
 code is addressed, and [scope.md](./scope.md) states the requirements.
 
-**Status.** Everything here is built unless marked **△ specified**, which means
-the behaviour is settled but the code is not written. Where this document and
-the code disagree on anything *not* so marked, the code is right and this
-document is a bug.
+**Status.** Every command here is built. Where this document and the code
+disagree, the code is right and this document is a bug.
 
 ## 1. Invocation
 
@@ -345,14 +343,19 @@ separate verb:
 
 ```
 design-docs link issue://a.md blocks issue://b.md          # writes yaml
-design-docs link src://app.ts#Service.run implements issue://a.md   # △ writes a comment
-design-docs link src://app.ts --line 42 implements issue://a.md     # △ resolves the line first
+design-docs link src://app.ts#Service.run implements issue://a.md   # writes a comment
+design-docs link src://app.ts --line 42 implements issue://a.md     # resolves the line first
 ```
 
-The source-writing half is **△ specified**, not built. It goes through this
-same changeset pipeline, so it inherits validate-then-write, atomic staging and
-`--dry-run`. Where the comment is placed, and what cannot be annotated, is
-settled in source-linkage §4. Batching is the changeset: N ops in one file.
+The source-writing half goes through this same changeset pipeline, so it
+inherits validate-then-write, atomic staging and `--dry-run`. Where the comment
+is placed, and what cannot be annotated, is settled in source-linkage §4.
+Batching is the changeset: N ops in one file, applied in a single pass.
+
+Note that a relation written in source runs **from the code to the document**,
+so it is a different relation from its forward counterpart and must be declared
+in that direction in the model. `--line <n>` resolves the subject anchor from a
+line number instead of a `#name`.
 | `delete <uri>` | `delete` |
 | `rename <from> <to> [--dry-run]` | `rename` |
 
@@ -493,7 +496,7 @@ Codes are stable identifiers; match on these rather than on message text.
 | `model/` | model parsing and validation | see below |
 | `instance/` | one instance against the model | see below |
 | `graph/` | cross-file checks | see below |
-| `source/` | source code addressing and reverse links | `dangling-reverse-link`, `invalid-reverse-relation`, `ambiguous-anchor`, `unsupported-language`; **△** `not-annotatable`, `verification-failed` |
+| `source/` | source code addressing and reverse links | `dangling-reverse-link`, `invalid-reverse-relation`, `ambiguous-anchor`, `unsupported-language`, `not-annotatable`, `verification-failed`, `not-found` |
 | `changeset/` | changeset parsing and application | see below |
 | `query/` | derived database | `no-database`, `failed` |
 | `ls/` | discovery | `not-found`, `not-a-class`, `not-a-directory` |
@@ -550,9 +553,6 @@ a `mode: text | uri` field would be cleaner.
 an easy mistake — `design-docs validate --json` silently ignores `--json`.
 
 ## 9. Not built
-
-The source-writing half of `link`/`unlink`, marked **△ specified** above, is
-designed in [source-linkage.md](./source-linkage.md) and not yet implemented.
 
 Deferred deliberately; see implementation-plan for the reasoning.
 

@@ -518,7 +518,7 @@ New diagnostic codes introduced by this document:
 | Broken anchor detection (`graph/missing-symbol`) | **Built**, detection only |
 | `refs` reverse lookup | **Built** |
 | `ls`, `locate` | **Built** |
-| Annotation writing (`link` on a `src://` subject) | Specified |
+| Annotation writing (`link` on a `src://` subject) | **Built** |
 | Drift tier §6.2 (git rename inference) | Specified |
 | Body fingerprints §6.3 | Deferred |
 

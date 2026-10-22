@@ -13,8 +13,9 @@ import {
   renderLinks,
   validateGraph,
 } from "./graph.ts";
-import { effectiveRelations, isInstantiable } from "./model/schema.ts";
+import { effectiveRelations, isInstantiable, isSubclassOf } from "./model/schema.ts";
 import type { SchemaIR } from "./model/types.ts";
+import { applyEdits, type AnnotationRequest, planAnnotations, verify } from "./annotate.ts";
 import { formatUri, parseUri } from "./uri.ts";
 
 export interface PendingWrite {
@@ -181,17 +182,30 @@ function regenerateLinks(graph: Graph): void {
   }
 }
 
+/** A link whose subject is source code is written as a comment, not as yaml. */
+function isSourceLink(op: Op, schema: SchemaIR): boolean {
+  if (op.op !== "link" && op.op !== "unlink") return false;
+  try {
+    return isSubclassOf(schema, parseUri(op.from).scheme, "src");
+  } catch {
+    return false;
+  }
+}
+
 export function planChangeset(cfg: Config, schema: SchemaIR, ops: Op[]): MutationPlan {
   const { graph, diagnostics } = loadGraph(cfg, schema);
 
   const before = new Map<string, string>();
   for (const node of graph.instances.values()) before.set(node.path, node.source);
 
-  const applied = applyOps(graph, ops);
+  const sourceOps = ops.filter((op) => isSourceLink(op, schema));
+  const applied = applyOps(graph, ops.filter((op) => !isSourceLink(op, schema)));
   rebuildEdges(graph);
   regenerateLinks(graph);
 
-  const found = [...diagnostics, ...applied, ...validateGraph(graph)];
+  const annotation = planSourceLinks(cfg, graph, sourceOps);
+
+  const found = [...diagnostics, ...applied, ...annotation.diagnostics, ...validateGraph(graph)];
   if (found.some((d) => d.severity === "error")) return { writes: [], diagnostics: found, graph };
 
   const after = new Map<string, string>();
@@ -206,8 +220,85 @@ export function planChangeset(cfg: Config, schema: SchemaIR, ops: Op[]): Mutatio
     if (!after.has(target)) writes.push({ path: target, content: null, before: previous });
   }
 
+  writes.push(...annotation.writes);
   writes.sort((a, b) => a.path.localeCompare(b.path));
   return { writes, diagnostics: found, graph };
+}
+
+/**
+ * Resolve source-side links into file writes: one parse per file, every
+ * insertion point taken against the original buffer, edits applied descending
+ * by offset, then the result re-parsed to confirm it still parses and that the
+ * link attached where it was meant to (source-linkage §4.6).
+ */
+function planSourceLinks(
+  cfg: Config,
+  graph: Graph,
+  ops: Op[],
+): { writes: PendingWrite[]; diagnostics: Diagnostic[] } {
+  if (ops.length === 0) return { writes: [], diagnostics: [] };
+  const diagnostics: Diagnostic[] = [];
+  const requests: AnnotationRequest[] = [];
+
+  for (const op of ops) {
+    if (op.op !== "link" && op.op !== "unlink") continue;
+    const subject = parseUri(op.from).scheme;
+
+    if (!effectiveRelations(graph.schema, subject).some((r) => r.name === op.rel)) {
+      diagnostics.push(error(
+        "changeset/unknown-relation",
+        `"${op.rel}" is not a relation of ${subject}; a link written in source runs from the code to the document`,
+      ));
+      continue;
+    }
+    if (!graph.instances.has(op.to)) {
+      diagnostics.push(error(
+        "changeset/not-found",
+        `${op.op} refers to ${op.to}, which does not exist`,
+      ));
+      continue;
+    }
+
+    requests.push({
+      from: op.from,
+      relation: op.rel,
+      to: op.to,
+      ...(op.op === "unlink" ? { remove: true } : {}),
+      ...(op.line === undefined ? {} : { line: op.line }),
+    });
+  }
+
+  const planned = planAnnotations(cfg, requests, cfg.anchorPolicy, (p) =>
+    readFileSync(absolute(cfg, p), "utf8"));
+  diagnostics.push(...planned.diagnostics);
+  if (diagnostics.some((d) => d.severity === "error")) return { writes: [], diagnostics };
+
+  const writes: PendingWrite[] = [];
+  const byFile = new Map<string, typeof planned.edits>();
+  for (const edit of planned.edits) {
+    const list = byFile.get(edit.path) ?? [];
+    list.push(edit);
+    byFile.set(edit.path, list);
+  }
+
+  for (const [target, edits] of byFile) {
+    const source = readFileSync(absolute(cfg, target), "utf8");
+    const written = applyEdits(source, edits);
+    if (written === source) continue;
+
+    const expected = edits
+      .filter((e) => e.removeBytes === undefined)
+      .map((e) => ({ relation: e.relation, target: e.target, anchor: e.anchor }));
+    const problems = verify(source, written, edits[0]!.language, cfg.anchorPolicy, expected);
+    if (problems.length > 0) {
+      diagnostics.push(...problems);
+      return { writes: [], diagnostics };
+    }
+
+    writes.push({ path: target, content: written, before: source });
+  }
+
+  return { writes, diagnostics };
 }
 
 /**

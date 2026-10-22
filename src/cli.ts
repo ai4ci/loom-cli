@@ -449,9 +449,13 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
       .argument("<from>", "source instance uri")
       .argument("<relation>", "relation name")
       .argument("<to>", "target uri")
-      .description(`${verb} two instances`)
-      .action((from: string, rel: string, to: string) => {
-        finish(applyOps(configNow(), [{ op: verb, from, rel, to }], {}));
+      .option("--line <n>", "resolve the subject anchor from a line number")
+      .description(`${verb} two instances, or source to a document`)
+      .action((from: string, rel: string, to: string, options: { line?: string }) => {
+        const op = options.line === undefined
+          ? { op: verb, from, rel, to }
+          : { op: verb, from, rel, to, line: Number(options.line) };
+        finish(applyOps(configNow(), [op], {}));
       });
   }
 

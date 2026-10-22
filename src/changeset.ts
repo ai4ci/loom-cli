@@ -4,8 +4,8 @@ import { type Diagnostic, error } from "./diagnostics.ts";
 export type Op =
   | { op: "create"; uri: string; attrs: Record<string, unknown> }
   | { op: "set"; uri: string; attrs: Record<string, unknown> }
-  | { op: "link"; from: string; rel: string; to: string }
-  | { op: "unlink"; from: string; rel: string; to: string }
+  | { op: "link"; from: string; rel: string; to: string; line?: number }
+  | { op: "unlink"; from: string; rel: string; to: string; line?: number }
   | { op: "rename"; from: string; to: string }
   | { op: "delete"; uri: string };
 
