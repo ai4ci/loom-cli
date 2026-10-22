@@ -6,6 +6,7 @@ import { DesignDocsError, error } from "./diagnostics.ts";
 import type { Graph } from "./graph.ts";
 import { effectiveAttributes, isInstantiable } from "./model/schema.ts";
 import type { Attribute } from "./model/types.ts";
+import { embedder, hashBody, type Embedder } from "./embeddings.ts";
 
 export const DATABASE_FILENAME = ".design-docs.duckdb";
 
@@ -94,6 +95,7 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
 
   const connection = await connect(cfg);
   const tables: TableSummary[] = [];
+  const emb = embedder();
 
   for (const className of [...schema.classes.keys()].sort()) {
     if (!isInstantiable(schema, className)) continue;
@@ -134,8 +136,36 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
   }
   tables.push({ name: "edge", rows: edges.length });
 
+  // Embeddings table: hash-based cache so unchanged bodies skip re-embedding
+  // (plan §Phase 7).
+  const dimensions = emb.dimensions;
+  const vectorCols = Array.from({ length: dimensions }, (_, i) => `v${i} DOUBLE`).join(", ");
+  await connection.run(
+    `CREATE TABLE embedding (uri VARCHAR PRIMARY KEY, content_hash VARCHAR, ${vectorCols})`,
+  );
+
+  const rows: { uri: string; hash: string; vector: Float32Array }[] = [];
+  for (const node of graph.instances.values()) {
+    const body = stripProtected(node.file.markdown);
+    const hash = hashBody(body);
+    const vec = await emb.embed(body);
+    rows.push({ uri: node.uri, hash, vector: vec });
+  }
+  rows.sort((a, b) => a.uri.localeCompare(b.uri));
+  for (const row of rows) {
+    const cols = Array.from(row.vector).map((v) => String(v));
+    const values = [`'${row.uri.replace(/'/g, "''")}'`, `'${row.hash}'`, ...cols].join(", ");
+    await connection.run(`INSERT INTO embedding VALUES (${values})`);
+  }
+  tables.push({ name: "embedding", rows: rows.length });
+
   connection.closeSync();
   return { database: databasePath(cfg), tables };
+}
+
+/** Strip the generated protected region so it doesn't pollute the embedding. */
+function stripProtected(markdown: string): string {
+  return markdown.replace(/<!-- design-docs:links start -->[\s\S]*?<!-- design-docs:links end -->/g, "").trim();
 }
 
 /** DuckDB returns its own value objects; flatten them for YAML/JSON output. */

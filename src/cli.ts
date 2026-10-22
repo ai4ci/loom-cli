@@ -7,6 +7,7 @@ import { readFileSync as readTextFile } from "node:fs";
 import { type Op, parseChangeset } from "./changeset.ts";
 import { unifiedDiff } from "./diff.ts";
 import { databasePath, query, rebuild } from "./duckdb.ts";
+import { cosineSimilarity, embedder } from "./embeddings.ts";
 import { indexCommand } from "./index.ts";
 import { getLinksBlock, parseInstance } from "./document.ts";
 import { applyFixes } from "./fix.ts";
@@ -217,6 +218,65 @@ async function queryCommand(cfg: Config, sql: string): Promise<CommandOutput> {
   return { value: await query(cfg, sql) };
 }
 
+async function similarCommand(
+  cfg: Config,
+  query_: string,
+  options: { limit?: number },
+): Promise<CommandOutput> {
+  if (!existsSync(absolute(cfg, databasePath(cfg)))) await rebuildCommand(cfg);
+  const { schema } = loadModel(cfg);
+  const { graph } = loadGraph(cfg, schema);
+
+  // Determine the query vector. A uri embeds the body of the referenced
+  // document (so `similar issue://x.md` finds the most related siblings).
+  const emb = embedder();
+  let queryVec: Float32Array;
+  let queryLabel = "text";
+  // Only treat the argument as a uri if it has a scheme separator.
+  if (/^[a-zA-Z+.-]+:\/\//.test(query_)) {
+    const parsed = parseUri(query_);
+    const target = formatUri({ scheme: parsed.scheme, path: parsed.path });
+    const node = graph.instances.get(target);
+    if (node) {
+      const body = stripForEmbed(node.file.markdown);
+      queryVec = await emb.embed(body);
+      queryLabel = node.uri;
+    } else {
+      queryVec = await emb.embed(query_);
+    }
+  } else {
+    queryVec = await emb.embed(query_);
+  }
+
+  // Score every row from the embedding table.
+  const cols = Array.from({ length: emb.dimensions }, (_, i) => `"v${i}"`).join(", ");
+  const result = await query(cfg, `SELECT uri, ${cols} FROM embedding`);
+  const scored: { uri: string; score: number }[] = [];
+  for (const row of result.rows) {
+    const rec = row as Record<string, unknown>;
+    const vec = new Float32Array(emb.dimensions);
+    for (let i = 0; i < emb.dimensions; i++) vec[i] = Number(rec[`v${i}`] ?? 0);
+    if (!Number.isFinite(vec[0] ?? NaN)) continue;
+    scored.push({ uri: String(rec["uri"]), score: cosineSimilarity(queryVec, vec) });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const limit = options.limit ?? 10;
+  const results = scored.slice(0, limit);
+
+  return {
+    value: {
+      query: queryLabel,
+      ...(queryLabel === "text" ? { queryText: query_ } : {}),
+      results,
+    },
+  };
+}
+
+/** Strip the protected region so it doesn't bias the embedding. */
+function stripForEmbed(markdown: string): string {
+  return markdown.replace(/<!-- design-docs:links start -->[\s\S]*?<!-- design-docs:links end -->/g, "").trim();
+}
+
 function applyCommand(cfg: Config, file: string, options: { dryRun?: boolean }): CommandOutput {
   const { ops, diagnostics } = parseChangeset(readTextFile(file, "utf8"));
   if (diagnostics.length > 0) return { value: summarise(diagnostics), code: 1 };
@@ -411,6 +471,16 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
         return;
       }
       finish({ value: { updated: result.updated, unchanged: result.unchanged } });
+    });
+
+  program
+    .command("similar")
+    .argument("<query>", "text or uri to search for")
+    .option("--limit <n>", "maximum results to return", "10")
+    .description("rank documents by semantic similarity to a query or existing uri")
+    .action(async (queryArg: string, options: { limit?: string }) => {
+      const limit = options.limit !== undefined ? Number(options.limit) : undefined;
+      finish(await similarCommand(configNow(), queryArg, { limit }));
     });
 
   return program;

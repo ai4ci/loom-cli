@@ -30,7 +30,7 @@ test("rebuild creates the database and reports its tables", async () => {
 
   const out = parse(r.out) as Record<string, any>;
   assert.ok(existsSync(path.join(root, out.database)));
-  assert.deepEqual(out.tables.map((t: any) => t.name).sort(), ["decision", "edge", "issue"]);
+  assert.deepEqual(out.tables.map((t: any) => t.name).sort(), ["decision", "edge", "embedding", "issue"]);
   assert.equal(out.tables.find((t: any) => t.name === "issue").rows, 2);
   assert.equal(out.tables.find((t: any) => t.name === "edge").rows, 1);
 });
