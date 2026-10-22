@@ -3,6 +3,7 @@ import path from "node:path";
 import { absolute, classRootsFor, configFrom, type Config } from "./config.ts";
 import { type Diagnostic, error } from "./diagnostics.ts";
 import { getLinksBlock, type InstanceFile, parseInstance } from "./document.ts";
+import { detectLang, findSymbolLine, extractReverseLinks } from "./source.ts";
 import { validateInstance } from "./instance.ts";
 import {
   effectiveAttributes,
@@ -282,8 +283,29 @@ export function validateGraph(graph: Graph): Diagnostic[] {
       }
       continue;
     }
-    // src targets resolve through the syntax tree; that is Phase 5.
-    if (isSubclassOf(schema, targetClass, "src")) continue;
+    // src targets resolve through the syntax tree (Phase 5).
+    if (isSubclassOf(schema, targetClass, "src")) {
+      const parsed = parseUri(edge.to);
+      const res = resolvePath(parsed, cfg);
+      const abs = absolute(cfg, res);
+      if (!existsSync(abs)) {
+        found.push(error("graph/missing-source-file", `${edge.to} does not exist`, { uri: edge.from }));
+      } else if (parsed.anchor) {
+        const lang = detectLang(res);
+        if (lang) {
+          const code = readFileSync(abs, "utf8");
+          const line = findSymbolLine(code, lang, parsed.anchor);
+          if (line === null) {
+            found.push(error(
+              "graph/missing-symbol",
+              `symbol "${parsed.anchor}" not found in ${res}`,
+              { uri: edge.from },
+            ));
+          }
+        }
+      }
+      continue;
+    }
 
     found.push(error(
       "graph/dangling-link",
@@ -310,5 +332,47 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     }
   }
 
-  return found;
-}
+    // Scan source files for reverse-link comments (plan §Phase 5)
+    for (const [name] of schema.classes) {
+      if (isSubclassOf(schema, name, "src")) {
+        for (const root of classRootsFor(cfg, name)) {
+          const absRoot = absolute(cfg, root);
+          if (!existsSync(absRoot)) continue;
+          const scanDir = (dir: string) => {
+            for (const entry of readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) scanDir(full);
+              else if (entry.isFile()) {
+                const rel = toRepoRelative(cfg, full);
+                const lang = detectLang(rel);
+                if (!lang) continue;
+                const code = readFileSync(full, "utf8");
+                const revLinks = extractReverseLinks(code, lang);
+                for (const rl of revLinks) {
+                  // Validate target exists
+                  if (!graph.instances.has(rl.target)) {
+                    found.push(error(
+                      "source/dangling-reverse-link",
+                      `comment points to non-existent ${rl.target}`,
+                      { uri: `${name}://${toRepoRelative(cfg, full).slice(root.length + 1)}`, line: rl.line },
+                    ));
+                  }
+                  // Validate relation is permitted on this src subclass
+                  if (!schema.relations.some((r) => r.name === rl.relation && isSubclassOf(schema, name, r.from))) {
+                    found.push(error(
+                      "source/invalid-reverse-relation",
+                      `relation "${rl.relation}" is not permitted from ${name}`,
+                      { uri: `${name}://${toRepoRelative(cfg, full).slice(root.length + 1)}`, line: rl.line },
+                    ));
+                  }
+                }
+              }
+            }
+          };
+          scanDir(absRoot);
+        }
+      }
+    }
+
+    return found;
+  }

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { absolute, type Config } from "./config.ts";
@@ -72,7 +72,13 @@ export interface TableSummary {
 
 async function connect(cfg: Config): Promise<DuckDBConnection> {
   const target = absolute(cfg, databasePath(cfg));
-  mkdirSync(path.dirname(target), { recursive: true });
+  const dir = path.dirname(target);
+  mkdirSync(dir, { recursive: true });
+  // Ensure the derived database and its WAL are git-ignored in the design root.
+  const ignoreFile = path.join(dir, ".gitignore");
+  if (!existsSync(ignoreFile)) {
+    writeFileSync(ignoreFile, `${DATABASE_FILENAME}*\n`);
+  }
   return (await DuckDBInstance.create(target)).connect();
 }
 

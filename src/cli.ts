@@ -16,6 +16,9 @@ import { loadModel } from "./model/load.ts";
 import { writeReport } from "./report.ts";
 import { serialise, type OutputFormat } from "./output.ts";
 import { canonicalise, formatUri, fsExists, parseUri, resolveUri } from "./uri.ts";
+import { detectLang, findSymbolLine } from "./source.ts";
+import pack from "@xberg-io/tree-sitter-language-pack";
+import { resolvePath } from "./graph.ts";
 
 export interface CliRun {
   code: number;
@@ -42,6 +45,17 @@ function resolveTarget(raw: string, cfg: Config) {
 
 function resolveCommand(cfg: Config, raw: string): CommandOutput {
   const { uri, resolved, absolutePath } = resolveTarget(raw, cfg);
+  let line: number | undefined;
+
+  if (existsSync(absolutePath) && uri.anchor) {
+    const lang = detectLang(resolved.path);
+    if (lang) {
+      const code = readFileSync(absolutePath, "utf8");
+      const found = findSymbolLine(code, lang, uri.anchor);
+      if (found !== null) line = found;
+    }
+  }
+
   return {
     value: {
       uri: formatUri(canonicalise(resolved.path, cfg, uri.anchor)),
@@ -49,6 +63,7 @@ function resolveCommand(cfg: Config, raw: string): CommandOutput {
       path: resolved.path,
       absolutePath,
       ...(uri.anchor === undefined ? {} : { anchor: uri.anchor }),
+      ...(line === undefined ? {} : { line }),
       candidates: resolved.candidates,
       ambiguous: resolved.ambiguous,
       exists: existsSync(absolutePath),
@@ -207,6 +222,33 @@ function applyCommand(cfg: Config, file: string, options: { dryRun?: boolean }):
   return applyOps(cfg, ops, options);
 }
 
+function refsCommand(cfg: Config, raw: string): CommandOutput {
+  const { schema } = loadModel(cfg);
+  const { graph } = loadGraph(cfg, schema);
+  const uri = parseUri(raw);
+  const targetCanonical = formatUri(canonicalise(resolvePath(uri, cfg), cfg, uri.anchor));
+
+  // Find all documents with edges pointing to this target or containing reverse links
+  const matches = graph.edges.filter((e) => e.to === targetCanonical || e.to.startsWith(`${targetCanonical}#`));
+
+  return {
+    value: {
+      target: targetCanonical,
+      references: matches.map((m) => ({ from: m.from, relation: m.relation })),
+    },
+  };
+}
+
+function prefetchCommand(cfg: Config): CommandOutput {
+  const languages = cfg.languages.length > 0 ? cfg.languages : ["mermaid", "typescript", "r", "python"];
+  pack.prefetch(languages);
+  return {
+    value: {
+      prefetched: languages,
+    },
+  };
+}
+
 export function buildProgram(emit: (text: string) => void, setCode: (code: number) => void): Command {
   const program = new Command();
 
@@ -340,6 +382,21 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .description("query the derived database")
     .action(async (sql: string) => {
       finish(await queryCommand(configNow(), sql));
+    });
+
+  program
+    .command("refs")
+    .argument("<srcUri>", "source code uri to check references for")
+    .description("find design documents referencing a source symbol")
+    .action((srcUri: string) => {
+      finish(refsCommand(configNow(), srcUri));
+    });
+
+  program
+    .command("prefetch")
+    .description("prefetch configured tree-sitter language grammars")
+    .action(() => {
+      finish(prefetchCommand(configNow()));
     });
 
   return program;
