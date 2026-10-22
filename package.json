@@ -1,0 +1,28 @@
+{
+  "name": "loom",
+  "version": "0.5.0",
+  "description": "Model-driven markdown documentation graph with typed relations, DuckDB projections and source code linkage",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "loom": "./dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test 'test/**/*.test.ts'"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "^2.0.0-r.1",
+    "@xberg-io/tree-sitter-language-pack": "^1.22.1",
+    "commander": "^14.0.2",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "typescript": "^5.9.3"
+  }
+}

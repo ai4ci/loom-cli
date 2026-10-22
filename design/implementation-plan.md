@@ -2,7 +2,9 @@
 
 Implementation plan for the tool described in [scope.md](./scope.md). Read that
 first; this document does not restate the requirements, it says how and in what
-order they get built.
+order they get built. For the command surface see
+[cli-interface.md](./cli-interface.md); for how source code is addressed and
+annotated, [source-linkage.md](./source-linkage.md).
 
 ## 1. Guiding decisions
 
@@ -12,7 +14,7 @@ These are settled and should not be relitigated without updating this section.
 
 The YAML header of each class instance is the single source of truth. Everything
 else is a **projection** that must be reproducible from a cold start by deleting
-it and running `design-docs rebuild`:
+it and running `loom rebuild`:
 
 | Artefact | Derived from | Committed |
 |---|---|---|
@@ -262,7 +264,7 @@ rewriting. See "Later — composite attributes".
 These are the user-facing contracts. They are fixed early because every later
 phase depends on them.
 
-### 2.1 Config — `$REPO_ROOT/.design-docs.yaml` (optional)
+### 2.1 Config — `$REPO_ROOT/.loom.yaml` (optional)
 
 ```yaml
 designRoot: design          # default: design
@@ -291,9 +293,9 @@ status: open
 blocks: [issue://other-thing.md]
 ---
 
-<!-- design-docs:links start -->
+<!-- loom:links start -->
 - blocks: [The other thing](../issues/other-thing.md)
-<!-- design-docs:links end -->
+<!-- loom:links end -->
 
 Free prose, edited by anything, never touched by the tool.
 ```
@@ -304,12 +306,12 @@ file's location; the location wins on conflict (§1.1).
 The generated block carries outbound links and, below them, inbound ones:
 
 ```markdown
-<!-- design-docs:links start -->
+<!-- loom:links start -->
 - blocks: [The other thing](../issues/other-thing.md)
 
 ### Backlinks
 - blocks: [Something upstream](../issues/upstream.md)
-<!-- design-docs:links end -->
+<!-- loom:links end -->
 ```
 
 **Link text** comes from the target's `title` attribute, falling back to its
@@ -361,7 +363,7 @@ matches roots of two *different* classes in the family.
 Each phase ends with a working CLI and its own tests. Phase 2 is the MVP — the
 first point at which the tool is worth running on a real repository.
 
-### Phase 0 — Foundations
+### Phase 0 — Foundations (Complete)
 
 **Scope.** Config discovery and defaults. URI parsing, resolution,
 canonicalisation and equivalence. Reading and writing a class instance file as
@@ -370,7 +372,7 @@ region splice that is a byte-for-byte no-op when content is unchanged.
 Diagnostic type, the `writeScalar` rules of §2.2, and output serialisation
 (YAML default, `--json` switch).
 
-**Commands.** `design-docs resolve <uri>`, `design-docs show <uri>`.
+**Commands.** `loom resolve <uri>`, `loom show <uri>`.
 
 **Done when.** A property test round-trips a corpus of awkward files (CRLF, no
 trailing newline, unicode, YAML anchors, absent protected block, protected block
@@ -384,7 +386,7 @@ on the first.
 **Risk.** Low. This is the only phase with no external unknowns, which is why it
 goes first.
 
-### Phase 1 — The document model
+### Phase 1 — The document model (Complete)
 
 **Scope.** Parse `$DESIGN_DOCS_ROOT/document-model.mmd` via the pack's mermaid
 grammar into a schema IR: classes, attributes (name, type per §1.7, required),
@@ -400,8 +402,8 @@ composition or aggregation arrow (§1.10), a class used as an attribute type tha
 declares relations, and a cycle in value-type containment. Validate one instance
 against the IR.
 
-**Commands.** `design-docs model check [--model <path>]`,
-`design-docs validate <uri>`.
+**Commands.** `loom model check [--model <path>]`,
+`loom validate <uri>`.
 
 **Why tree-sitter and not mermaid's own parser.** `@mermaid-js/parser` (the
 Langium rewrite, 2.0.1) covers `info`, `packet`, `pie`, `treeView`,
@@ -449,7 +451,7 @@ diagnostic citing the offending line.
 **Risk.** Low-medium, reduced by the spike above having already landed. What is
 left is the breadth of the mermaid subset, not whether the approach works.
 
-### Phase 2 — Whole-graph validation (MVP)
+### Phase 2 — Whole-graph validation (MVP) (Complete)
 
 **Scope.** Walk all class roots, load every instance, build the graph in memory.
 Check: attribute types and requiredness, enum values against their member list,
@@ -461,7 +463,7 @@ disagree with their location. Emit the report to
 `$DESIGN_DOCS_ROOT/VALIDATION.md` and to stdout. Model-change impact analysis
 (scope §CLI.9) is the same code path run against a proposed model file.
 
-**Commands.** `design-docs validate [--model <proposed.mmd>] [--fix]`.
+**Commands.** `loom validate [--model <proposed.mmd>] [--fix]`.
 
 `--fix` handles only the unambiguous repairs: regenerate a stale or missing
 protected link block from the YAML, normalise a non-canonical URI. Anything
@@ -473,7 +475,7 @@ class produces exactly the expected diagnostic set, and a clean repository exits
 
 **Risk.** Low. Mostly bookkeeping over Phase 1's IR.
 
-### Phase 3 — Mutation
+### Phase 3 — Mutation (Complete)
 
 **Scope.** Changeset parsing, in-memory application, whole-graph validation,
 atomic multi-file write (§1.2). Protected link block regeneration with correct
@@ -481,8 +483,8 @@ relative paths. `rename` rewrites every inbound URI across the corpus — this i
 the operation that makes path-as-identity survivable, and `git mv` without it is
 the single most likely way a user corrupts their graph.
 
-**Commands.** `design-docs apply <changeset.yaml> [--dry-run]`,
-`design-docs rename <from-uri> <to-uri>`, plus thin sugar for single ops
+**Commands.** `loom apply <changeset.yaml> [--dry-run]`,
+`loom rename <from-uri> <to-uri>`, plus thin sugar for single ops
 (`create`, `set`, `link`, `unlink`, `delete`) that build a one-op changeset.
 
 **Done when.** `--dry-run` prints the exact diff that `apply` would write; a
@@ -494,9 +496,9 @@ changeset twice is a no-op.
 **Risk.** Low-medium. The failure mode to test hardest is a partial write after
 a mid-sequence error.
 
-### Phase 4 — DuckDB projection
+### Phase 4 — DuckDB projection (Complete)
 
-**Scope.** Project the graph into `$DESIGN_DOCS_ROOT/.design-docs.duckdb`
+**Scope.** Project the graph into `$DESIGN_DOCS_ROOT/.loom.duckdb`
 (git-ignored): one table per concrete class with its scalar attributes, plus
 `edge(subject, relation, object)`. Attribute types map to native DuckDB types
 (`date` → `DATE`, `int` → `INTEGER`, enums → `VARCHAR`, with the member list
@@ -509,7 +511,7 @@ structured YAML — they appear only as subjects or objects in `edge`. Full
 rebuild only — incremental update is not worth the invalidation bugs at this
 corpus size. Pass arbitrary SQL through to DuckDB.
 
-**Commands.** `design-docs rebuild`, `design-docs query "<sql>" [--json]`.
+**Commands.** `loom rebuild`, `loom query "<sql>" [--json]`.
 
 **Done when.** A rebuild of a fixture repo produces the expected schema and row
 counts, and `rebuild` from scratch and `rebuild` over an existing database give
@@ -517,7 +519,13 @@ identical databases.
 
 **Risk.** Low.
 
-### Phase 5 — Source code linkage
+### Phase 5 — Source code linkage (Complete)
+
+> Phase 5 shipped the resolution and scanning described here.
+> [source-linkage.md](./source-linkage.md) supersedes it: it settles the
+> anchor-kind policy, makes anchor ambiguity a hard error, adds overload
+> qualification, and replaces the attribution heuristic below with body-span
+> containment. That last point is a behaviour change, not a refinement.
 
 **Scope.** Resolve `src://path/File.ext#symbol` — and the equivalent URI of any
 `src` subclass such as `test://` (§1.9) — to a line number using `process()`
@@ -532,9 +540,9 @@ reverse-link comment pointing at a missing document, using a relation the model
 does not define, or using a relation not permitted for that particular `src`
 subclass.
 
-**Commands.** `design-docs resolve <src-uri>` (now returns a line number),
-`design-docs refs <src-uri>` (which documents reference this function),
-`design-docs prefetch` (download the configured grammars).
+**Commands.** `loom resolve <src-uri>` (now returns a line number),
+`loom refs <src-uri>` (which documents reference this function),
+`loom prefetch` (download the configured grammars).
 
 **Two things to settle in a spike.** First, `CommentInfo.associatedNode` is
 documented as "name of the syntax node this comment is directly associated
@@ -555,13 +563,13 @@ diagnostic.
 comment extraction is language-agnostic, so there is no per-language query work.
 The residual risk is grammar coverage quality for specific languages.
 
-### Phase 6 — Navigational indexes
+### Phase 6 — Navigational indexes (Complete)
 
 **Scope.** An index file is an ordinary markdown file whose frontmatter declares
 a view (a SQL query or a filter over classes and attributes) and whose body is a
 protected generated region of relative wiki links. Regenerating is idempotent.
 
-**Commands.** `design-docs index [--check]`. `--check` exits 1 if any index is
+**Commands.** `loom index [--check]`. `--check` exits 1 if any index is
 stale, for CI.
 
 **Done when.** A stale index is detected by `--check` and brought up to date by
@@ -569,7 +577,7 @@ stale, for CI.
 
 **Risk.** Low.
 
-### Phase 7 — Semantic search
+### Phase 7 — Semantic search (Complete)
 
 **Scope.** Embed the unprotected markdown body of each instance, cache vectors
 in DuckDB keyed by a content hash so only changed documents are re-embedded,
@@ -577,12 +585,20 @@ and answer similarity queries by brute-force cosine. The embedding provider is
 an interface with one local implementation; the choice of model is deliberately
 deferred to this point.
 
-**Commands.** `design-docs similar <uri|text> [--limit n]`.
+**Commands.** `loom similar <uri|text> [--limit n]`.
 
 **Done when.** Re-running after editing one document re-embeds exactly one
 document.
 
 **Risk.** Low, and fully isolated — nothing else depends on this phase.
+
+### Phases 8–11 — Source linkage extensions (Complete)
+
+Detailed in [source-linkage.md](./source-linkage.md):
+- **Phase 8 — The anchor model**: anchor allowlist policy, transparent kinds, ambiguity as a hard error, overload qualification, R language adapter with body spans, and drift candidate suggestion.
+- **Phase 9 — Discovery**: `ls <uri>` directory/symbol traversal and `locate <uri> --line <n>` symbol resolver.
+- **Phase 10 — Source annotation**: `link` and `unlink` support writing reverse-link comments directly into source declarations using AST validation and safe splicing.
+- **Phase 11 — Git rename inference**: drift tier 6.2 compares missing anchors against `HEAD` and auto-heals renames with `validate --fix`.
 
 ### Later — composite attributes
 
