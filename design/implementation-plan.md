@@ -2,7 +2,8 @@
 
 Implementation plan for the tool described in [scope.md](./scope.md). Read that
 first; this document does not restate the requirements, it says how and in what
-order they get built.
+order they get built. For the command surface as built, see
+[cli-interface.md](./cli-interface.md).
 
 ## 1. Guiding decisions
 
