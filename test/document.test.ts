@@ -104,7 +104,7 @@ test("setLinksBlock replaces an existing block in place", () => {
   const out = setLinksBlock(f.markdown, "- blocks: [New](../issue/new.md)");
   assert.equal(getLinksBlock(out), "- blocks: [New](../issue/new.md)");
   assert.match(out, /Free prose/);
-  assert.equal(out.match(/design-docs:links start/g)?.length, 1);
+  assert.equal(out.match(/loom:links start/g)?.length, 1);
 });
 
 test("setLinksBlock inserts a missing block ahead of the prose", () => {

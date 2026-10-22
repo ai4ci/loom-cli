@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { Command } from "commander";
 import { absolute, loadConfig, RESERVED_SCHEMES, type Config } from "./config.ts";
-import { DesignDocsError, error, summarise } from "./diagnostics.ts";
+import { LoomError, error, summarise } from "./diagnostics.ts";
 import { parse as parseYaml } from "yaml";
 import { readFileSync as readTextFile } from "node:fs";
 import { type Op, parseChangeset } from "./changeset.ts";
@@ -58,7 +58,7 @@ function resolveCommand(cfg: Config, raw: string): CommandOutput {
       if (found.ok) {
         line = found.anchor.line;
       } else if (found.reason === "ambiguous") {
-        throw new DesignDocsError(error(
+        throw new LoomError(error(
           "source/ambiguous-anchor",
           `"${uri.anchor}" matches several declarations in ${resolved.path}`,
           { uri: raw, fix: `qualify it: ${found.candidates.join(" | ")}` },
@@ -85,7 +85,7 @@ function resolveCommand(cfg: Config, raw: string): CommandOutput {
 function readInstance(raw: string, cfg: Config) {
   const { uri, resolved, absolutePath } = resolveTarget(raw, cfg);
   if (!existsSync(absolutePath)) {
-    throw new DesignDocsError(error("instance/not-found", `no file at ${resolved.path}`, {
+    throw new LoomError(error("instance/not-found", `no file at ${resolved.path}`, {
       uri: formatUri(uri),
     }));
   }
@@ -120,7 +120,7 @@ function validateOneCommand(cfg: Config, raw: string, override?: string): Comman
   const { canonical, path, file } = readInstance(raw, cfg);
 
   if (RESERVED_SCHEMES.has(canonical.scheme)) {
-    throw new DesignDocsError(error(
+    throw new LoomError(error(
       "uri/not-a-class",
       `${path} is not under any class root, so it has no class to validate against`,
       { uri: formatUri(canonical) },
@@ -177,7 +177,7 @@ function parseAssignments(pairs: string[]): Record<string, unknown> {
   for (const pair of pairs) {
     const split = pair.indexOf("=");
     if (split < 0) {
-      throw new DesignDocsError(error("cli/bad-assignment", `expected key=value, got ${pair}`));
+      throw new LoomError(error("cli/bad-assignment", `expected key=value, got ${pair}`));
     }
     attrs[pair.slice(0, split)] = parseYaml(pair.slice(split + 1));
   }
@@ -283,7 +283,7 @@ async function similarCommand(
 
 /** Strip the protected region so it doesn't bias the embedding. */
 function stripForEmbed(markdown: string): string {
-  return markdown.replace(/<!-- design-docs:links start -->[\s\S]*?<!-- design-docs:links end -->/g, "").trim();
+  return markdown.replace(/<!-- loom:links start -->[\s\S]*?<!-- loom:links end -->/g, "").trim();
 }
 
 function applyCommand(cfg: Config, file: string, options: { dryRun?: boolean }): CommandOutput {
@@ -311,7 +311,7 @@ function lsCommand(
 
 function locateCommand(cfg: Config, raw: string, options: { line?: string }): CommandOutput {
   if (options.line === undefined) {
-    throw new DesignDocsError(error("cli/missing-option", "locate needs --line <n>"));
+    throw new LoomError(error("cli/missing-option", "locate needs --line <n>"));
   }
   return { value: locateLine(cfg, raw, Number(options.line)) };
 }
@@ -347,8 +347,8 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
   const program = new Command();
 
   program
-    .name("design-docs")
-    .description("Configurable in-project design documentation")
+    .name("loom")
+    .description("Model-driven markdown documentation graph")
     .option("--json", "emit JSON instead of YAML")
     .option("--cwd <dir>", "directory to resolve configuration from");
 
@@ -571,7 +571,7 @@ export async function run(argv: string[]): Promise<CliRun> {
     await program.parseAsync(argv, { from: "user" });
     return { code, out, err };
   } catch (cause) {
-    if (cause instanceof DesignDocsError) {
+    if (cause instanceof LoomError) {
       return { code: 1, out, err: `${cause.diagnostic.code}: ${cause.message}\n` };
     }
     const exitCode = (cause as { exitCode?: number }).exitCode;

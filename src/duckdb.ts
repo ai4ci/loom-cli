@@ -2,13 +2,13 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { absolute, type Config } from "./config.ts";
-import { DesignDocsError, error } from "./diagnostics.ts";
+import { LoomError, error } from "./diagnostics.ts";
 import type { Graph } from "./graph.ts";
 import { effectiveAttributes, isInstantiable } from "./model/schema.ts";
 import type { Attribute } from "./model/types.ts";
 import { embedder, hashBody, type Embedder } from "./embeddings.ts";
 
-export const DATABASE_FILENAME = ".design-docs.duckdb";
+export const DATABASE_FILENAME = ".loom.duckdb";
 
 export function databasePath(cfg: Config): string {
   return `${cfg.designRoot}/${DATABASE_FILENAME}`;
@@ -165,7 +165,7 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
 
 /** Strip the generated protected region so it doesn't pollute the embedding. */
 function stripProtected(markdown: string): string {
-  return markdown.replace(/<!-- design-docs:links start -->[\s\S]*?<!-- design-docs:links end -->/g, "").trim();
+  return markdown.replace(/<!-- loom:links start -->[\s\S]*?<!-- loom:links end -->/g, "").trim();
 }
 
 /** DuckDB returns its own value objects; flatten them for YAML/JSON output. */
@@ -186,7 +186,7 @@ function plain(value: unknown): unknown {
 
 export async function query(cfg: Config, sql: string): Promise<{ rows: unknown[] }> {
   if (!existsSync(absolute(cfg, databasePath(cfg)))) {
-    throw new DesignDocsError(error("query/no-database", "no database; run `design-docs rebuild`"));
+    throw new LoomError(error("query/no-database", "no database; run `loom rebuild`"));
   }
 
   const connection = await connect(cfg);
@@ -194,7 +194,7 @@ export async function query(cfg: Config, sql: string): Promise<{ rows: unknown[]
     const result = await connection.runAndReadAll(sql);
     return { rows: result.getRowObjects().map((row) => plain(row)) };
   } catch (cause) {
-    throw new DesignDocsError(error("query/failed", (cause as Error).message));
+    throw new LoomError(error("query/failed", (cause as Error).message));
   } finally {
     connection.closeSync();
   }

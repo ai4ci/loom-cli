@@ -1,13 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parse } from "yaml";
-import { DesignDocsError, error } from "./diagnostics.ts";
+import { LoomError, error } from "./diagnostics.ts";
 import { type AnchorPolicy, DEFAULT_ANCHOR_POLICY } from "./source.ts";
 
 /** Schemes that address locations rather than classes (plan §2.4). */
 export const RESERVED_SCHEMES = new Set(["repo", "design"]);
 
-export const CONFIG_FILENAME = ".design-docs.yaml";
+export const CONFIG_FILENAME = ".loom.yaml";
 
 export interface Config {
   /** Absolute path to the repository root. */
@@ -62,7 +62,7 @@ export function configFrom(repoRoot: string, raw: RawConfig, configPath: string 
  */
 export function classRootsFor(cfg: Config, className: string): string[] {
   if (RESERVED_SCHEMES.has(className)) {
-    throw new DesignDocsError(
+    throw new LoomError(
       error("config/reserved-scheme", `"${className}" is a reserved scheme, not a class`),
     );
   }
@@ -79,7 +79,7 @@ export function absolute(cfg: Config, repoRelative: string): string {
 }
 
 /**
- * Find the nearest `.design-docs.yaml` by walking up from `startDir`. Absent
+ * Find the nearest `.loom.yaml` by walking up from `startDir`. Absent
  * one, the repo root is the nearest git root and all defaults apply.
  */
 export function loadConfig(startDir: string = process.cwd()): Config {

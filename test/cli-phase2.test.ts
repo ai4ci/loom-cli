@@ -11,7 +11,7 @@ const CONFIG = "designRoot: design\nclassRoots:\n  issue: design/issue\n  decisi
 
 function repo(files: Record<string, string>): string {
   return makeRepo({
-    ".design-docs.yaml": CONFIG,
+    ".loom.yaml": CONFIG,
     "design/document-model.mmd": GRAPH_MODEL,
     ...files,
   });
@@ -56,7 +56,7 @@ test("--fix repairs a stale link block", async () => {
   const root = repo({
     "design/issue/a.md": instance(
       "class: issue\ntitle: A\nstatus: open\nblocks: [issue://b.md]",
-      "\n<!-- design-docs:links start -->\n- blocks: [Wrong](zzz.md)\n<!-- design-docs:links end -->\n\nProse.\n",
+      "\n<!-- loom:links start -->\n- blocks: [Wrong](zzz.md)\n<!-- loom:links end -->\n\nProse.\n",
     ),
     "design/issue/b.md": OPEN("Bee"),
   });

@@ -313,7 +313,7 @@ export function commit(cfg: Config, writes: PendingWrite[]): string[] {
     if (write.content === null) continue;
     const target = absolute(cfg, write.path);
     mkdirSync(path.dirname(target), { recursive: true });
-    const temp = `${target}.design-docs-tmp`;
+    const temp = `${target}.loom-tmp`;
     writeFileSync(temp, write.content);
     staged.push({ temp, target });
   }

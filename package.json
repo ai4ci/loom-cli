@@ -1,11 +1,11 @@
 {
-  "name": "design-docs",
-  "version": "0.4.2",
-  "description": "Configurable in-project design documentation",
+  "name": "loom",
+  "version": "0.5.0",
+  "description": "Model-driven markdown documentation graph with typed relations, DuckDB projections and source code linkage",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "design-docs": "./dist/cli.js"
+    "loom": "./dist/cli.js"
   },
   "engines": {
     "node": ">=22"

@@ -23,7 +23,7 @@ function git(root: string, ...args: string[]): void {
 /** A repository with one commit, so HEAD can be compared against. */
 function committed(files: Record<string, string>): string {
   const root = makeRepo({
-    ".design-docs.yaml": CONFIG,
+    ".loom.yaml": CONFIG,
     "design/document-model.mmd": MODEL,
     ...files,
   });
@@ -96,7 +96,7 @@ test("a rename with a changed body is not inferred", async () => {
 
 test("drift detection is skipped outside a git repository", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": CONFIG,
+    ".loom.yaml": CONFIG,
     "design/document-model.mmd": MODEL,
     "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#gone]"),
     "src/app.ts": "export function other() {}\n",

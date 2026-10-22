@@ -6,10 +6,10 @@ import { instance, makeRepo } from "./helpers.ts";
 
 function repo(): string {
   return makeRepo({
-    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src, R]\n",
+    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src, R]\n",
     "design/issue/first.md": instance(
       "class: issue\nid: first.md\ntitle: The thing is broken\nstatus: open",
-      "\n<!-- design-docs:links start -->\n- blocks: [Other](other.md)\n<!-- design-docs:links end -->\n\nProse.\n",
+      "\n<!-- loom:links start -->\n- blocks: [Other](other.md)\n<!-- loom:links end -->\n\nProse.\n",
     ),
     "R/model.R": "fit <- function(x) x\n",
   });

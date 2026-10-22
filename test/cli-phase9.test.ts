@@ -21,7 +21,7 @@ const CONFIG = "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [
 
 function repo(extra: Record<string, string> = {}): string {
   return makeRepo({
-    ".design-docs.yaml": CONFIG,
+    ".loom.yaml": CONFIG,
     "design/document-model.mmd": MODEL,
     "design/issue/a.md": instance("class: issue\ntitle: Aye\nstatus: open\nimplemented-by: [src://app.ts#Service.run]"),
     "design/issue/b.md": instance("class: issue\ntitle: Bee\nstatus: closed"),

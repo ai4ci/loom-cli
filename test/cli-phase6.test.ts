@@ -11,7 +11,7 @@ const CONFIG = "designRoot: design\nclassRoots:\n  issue: design/issue\n";
 
 function repo(): string {
   return makeRepo({
-    ".design-docs.yaml": CONFIG,
+    ".loom.yaml": CONFIG,
     "design/document-model.mmd": GRAPH_MODEL,
     "design/issue/open-a.md": instance("class: issue\ntitle: Open A\nstatus: open"),
     "design/issue/open-b.md": instance("class: issue\ntitle: Open B\nstatus: open"),
@@ -42,7 +42,7 @@ test("index regenerates a query-based index", async () => {
 
 test("index regenerates a SQL-query-based index", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": CONFIG,
+    ".loom.yaml": CONFIG,
     "design/document-model.mmd": GRAPH_MODEL,
     "design/issue/a.md": instance("class: issue\ntitle: A\nstatus: open"),
     "design/issue/b.md": instance("class: issue\ntitle: B\nstatus: closed"),
@@ -77,8 +77,8 @@ test("--check detects a stale index", async () => {
   // Manually edit the index to be stale
   const stalePath = path.join(root, "design/INDEX.md");
   const stale = readFileSync(stalePath, "utf8")
-    .replace(/<!-- design-docs:links start -->\n([\s\S]*?)\n<!-- design-docs:links end -->/,
-             "<!-- design-docs:links start -->\n- [Stale](stale.md)\n<!-- design-docs:links end -->");
+    .replace(/<!-- loom:links start -->\n([\s\S]*?)\n<!-- loom:links end -->/,
+             "<!-- loom:links start -->\n- [Stale](stale.md)\n<!-- loom:links end -->");
   const { writeFileSync } = await import("node:fs");
   writeFileSync(stalePath, stale);
 
@@ -98,7 +98,7 @@ test("--check passes when indexes are up to date", async () => {
 
 test("--check passes when there are no indexes", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": CONFIG,
+    ".loom.yaml": CONFIG,
     "design/document-model.mmd": GRAPH_MODEL,
     "design/issue/a.md": instance("class: issue\ntitle: A\nstatus: open"),
   });
@@ -116,7 +116,7 @@ test("index reports which files were updated", async () => {
 
 test("an index file with no view is left untouched", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": CONFIG,
+    ".loom.yaml": CONFIG,
     "design/document-model.mmd": GRAPH_MODEL,
     "design/issue/a.md": instance("class: issue\ntitle: A\nstatus: open"),
     "design/INDEX.md": `---

@@ -46,7 +46,7 @@ language; it needs an allowlist over a fixed set.
 > configured anchor-kind set, addressed by its dotted path from the file root.
 
 ```yaml
-# .design-docs.yaml
+# .loom.yaml
 src:
   anchorKinds: [Function, Method, Class, Struct, Interface, Enum, Trait]
   transparentKinds: [Impl, Module, Namespace]
@@ -224,10 +224,10 @@ The URI space is one hierarchy in which `#anchor` is simply a deeper level than
 the path, so `ls` is directory descent and needs no mode switch:
 
 ```
-design-docs ls issue://                  # instances of a class
-design-docs ls src://                    # directories and files
-design-docs ls src://pkg/app.ts          # linkable anchors in the file
-design-docs ls src://pkg/app.ts#Service  # anchors nested in that anchor
+loom ls issue://                  # instances of a class
+loom ls src://                    # directories and files
+loom ls src://pkg/app.ts          # linkable anchors in the file
+loom ls src://pkg/app.ts#Service  # anchors nested in that anchor
 ```
 
 ```yaml
@@ -250,7 +250,7 @@ table.
 ### `locate` — the address of a line
 
 ```
-design-docs locate src://app.ts --line 42
+loom locate src://app.ts --line 42
 ```
 
 ```yaml

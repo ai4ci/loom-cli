@@ -1,10 +1,10 @@
 import { type Document, parseDocument } from "yaml";
 import { enforceSafeScalars } from "./yaml-scalars.ts";
 
-export const LINKS_START = "<!-- design-docs:links start -->";
-export const LINKS_END = "<!-- design-docs:links end -->";
+export const LINKS_START = "<!-- loom:links start -->";
+export const LINKS_END = "<!-- loom:links end -->";
 
-const LINKS_RE = /<!-- design-docs:links start -->[\s\S]*?<!-- design-docs:links end -->/;
+const LINKS_RE = /<!-- loom:links start -->[\s\S]*?<!-- loom:links end -->/;
 
 export interface InstanceFile {
   /** Comment-preserving YAML document, or null when the file has no frontmatter. */

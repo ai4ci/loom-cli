@@ -14,11 +14,11 @@ const OPEN = (title: string, extra = "") =>
   instance(`class: issue\ntitle: ${title}\nstatus: open${extra ? `\n${extra}` : ""}`);
 
 const withLinks = (frontmatter: string, links: string) =>
-  instance(frontmatter, `\n<!-- design-docs:links start -->\n${links}\n<!-- design-docs:links end -->\n\nProse.\n`);
+  instance(frontmatter, `\n<!-- loom:links start -->\n${links}\n<!-- loom:links end -->\n\nProse.\n`);
 
 function repo(files: Record<string, string>): string {
   return makeRepo({
-    ".design-docs.yaml": CONFIG,
+    ".loom.yaml": CONFIG,
     "design/document-model.mmd": GRAPH_MODEL,
     ...files,
   });

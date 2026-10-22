@@ -14,7 +14,7 @@ const OPEN = (title: string, extra = "") =>
 
 function repo(): string {
   return makeRepo({
-    ".design-docs.yaml": CONFIG,
+    ".loom.yaml": CONFIG,
     "design/document-model.mmd": GRAPH_MODEL,
     "design/issue/a.md": OPEN("Aye", "blocks: [issue://b.md]\nspec: notes/s.md"),
     "design/issue/b.md": OPEN("Bee"),
@@ -59,7 +59,7 @@ test("attributes get native column types", async () => {
 
 test("a date attribute compares without a cast", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n",
+    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n",
     "design/document-model.mmd": `classDiagram
     class issue {
         +string title
@@ -106,7 +106,7 @@ test("rebuild picks up a change to an instance", async () => {
 
 test("a list attribute becomes a duckdb list", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n",
+    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n",
     "design/document-model.mmd": `classDiagram
     class issue {
         +string title

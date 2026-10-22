@@ -19,12 +19,12 @@ export interface Diagnostic {
 }
 
 /** Thrown for conditions the caller is expected to report, not stack-trace. */
-export class DesignDocsError extends Error {
+export class LoomError extends Error {
   readonly diagnostic: Diagnostic;
 
   constructor(diagnostic: Diagnostic) {
     super(diagnostic.message);
-    this.name = "DesignDocsError";
+    this.name = "LoomError";
     this.diagnostic = diagnostic;
   }
 }

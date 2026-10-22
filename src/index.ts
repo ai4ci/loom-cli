@@ -173,7 +173,7 @@ export async function indexCommand(cfg: Config, options: { check?: boolean }): P
     };
   }
   // Rebuild the database if it doesn't exist; queries need it.
-  if (!existsSync(absolute(cfg, `${cfg.designRoot}/.design-docs.duckdb`))) {
+  if (!existsSync(absolute(cfg, `${cfg.designRoot}/.loom.duckdb`))) {
     const { loadGraph } = await import("./graph.ts");
     const { rebuild } = await import("./duckdb.ts");
     const { graph } = loadGraph(cfg, schema);

@@ -14,7 +14,7 @@ These are settled and should not be relitigated without updating this section.
 
 The YAML header of each class instance is the single source of truth. Everything
 else is a **projection** that must be reproducible from a cold start by deleting
-it and running `design-docs rebuild`:
+it and running `loom rebuild`:
 
 | Artefact | Derived from | Committed |
 |---|---|---|
@@ -264,7 +264,7 @@ rewriting. See "Later — composite attributes".
 These are the user-facing contracts. They are fixed early because every later
 phase depends on them.
 
-### 2.1 Config — `$REPO_ROOT/.design-docs.yaml` (optional)
+### 2.1 Config — `$REPO_ROOT/.loom.yaml` (optional)
 
 ```yaml
 designRoot: design          # default: design
@@ -293,9 +293,9 @@ status: open
 blocks: [issue://other-thing.md]
 ---
 
-<!-- design-docs:links start -->
+<!-- loom:links start -->
 - blocks: [The other thing](../issues/other-thing.md)
-<!-- design-docs:links end -->
+<!-- loom:links end -->
 
 Free prose, edited by anything, never touched by the tool.
 ```
@@ -306,12 +306,12 @@ file's location; the location wins on conflict (§1.1).
 The generated block carries outbound links and, below them, inbound ones:
 
 ```markdown
-<!-- design-docs:links start -->
+<!-- loom:links start -->
 - blocks: [The other thing](../issues/other-thing.md)
 
 ### Backlinks
 - blocks: [Something upstream](../issues/upstream.md)
-<!-- design-docs:links end -->
+<!-- loom:links end -->
 ```
 
 **Link text** comes from the target's `title` attribute, falling back to its
@@ -372,7 +372,7 @@ region splice that is a byte-for-byte no-op when content is unchanged.
 Diagnostic type, the `writeScalar` rules of §2.2, and output serialisation
 (YAML default, `--json` switch).
 
-**Commands.** `design-docs resolve <uri>`, `design-docs show <uri>`.
+**Commands.** `loom resolve <uri>`, `loom show <uri>`.
 
 **Done when.** A property test round-trips a corpus of awkward files (CRLF, no
 trailing newline, unicode, YAML anchors, absent protected block, protected block
@@ -402,8 +402,8 @@ composition or aggregation arrow (§1.10), a class used as an attribute type tha
 declares relations, and a cycle in value-type containment. Validate one instance
 against the IR.
 
-**Commands.** `design-docs model check [--model <path>]`,
-`design-docs validate <uri>`.
+**Commands.** `loom model check [--model <path>]`,
+`loom validate <uri>`.
 
 **Why tree-sitter and not mermaid's own parser.** `@mermaid-js/parser` (the
 Langium rewrite, 2.0.1) covers `info`, `packet`, `pie`, `treeView`,
@@ -463,7 +463,7 @@ disagree with their location. Emit the report to
 `$DESIGN_DOCS_ROOT/VALIDATION.md` and to stdout. Model-change impact analysis
 (scope §CLI.9) is the same code path run against a proposed model file.
 
-**Commands.** `design-docs validate [--model <proposed.mmd>] [--fix]`.
+**Commands.** `loom validate [--model <proposed.mmd>] [--fix]`.
 
 `--fix` handles only the unambiguous repairs: regenerate a stale or missing
 protected link block from the YAML, normalise a non-canonical URI. Anything
@@ -483,8 +483,8 @@ relative paths. `rename` rewrites every inbound URI across the corpus — this i
 the operation that makes path-as-identity survivable, and `git mv` without it is
 the single most likely way a user corrupts their graph.
 
-**Commands.** `design-docs apply <changeset.yaml> [--dry-run]`,
-`design-docs rename <from-uri> <to-uri>`, plus thin sugar for single ops
+**Commands.** `loom apply <changeset.yaml> [--dry-run]`,
+`loom rename <from-uri> <to-uri>`, plus thin sugar for single ops
 (`create`, `set`, `link`, `unlink`, `delete`) that build a one-op changeset.
 
 **Done when.** `--dry-run` prints the exact diff that `apply` would write; a
@@ -498,7 +498,7 @@ a mid-sequence error.
 
 ### Phase 4 — DuckDB projection (Complete)
 
-**Scope.** Project the graph into `$DESIGN_DOCS_ROOT/.design-docs.duckdb`
+**Scope.** Project the graph into `$DESIGN_DOCS_ROOT/.loom.duckdb`
 (git-ignored): one table per concrete class with its scalar attributes, plus
 `edge(subject, relation, object)`. Attribute types map to native DuckDB types
 (`date` → `DATE`, `int` → `INTEGER`, enums → `VARCHAR`, with the member list
@@ -511,7 +511,7 @@ structured YAML — they appear only as subjects or objects in `edge`. Full
 rebuild only — incremental update is not worth the invalidation bugs at this
 corpus size. Pass arbitrary SQL through to DuckDB.
 
-**Commands.** `design-docs rebuild`, `design-docs query "<sql>" [--json]`.
+**Commands.** `loom rebuild`, `loom query "<sql>" [--json]`.
 
 **Done when.** A rebuild of a fixture repo produces the expected schema and row
 counts, and `rebuild` from scratch and `rebuild` over an existing database give
@@ -540,9 +540,9 @@ reverse-link comment pointing at a missing document, using a relation the model
 does not define, or using a relation not permitted for that particular `src`
 subclass.
 
-**Commands.** `design-docs resolve <src-uri>` (now returns a line number),
-`design-docs refs <src-uri>` (which documents reference this function),
-`design-docs prefetch` (download the configured grammars).
+**Commands.** `loom resolve <src-uri>` (now returns a line number),
+`loom refs <src-uri>` (which documents reference this function),
+`loom prefetch` (download the configured grammars).
 
 **Two things to settle in a spike.** First, `CommentInfo.associatedNode` is
 documented as "name of the syntax node this comment is directly associated
@@ -569,7 +569,7 @@ The residual risk is grammar coverage quality for specific languages.
 a view (a SQL query or a filter over classes and attributes) and whose body is a
 protected generated region of relative wiki links. Regenerating is idempotent.
 
-**Commands.** `design-docs index [--check]`. `--check` exits 1 if any index is
+**Commands.** `loom index [--check]`. `--check` exits 1 if any index is
 stale, for CI.
 
 **Done when.** A stale index is detected by `--check` and brought up to date by
@@ -585,7 +585,7 @@ and answer similarity queries by brute-force cosine. The embedding provider is
 an interface with one local implementation; the choice of model is deliberately
 deferred to this point.
 
-**Commands.** `design-docs similar <uri|text> [--limit n]`.
+**Commands.** `loom similar <uri|text> [--limit n]`.
 
 **Done when.** Re-running after editing one document re-embeds exactly one
 document.

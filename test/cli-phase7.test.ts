@@ -10,7 +10,7 @@ const CONFIG = "designRoot: design\nclassRoots:\n  issue: design/issue\n";
 
 function repo(extra: Record<string, string> = {}): string {
   return makeRepo({
-    ".design-docs.yaml": CONFIG,
+    ".loom.yaml": CONFIG,
     "design/document-model.mmd": GRAPH_MODEL,
     "design/issue/a.md": instance(
       "class: issue\ntitle: Authentication bug\nstatus: open",

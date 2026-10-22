@@ -1,6 +1,6 @@
 # CLI interface
 
-The command surface of `design-docs`. This is the contract an agent or script
+The command surface of `loom`. This is the contract an agent or script
 codes against; [implementation-plan.md](./implementation-plan.md) says *why*
 each piece exists, [source-linkage.md](./source-linkage.md) settles how source
 code is addressed, and [scope.md](./scope.md) states the requirements.
@@ -11,15 +11,15 @@ disagree, the code is right and this document is a bug.
 ## 1. Invocation
 
 ```
-design-docs [global options] <command> [arguments] [command options]
+loom [global options] <command> [arguments] [command options]
 ```
 
 Global options must appear **before** the command name, because they are
 declared on the root program:
 
 ```
-design-docs --json resolve issue://a.md      # correct
-design-docs resolve issue://a.md --json      # not recognised as global
+loom --json resolve issue://a.md      # correct
+loom resolve issue://a.md --json      # not recognised as global
 ```
 
 | Global option | Default | Effect |
@@ -30,7 +30,7 @@ design-docs resolve issue://a.md --json      # not recognised as global
 
 There is no `--version` flag. See §7.
 
-Configuration is found by walking up from `--cwd` for `.design-docs.yaml`,
+Configuration is found by walking up from `--cwd` for `.loom.yaml`,
 falling back to the nearest git root with all defaults applied. See
 implementation-plan §2.1 for the file's shape.
 
@@ -162,10 +162,10 @@ is a deeper level than the path, so `ls` is directory descent and needs no mode
 switch.
 
 ```
-design-docs ls issue://                  # instances of a class
-design-docs ls src://                    # directories and files
-design-docs ls src://pkg/app.ts          # linkable anchors in the file
-design-docs ls src://pkg/app.ts#Service  # anchors nested in that anchor
+loom ls issue://                  # instances of a class
+loom ls src://                    # directories and files
+loom ls src://pkg/app.ts          # linkable anchors in the file
+loom ls src://pkg/app.ts#Service  # anchors nested in that anchor
 ```
 
 | Option | Default | Effect |
@@ -343,9 +343,9 @@ already constrains which relations are legal in which direction, so there is no
 separate verb:
 
 ```
-design-docs link issue://a.md blocks issue://b.md          # writes yaml
-design-docs link src://app.ts#Service.run implements issue://a.md   # writes a comment
-design-docs link src://app.ts --line 42 implements issue://a.md     # resolves the line first
+loom link issue://a.md blocks issue://b.md          # writes yaml
+loom link src://app.ts#Service.run implements issue://a.md   # writes a comment
+loom link src://app.ts --line 42 implements issue://a.md     # resolves the line first
 ```
 
 The source-writing half goes through this same changeset pipeline, so it
@@ -377,7 +377,7 @@ only — the files are the source of truth, so this is the cheapest correct
 projection and it needs no migrations.
 
 ```yaml
-database: design/.design-docs.duckdb
+database: design/.loom.duckdb
 tables:
   - { name: issue, rows: 2 }
   - { name: edge, rows: 1 }
@@ -551,7 +551,7 @@ field, so a document literally named `text` would be ambiguous. Harmless today;
 a `mode: text | uri` field would be cleaner.
 
 **Global options must precede the command.** Commander's default behaviour, but
-an easy mistake — `design-docs validate --json` silently ignores `--json`.
+an easy mistake — `loom validate --json` silently ignores `--json`.
 
 ## 9. Not built
 

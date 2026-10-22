@@ -1,15 +1,15 @@
 ---
-name: creating-a-design-docs-workflow
-description: Meta-skill for designing, configuring, and deploying a design-docs system for a specific repository. Use when setting up design-docs in a new or existing codebase, authoring a Mermaid document model (`document-model.mmd`), writing `.design-docs.yaml`, setting up human-navigable index views, defining document lifecycle transition rules (e.g. issue states, review workflows), or generating a project-specific workflow skill.
+name: creating-a-loom-workflow
+description: Meta-skill for designing, configuring, and deploying a loom system for a specific repository. Use when setting up loom in a new or existing codebase, authoring a Mermaid document model (`document-model.mmd`), writing `.loom.yaml`, setting up human-navigable index views, defining document lifecycle transition rules (e.g. issue states, review workflows), or generating a project-specific workflow skill.
 ---
 
-# Creating a Design-Docs Workflow
+# Creating a Loom Workflow
 
-This meta-skill guides an agent through establishing a documentation architecture using `design-docs`, tailoring the schema, configuring the tooling, generating navigation, and codifying the repository's document lifecycle into a project-specific workflow skill.
+This meta-skill guides an agent through establishing a documentation architecture using `loom`, tailoring the schema, configuring the tooling, generating navigation, and codifying the repository's document lifecycle into a project-specific workflow skill.
 
 ## When to Use This Skill
 
-- Setting up `design-docs` in a repository for the first time.
+- Setting up `loom` in a repository for the first time.
 - Modeling design artefacts (ADRs, RFCs, Issues, Requirements, Test Plans, Services).
 - Defining document lifecycle transition rules (e.g. `draft` -> `review` -> `accepted` -> `implemented`).
 - Creating a companion project-specific workflow skill (e.g. `manage-architecture-docs`, `issue-lifecycle-workflow`) tailored to the repository's domain model.
@@ -75,14 +75,14 @@ Place the model at `$DESIGN_DOCS_ROOT/document-model.mmd` (typically `design/doc
 
 Validate the model syntax:
 ```bash
-design-docs model check
+loom model check
 ```
 
 ---
 
-## Step 3: Configure Top-Level YAML (`.design-docs.yaml`)
+## Step 3: Configure Top-Level YAML (`.loom.yaml`)
 
-Create `.design-docs.yaml` in the project root:
+Create `.loom.yaml` in the project root:
 
 ```yaml
 # Root directory for design documents
@@ -113,7 +113,7 @@ source:
 
 Run initial validation to ensure configuration is active:
 ```bash
-design-docs validate
+loom validate
 ```
 
 ---
@@ -136,8 +136,8 @@ view:
 
 # Open Issues
 
-<!-- design-docs:links start -->
-<!-- design-docs:links end -->
+<!-- loom:links start -->
+<!-- loom:links end -->
 ```
 
 ### SQL Query View Example (`design/adrs/INDEX.md`)
@@ -151,13 +151,13 @@ view:
 
 # Architecture Decisions
 
-<!-- design-docs:links start -->
-<!-- design-docs:links end -->
+<!-- loom:links start -->
+<!-- loom:links end -->
 ```
 
 Generate the link blocks:
 ```bash
-design-docs index
+loom index
 ```
 
 ---
@@ -195,8 +195,8 @@ description: Procedures, validation rules, and lifecycle transitions for managin
 
 # <Project> Design Docs Workflow
 
-This repository uses `design-docs` governed by `design/document-model.mmd`.
-Refer to `using-design-docs-cli` for general CLI operation syntax.
+This repository uses `loom` governed by `design/document-model.mmd`.
+Refer to `using-loom-cli` for general CLI operation syntax.
 
 ## 1. Document Classes & Locations
 - Issues: `issue://<name>.md` -> `design/issues/<name>.md`
@@ -206,13 +206,13 @@ Refer to `using-design-docs-cli` for general CLI operation syntax.
 
 ### Creating an Issue
 \`\`\`bash
-design-docs create issue://my-task.md "title: My Task" "status: open" "created: $(date +%Y-%m-%d)"
+loom create issue://my-task.md "title: My Task" "status: open" "created: $(date +%Y-%m-%d)"
 \`\`\`
 
 ### Linking Code to an Issue
 When implementing an issue in code:
 \`\`\`bash
-design-docs link src://src/feature.ts#handleTask implements issue://my-task.md
+loom link src://src/feature.ts#handleTask implements issue://my-task.md
 \`\`\`
 
 ## 3. Lifecycle Transition Rules
@@ -220,23 +220,23 @@ design-docs link src://src/feature.ts#handleTask implements issue://my-task.md
 ### Moving an Issue to in_progress
 - Check if blocked:
   \`\`\`bash
-  design-docs query "SELECT object FROM edge WHERE subject = 'issue://my-task.md' AND relation = 'blocks'"
+  loom query "SELECT object FROM edge WHERE subject = 'issue://my-task.md' AND relation = 'blocks'"
   \`\`\`
 
 ### Resolving an Issue
 - Ensure code link exists:
   \`\`\`bash
-  design-docs refs src://path/to/code.ts#symbol
+  loom refs src://path/to/code.ts#symbol
   \`\`\`
 - Update status:
   \`\`\`bash
-  design-docs set issue://my-task.md status resolved
+  loom set issue://my-task.md status resolved
   \`\`\`
 
 ## 4. Pre-Commit Checklist
 Always run before committing changes to design docs:
-1. \`design-docs validate --fix\`
-2. \`design-docs index\`
+1. \`loom validate --fix\`
+2. \`loom index\`
 3. Verify zero errors in \`design/VALIDATION.md\`
 ```
 
@@ -244,8 +244,8 @@ Always run before committing changes to design docs:
 
 ## Step 7: Verification Checklist
 
-1. Model passes `design-docs model check`.
-2. Graph validates clean with `design-docs validate`.
-3. Indexes update cleanly with `design-docs index`.
-4. Git pre-commit or CI check runs `design-docs validate && design-docs index --check`.
-5. The companion `using-design-docs-cli` skill is present and referenced.
+1. Model passes `loom model check`.
+2. Graph validates clean with `loom validate`.
+3. Indexes update cleanly with `loom index`.
+4. Git pre-commit or CI check runs `loom validate && loom index --check`.
+5. The companion `using-loom-cli` skill is present and referenced.

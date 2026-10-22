@@ -296,7 +296,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
         found.push(error(
           "graph/stale-links",
           "the protected link block disagrees with the yaml",
-          { uri: node.uri, fix: "run `design-docs validate --fix`" },
+          { uri: node.uri, fix: "run `loom validate --fix`" },
         ));
       }
     }

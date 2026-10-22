@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { absolute, classRootsFor, RESERVED_SCHEMES, type Config } from "./config.ts";
-import { DesignDocsError, error } from "./diagnostics.ts";
+import { LoomError, error } from "./diagnostics.ts";
 import { type Graph } from "./graph.ts";
 import { isInstantiable } from "./model/schema.ts";
 import { type Anchor, detectLang, extractAnchors } from "./source.ts";
@@ -59,7 +59,7 @@ function listInstances(cfg: Config, graph: Graph, className: string): ListEntry[
 function listDirectory(cfg: Config, scheme: string, root: string, relative: string): ListEntry[] {
   const dir = absolute(cfg, relative === "" ? root : `${root}/${relative}`);
   if (!existsSync(dir)) {
-    throw new DesignDocsError(error("ls/not-found", `nothing at ${scheme}://${relative}`));
+    throw new LoomError(error("ls/not-found", `nothing at ${scheme}://${relative}`));
   }
 
   return readdirSync(dir, { withFileTypes: true })
@@ -80,7 +80,7 @@ function listAnchors(
 ): ListEntry[] {
   const language = detectLang(filePath);
   if (language === null) {
-    throw new DesignDocsError(error(
+    throw new LoomError(error(
       "source/unsupported-language",
       `no structure available for ${filePath}`,
     ));
@@ -119,7 +119,7 @@ export function listUri(cfg: Config, graph: Graph, raw: string, options: ListOpt
   const scheme = bare ? bare[1]!.toLowerCase() : parseUri(raw).scheme;
 
   if (RESERVED_SCHEMES.has(scheme)) {
-    throw new DesignDocsError(error("ls/not-a-class", `${scheme}:// is not a class or source root`));
+    throw new LoomError(error("ls/not-a-class", `${scheme}:// is not a class or source root`));
   }
 
   const isSource = !isInstantiable(graph.schema, scheme);
@@ -136,13 +136,13 @@ export function listUri(cfg: Config, graph: Graph, raw: string, options: ListOpt
   const full = absolute(cfg, relative);
 
   if (!isSource) {
-    throw new DesignDocsError(error(
+    throw new LoomError(error(
       "ls/not-a-directory",
       `${raw} is an instance; use \`show\` to read it`,
     ));
   }
   if (!existsSync(full)) {
-    throw new DesignDocsError(error("ls/not-found", `nothing at ${raw}`));
+    throw new LoomError(error("ls/not-found", `nothing at ${raw}`));
   }
   if (statSync(full).isDirectory()) {
     return {
@@ -184,11 +184,11 @@ export function locateLine(cfg: Config, raw: string, line: number): Located {
   const full = absolute(cfg, relative);
 
   if (!existsSync(full)) {
-    throw new DesignDocsError(error("ls/not-found", `nothing at ${raw}`));
+    throw new LoomError(error("ls/not-found", `nothing at ${raw}`));
   }
   const language = detectLang(relative);
   if (language === null) {
-    throw new DesignDocsError(error(
+    throw new LoomError(error(
       "source/unsupported-language",
       `no structure available for ${relative}`,
     ));

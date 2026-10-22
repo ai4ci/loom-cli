@@ -31,7 +31,7 @@ const TS = `export class Service {
 
 function repo(extra: Record<string, string> = {}): string {
   return makeRepo({
-    ".design-docs.yaml": CONFIG,
+    ".loom.yaml": CONFIG,
     "design/document-model.mmd": MODEL,
     "design/issue/auth.md": instance("class: issue\ntitle: Auth"),
     "design/issue/other.md": instance("class: issue\ntitle: Other"),

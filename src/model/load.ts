@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { absolute, type Config } from "../config.ts";
-import { DesignDocsError, type Diagnostic, error } from "../diagnostics.ts";
+import { LoomError, type Diagnostic, error } from "../diagnostics.ts";
 import { parseModel } from "./mermaid.ts";
 import { validateModel } from "./schema.ts";
 import type { SchemaIR } from "./types.ts";
@@ -31,7 +31,7 @@ export function loadModel(cfg: Config, override?: string): LoadedModel {
     : path.resolve(cfg.repoRoot, override);
 
   if (!existsSync(target)) {
-    throw new DesignDocsError(error("model/not-found", `no document model at ${target}`, {
+    throw new LoomError(error("model/not-found", `no document model at ${target}`, {
       fix: `create ${cfg.designRoot}/${MODEL_FILENAME}`,
     }));
   }

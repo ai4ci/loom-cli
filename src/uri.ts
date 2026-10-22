@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { absolute, classRootsFor, type Config } from "./config.ts";
-import { DesignDocsError, error } from "./diagnostics.ts";
+import { LoomError, error } from "./diagnostics.ts";
 
 export interface ParsedUri {
   scheme: string;
@@ -31,7 +31,7 @@ export function normalisePath(raw: string): string {
     if (segment === "" || segment === ".") continue;
     if (segment === "..") {
       if (segments.length === 0) {
-        throw new DesignDocsError(
+        throw new LoomError(
           error("uri/escapes-root", `path ${JSON.stringify(raw)} escapes its root`),
         );
       }
@@ -46,7 +46,7 @@ export function normalisePath(raw: string): string {
 export function parseUri(raw: string): ParsedUri {
   const match = URI_RE.exec(raw.trim());
   if (!match) {
-    throw new DesignDocsError(
+    throw new LoomError(
       error("uri/malformed", `not a design uri: ${JSON.stringify(raw)}`),
     );
   }
@@ -63,7 +63,7 @@ export function parseUri(raw: string): ParsedUri {
 
   const normalised = normalisePath(rest);
   if (normalised === "") {
-    throw new DesignDocsError(
+    throw new LoomError(
       error("uri/malformed", `design uri has no path: ${JSON.stringify(raw)}`),
     );
   }

@@ -7,7 +7,7 @@ import path from "node:path";
  * Returns its absolute root.
  */
 export function makeRepo(files: Record<string, string>): string {
-  const root = mkdtempSync(path.join(tmpdir(), "design-docs-"));
+  const root = mkdtempSync(path.join(tmpdir(), "loom-"));
   mkdirSync(path.join(root, ".git"));
   for (const [relative, content] of Object.entries(files)) {
     const target = path.join(root, relative);

@@ -30,9 +30,9 @@ test("reserved schemes are not classes", () => {
   }
 });
 
-test("loadConfig finds .design-docs.yaml by walking up", () => {
+test("loadConfig finds .loom.yaml by walking up", () => {
   const root = mkdtempSync(path.join(tmpdir(), "dd-"));
-  writeFileSync(path.join(root, ".design-docs.yaml"), "designRoot: docs\nclassRoots:\n  issue: docs/issues\n");
+  writeFileSync(path.join(root, ".loom.yaml"), "designRoot: docs\nclassRoots:\n  issue: docs/issues\n");
   const nested = path.join(root, "a", "b");
   mkdirSync(nested, { recursive: true });
 

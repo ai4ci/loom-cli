@@ -14,7 +14,7 @@ const MODEL_WITH_SRC = `classDiagram
 
 function repo(): string {
   return makeRepo({
-    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src, R]\n",
+    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src, R]\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance(
       "class: issue\ntitle: One\nimplemented-by: [src://app.ts#runApp, src://model.R#fitModel]",
@@ -55,7 +55,7 @@ test("resolve resolves R function with anchor across multi-root to line number",
 
 test("validate catches missing symbol in source code", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#missing]"),
     "src/app.ts": "export function exists() {}",
@@ -68,7 +68,7 @@ test("validate catches missing symbol in source code", async () => {
 
 test("validate catches dangling reverse link comment in source file", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance("class: issue\ntitle: One"),
     "src/app.ts": `
@@ -100,7 +100,7 @@ test("prefetch command downloads/warms grammars", async () => {
 
 test("an ambiguous anchor is an error, not a silent first match", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#run]"),
     "src/app.ts": "export class Alpha { run() {} }\nexport class Beta { run() {} }\n",
@@ -115,7 +115,7 @@ test("an ambiguous anchor is an error, not a silent first match", async () => {
 
 test("resolve refuses an ambiguous anchor", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "src/app.ts": "export class Alpha { run() {} }\nexport class Beta { run() {} }\n",
   });
@@ -126,7 +126,7 @@ test("resolve refuses an ambiguous anchor", async () => {
 
 test("a dotted anchor disambiguates through the cli", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "src/app.ts": "export class Alpha { run() {} }\nexport class Beta { run() {} }\n",
   });
@@ -137,7 +137,7 @@ test("a dotted anchor disambiguates through the cli", async () => {
 
 test("a renamed symbol suggests the nearest candidate", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#runApp]"),
     "src/app.ts": "export function runApplication() {}\n",
@@ -150,7 +150,7 @@ test("a renamed symbol suggests the nearest candidate", async () => {
 
 test("the anchor policy is configurable", async () => {
   const root = makeRepo({
-    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\nsource:\n  anchorKinds: [Class]\n",
+    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\nsource:\n  anchorKinds: [Class]\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "src/app.ts": "export class Alpha { run() {} }\n",
   });

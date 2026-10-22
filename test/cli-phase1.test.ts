@@ -9,7 +9,7 @@ import { MODEL } from "./fixtures.ts";
 
 function repo(extra: Record<string, string> = {}): string {
   return makeRepo({
-    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n",
+    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n",
     "design/document-model.mmd": MODEL,
     "design/issue/first.md": instance(
       "class: issue\nid: first.md\ntitle: The thing\ncreated: 2026-01-05\nstatus: open\ntags: [a]",
