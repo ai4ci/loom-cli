@@ -1,10 +1,14 @@
 # CLI interface
 
-The command surface of `design-docs`, as built. This is the contract an agent
-or script codes against; [implementation-plan.md](./implementation-plan.md)
-says *why* each piece exists, and [scope.md](./scope.md) states the
-requirements. Where this document and the code disagree, the code is right and
-this document is a bug.
+The command surface of `design-docs`. This is the contract an agent or script
+codes against; [implementation-plan.md](./implementation-plan.md) says *why*
+each piece exists, [source-linkage.md](./source-linkage.md) settles how source
+code is addressed, and [scope.md](./scope.md) states the requirements.
+
+**Status.** Everything here is built unless marked **△ specified**, which means
+the behaviour is settled but the code is not written. Where this document and
+the code disagree on anything *not* so marked, the code is right and this
+document is a bug.
 
 ## 1. Invocation
 
@@ -153,6 +157,64 @@ markdown: "\nProse.\n"  # everything after the frontmatter, verbatim
 
 Exits 1 with `instance/not-found` when the file is missing.
 
+### △ specified: `ls [uri]`
+
+List what can be linked to. The uri space is one hierarchy in which `#anchor`
+is a deeper level than the path, so `ls` is directory descent and needs no mode
+switch.
+
+```
+design-docs ls issue://                  # instances of a class
+design-docs ls src://                    # directories and files
+design-docs ls src://pkg/app.ts          # linkable anchors in the file
+design-docs ls src://pkg/app.ts#Service  # anchors nested in that anchor
+```
+
+| Option | Default | Effect |
+|---|---|---|
+| `--depth <n>` | `1` | How far to descend. |
+| `--kind <k,...>` | all | Narrow to given structure kinds. |
+| `--linked` / `--unlinked` | both | Filter by whether a design document already points there. |
+
+```yaml
+parent: src://pkg/app.ts
+entries:
+  - uri: src://pkg/app.ts#Service
+    kind: Class
+    line: 6
+    signature: class Service
+    children: 2
+    linked: true
+```
+
+`--unlinked` answers the question that motivates the command: *what in this
+file is not yet covered by any issue?* It is read from the edge table.
+
+What counts as a linkable anchor is a configured policy over the language
+pack's normalised structure kinds — see source-linkage §2.1. If `ls` does not
+list it, it is not linkable.
+
+### △ specified: `locate <uri> --line <n>`
+
+The address of a line: the reverse of `resolve`.
+
+```yaml
+anchor:
+  uri: src://app.ts#Service.run     # innermost linkable ancestor
+  kind: Method
+  span: { startLine: 40, endLine: 55 }
+ancestors:                           # coarser choices, outermost last
+  - { uri: "src://app.ts#Service", kind: Class }
+  - { uri: "src://app.ts", kind: File }
+```
+
+A line in an import block or a top-level statement has no linkable ancestor:
+`anchor` is `null` and the file is the only target, which is honest rather than
+inventing a node.
+
+A line number is an **input convenience and is never stored**. There is no
+`#L42` anchor form — a line does not say what granularity it means.
+
 ## 4. Model and validation
 
 ### `model check [--model <path>]`
@@ -274,6 +336,23 @@ output shape.
 | `set <uri> <key=value...>` | `set` |
 | `link <from> <relation> <to>` | `link` |
 | `unlink <from> <relation> <to>` | `unlink` |
+
+`link` and `unlink` **dispatch on the subject's scheme**. A design instance
+writes the relation into its yaml; a `src://` subject writes a comment into the
+source file. The shape is subject–relation–object either way, and the model
+already constrains which relations are legal in which direction, so there is no
+separate verb:
+
+```
+design-docs link issue://a.md blocks issue://b.md          # writes yaml
+design-docs link src://app.ts#Service.run implements issue://a.md   # △ writes a comment
+design-docs link src://app.ts --line 42 implements issue://a.md     # △ resolves the line first
+```
+
+The source-writing half is **△ specified**, not built. It goes through this
+same changeset pipeline, so it inherits validate-then-write, atomic staging and
+`--dry-run`. Where the comment is placed, and what cannot be annotated, is
+settled in source-linkage §4. Batching is the changeset: N ops in one file.
 | `delete <uri>` | `delete` |
 | `rename <from> <to> [--dry-run]` | `rename` |
 
@@ -414,7 +493,7 @@ Codes are stable identifiers; match on these rather than on message text.
 | `model/` | model parsing and validation | see below |
 | `instance/` | one instance against the model | see below |
 | `graph/` | cross-file checks | see below |
-| `source/` | reverse links in source code | `dangling-reverse-link`, `invalid-reverse-relation` |
+| `source/` | source code addressing and reverse links | `dangling-reverse-link`, `invalid-reverse-relation`; **△** `ambiguous-anchor`, `not-annotatable`, `unsupported-language`, `verification-failed` |
 | `changeset/` | changeset parsing and application | see below |
 | `query/` | derived database | `no-database`, `failed` |
 
@@ -439,7 +518,9 @@ Codes are stable identifiers; match on these rather than on message text.
 `unknown-relation`, `rename-across-classes`.
 
 `model/no-title-attribute` is the only warning currently emitted. Everything
-else is an error.
+else is an error — including `source/ambiguous-anchor`, because an address that
+resolves to several things is harder to handle at every layer than one that
+simply fails.
 
 ## 8. Known rough edges
 
@@ -464,10 +545,21 @@ single-element `diagnostics` array.
 field, so a document literally named `text` would be ambiguous. Harmless today;
 a `mode: text | uri` field would be cleaner.
 
+**A bare anchor silently takes the first match.** With `class Alpha { run() }`
+and `class Beta { run() }`, `src://x.ts#run` resolves to `Alpha.run` with no
+indication the choice was arbitrary. Fixed by the uniqueness invariant in
+source-linkage §2.2, which is specified but not yet built.
+
 **Global options must precede the command.** Commander's default behaviour, but
 an easy mistake — `design-docs validate --json` silently ignores `--json`.
 
 ## 9. Not built
+
+Commands marked **△ specified** above — `ls`, `locate`, and the source-writing
+half of `link`/`unlink` — are designed in
+[source-linkage.md](./source-linkage.md) and not yet implemented, along with the
+anchor-kind policy, the uniqueness invariant and overload qualification that
+they depend on.
 
 Deferred deliberately; see implementation-plan for the reasoning.
 

@@ -2,8 +2,9 @@
 
 Implementation plan for the tool described in [scope.md](./scope.md). Read that
 first; this document does not restate the requirements, it says how and in what
-order they get built. For the command surface as built, see
-[cli-interface.md](./cli-interface.md).
+order they get built. For the command surface see
+[cli-interface.md](./cli-interface.md); for how source code is addressed and
+annotated, [source-linkage.md](./source-linkage.md).
 
 ## 1. Guiding decisions
 
@@ -519,6 +520,12 @@ identical databases.
 **Risk.** Low.
 
 ### Phase 5 — Source code linkage
+
+> Phase 5 shipped the resolution and scanning described here.
+> [source-linkage.md](./source-linkage.md) supersedes it: it settles the
+> anchor-kind policy, makes anchor ambiguity a hard error, adds overload
+> qualification, and replaces the attribution heuristic below with body-span
+> containment. That last point is a behaviour change, not a refinement.
 
 **Scope.** Resolve `src://path/File.ext#symbol` — and the equivalent URI of any
 `src` subclass such as `test://` (§1.9) — to a line number using `process()`
