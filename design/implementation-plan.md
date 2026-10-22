@@ -363,7 +363,7 @@ matches roots of two *different* classes in the family.
 Each phase ends with a working CLI and its own tests. Phase 2 is the MVP — the
 first point at which the tool is worth running on a real repository.
 
-### Phase 0 — Foundations
+### Phase 0 — Foundations (Complete)
 
 **Scope.** Config discovery and defaults. URI parsing, resolution,
 canonicalisation and equivalence. Reading and writing a class instance file as
@@ -386,7 +386,7 @@ on the first.
 **Risk.** Low. This is the only phase with no external unknowns, which is why it
 goes first.
 
-### Phase 1 — The document model
+### Phase 1 — The document model (Complete)
 
 **Scope.** Parse `$DESIGN_DOCS_ROOT/document-model.mmd` via the pack's mermaid
 grammar into a schema IR: classes, attributes (name, type per §1.7, required),
@@ -451,7 +451,7 @@ diagnostic citing the offending line.
 **Risk.** Low-medium, reduced by the spike above having already landed. What is
 left is the breadth of the mermaid subset, not whether the approach works.
 
-### Phase 2 — Whole-graph validation (MVP)
+### Phase 2 — Whole-graph validation (MVP) (Complete)
 
 **Scope.** Walk all class roots, load every instance, build the graph in memory.
 Check: attribute types and requiredness, enum values against their member list,
@@ -475,7 +475,7 @@ class produces exactly the expected diagnostic set, and a clean repository exits
 
 **Risk.** Low. Mostly bookkeeping over Phase 1's IR.
 
-### Phase 3 — Mutation
+### Phase 3 — Mutation (Complete)
 
 **Scope.** Changeset parsing, in-memory application, whole-graph validation,
 atomic multi-file write (§1.2). Protected link block regeneration with correct
@@ -496,7 +496,7 @@ changeset twice is a no-op.
 **Risk.** Low-medium. The failure mode to test hardest is a partial write after
 a mid-sequence error.
 
-### Phase 4 — DuckDB projection
+### Phase 4 — DuckDB projection (Complete)
 
 **Scope.** Project the graph into `$DESIGN_DOCS_ROOT/.design-docs.duckdb`
 (git-ignored): one table per concrete class with its scalar attributes, plus
@@ -519,7 +519,7 @@ identical databases.
 
 **Risk.** Low.
 
-### Phase 5 — Source code linkage
+### Phase 5 — Source code linkage (Complete)
 
 > Phase 5 shipped the resolution and scanning described here.
 > [source-linkage.md](./source-linkage.md) supersedes it: it settles the
@@ -563,7 +563,7 @@ diagnostic.
 comment extraction is language-agnostic, so there is no per-language query work.
 The residual risk is grammar coverage quality for specific languages.
 
-### Phase 6 — Navigational indexes
+### Phase 6 — Navigational indexes (Complete)
 
 **Scope.** An index file is an ordinary markdown file whose frontmatter declares
 a view (a SQL query or a filter over classes and attributes) and whose body is a
@@ -577,7 +577,7 @@ stale, for CI.
 
 **Risk.** Low.
 
-### Phase 7 — Semantic search
+### Phase 7 — Semantic search (Complete)
 
 **Scope.** Embed the unprotected markdown body of each instance, cache vectors
 in DuckDB keyed by a content hash so only changed documents are re-embedded,
@@ -591,6 +591,14 @@ deferred to this point.
 document.
 
 **Risk.** Low, and fully isolated — nothing else depends on this phase.
+
+### Phases 8–11 — Source linkage extensions (Complete)
+
+Detailed in [source-linkage.md](./source-linkage.md):
+- **Phase 8 — The anchor model**: anchor allowlist policy, transparent kinds, ambiguity as a hard error, overload qualification, R language adapter with body spans, and drift candidate suggestion.
+- **Phase 9 — Discovery**: `ls <uri>` directory/symbol traversal and `locate <uri> --line <n>` symbol resolver.
+- **Phase 10 — Source annotation**: `link` and `unlink` support writing reverse-link comments directly into source declarations using AST validation and safe splicing.
+- **Phase 11 — Git rename inference**: drift tier 6.2 compares missing anchors against `HEAD` and auto-heals renames with `validate --fix`.
 
 ### Later — composite attributes
 
