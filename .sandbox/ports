@@ -1,8 +1,4 @@
 # .sandbox/ports — ports forwarded from host loopback into the sandbox, one per line
-
-# Local openAI API:
-# 11434
-# 8000
-# 11435
-
+# None: nothing this project needs runs on the host.
 11435
+11434

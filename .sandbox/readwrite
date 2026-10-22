@@ -1,0 +1,5 @@
+# Paths bound read-write inside the sandbox (adds to the baseline).
+
+# bun's global install cache (~/.bun/install/cache) — without it every
+# `bun install` re-downloads. Does not exist yet; created on first use.
+$HOME/.bun

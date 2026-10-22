@@ -1,0 +1,5 @@
+# Paths kept read-only inside the sandbox, one per line (adds to the baseline).
+
+# bun lockfile — the baseline covers npm/pnpm/yarn lockfiles but not bun's.
+bun.lock
+bun.lockb
