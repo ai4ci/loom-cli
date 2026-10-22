@@ -7,6 +7,7 @@ import { readFileSync as readTextFile } from "node:fs";
 import { type Op, parseChangeset } from "./changeset.ts";
 import { unifiedDiff } from "./diff.ts";
 import { databasePath, query, rebuild } from "./duckdb.ts";
+import { indexCommand } from "./index.ts";
 import { getLinksBlock, parseInstance } from "./document.ts";
 import { applyFixes } from "./fix.ts";
 import { commit, planChangeset } from "./mutate.ts";
@@ -397,6 +398,19 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .description("prefetch configured tree-sitter language grammars")
     .action(() => {
       finish(prefetchCommand(configNow()));
+    });
+
+  program
+    .command("index")
+    .option("--check", "exit 1 if any index is stale")
+    .description("regenerate navigational indexes")
+    .action(async (options: { check?: boolean }) => {
+      const result = await indexCommand(configNow(), options);
+      if (options.check && result.unchanged.length > 0) {
+        finish({ value: { ok: false, stale: result.unchanged }, code: 1 });
+        return;
+      }
+      finish({ value: { updated: result.updated, unchanged: result.unchanged } });
     });
 
   return program;
