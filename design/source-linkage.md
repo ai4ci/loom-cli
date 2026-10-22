@@ -290,13 +290,30 @@ One rule, applied everywhere, in both directions.
 
 ### 4.1 Reading
 
-A comment attaches to the innermost anchor whose **body span** contains it;
+A comment attaches to the innermost **declaration** that lexically contains it;
 otherwise to the file. Pure containment — no lookahead, no line counting.
 
-Decorators, annotations, Javadoc and docstrings all sit outside the body, so
-none of them can interfere. A comment in a class body but outside any method
-body therefore attaches to the class, which is the rule working correctly rather
-than an edge case.
+Containment is tested against the whole declaration rather than against its
+block, because no node spans "body including leading comments" in every
+language. In Python a comment on a function's first line is a *sibling* of the
+`block` node, not a child of it, so a block-based test would hand a link written
+in exactly the canonical position to the enclosing class instead. Measured:
+
+```
+function_definition [13-57]
+  :           [28-29]
+  comment     [38-44]   ← the link, outside the block
+  block       [53-57]
+```
+
+The block still decides where a link is *written* (§4.2) and whether a
+declaration can be annotated at all (§4.4) — it is just not what decides
+ownership.
+
+Decorators, annotations, Javadoc and docstrings sit outside the declaration or
+before its name, so none of them can interfere. A comment in a class body but
+outside any method therefore attaches to the class, which is the rule working
+correctly rather than an edge case.
 
 ### 4.2 Writing
 
@@ -491,39 +508,29 @@ New diagnostic codes introduced by this document:
 
 | Capability | State |
 |---|---|
-| Forward anchor resolution, dotted path | **Built** (Phase 5), except R — see below |
-| Reverse link scanning | **Built**, but with the old attribution rule — see below |
+| Forward anchor resolution, dotted path | **Built** |
+| Reverse link scanning | **Built** |
+| Anchor-kind policy, transparent kinds | **Built**, configurable under `source:` |
+| Uniqueness as a hard error | **Built** |
+| Overload qualification | **Built** |
+| R adapter: bodySpan, nesting, R6/S7 | **Built** |
+| Drift tier §6.1 (candidate suggestion) | **Built** |
 | Broken anchor detection (`graph/missing-symbol`) | **Built**, detection only |
 | `refs` reverse lookup | **Built** |
-| Anchor-kind policy, transparent kinds | Specified |
-| Uniqueness as a hard error | Specified — current code silently takes the first match |
-| Overload qualification | Specified |
 | `ls`, `locate` | Specified |
 | Annotation writing (`link` on a `src://` subject) | Specified |
-| Drift tiers §6.1–6.2 | Specified |
+| Drift tier §6.2 (git rename inference) | Specified |
 | Body fingerprints §6.3 | Deferred |
 
-**The R adapter needs three fixes before R supports any of this.** Measured
-against the built implementation:
+The R adapter now carries `braced_expression` through as `bodySpan`, names
+nested functions by their enclosing scope, recognises R6 and S7
+argument-defined functions, and matches only an identifier left-hand side so
+`method(…) <- function(…)` no longer yields a colliding name.
 
-1. It discards `bodySpan`, so every R anchor is un-annotatable under §4.4. The
-   `braced_expression` node is already in the tree; it just is not carried
-   through.
-2. It emits flat names, so a nested function is `helper` rather than
-   `fit_model.helper`. Two inner functions of the same name in different outer
-   functions therefore collide, which §2.2 turns into a hard error rather than a
-   wrong answer — but neither becomes addressable.
-3. It recognises neither R6 nor S7 argument-defined functions, so both OO
-   systems currently produce no anchors at all. It also matches
-   `method(…) <- function(…)` accidentally, producing the colliding name
-   described in §2.6.
-
-**The attribution rule in §4.1 is a behaviour change, not a refinement.** The
-built scanner uses outer-span containment plus a ±2-line lookahead, so a comment
-above a method currently attaches to that method; under §4.1 it attaches to the
-enclosing class. The Phase 5 tests assert the old behaviour in both cases and
-need rewriting. Zero real-world cost — nothing is in use yet — but it changes
-what existing comments mean.
+The attribution rule in §4.1 replaced a ±2-line lookahead, under which a comment
+above a method attached to that method; it now attaches to the enclosing class.
+`test/source.test.ts` asserted the old behaviour and was removed, its coverage
+subsumed by `test/anchors.test.ts` and `test/anchors-r.test.ts`.
 
 ## 9. Open items
 

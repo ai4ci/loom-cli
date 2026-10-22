@@ -3,7 +3,13 @@ import path from "node:path";
 import { absolute, classRootsFor, configFrom, type Config } from "./config.ts";
 import { type Diagnostic, error } from "./diagnostics.ts";
 import { getLinksBlock, type InstanceFile, parseInstance } from "./document.ts";
-import { detectLang, findSymbolLine, extractReverseLinks } from "./source.ts";
+import {
+  type AnchorPolicy,
+  detectLang,
+  extractAnchors,
+  extractReverseLinks,
+  resolveAnchor,
+} from "./source.ts";
 import { validateInstance } from "./instance.ts";
 import {
   effectiveAttributes,
@@ -13,6 +19,7 @@ import {
   isSubclassOf,
 } from "./model/schema.ts";
 import type { Cardinality, SchemaIR } from "./model/types.ts";
+import { similarity } from "./similarity.ts";
 import { canonicalise, formatUri, parseUri } from "./uri.ts";
 
 export interface InstanceNode {
@@ -211,6 +218,27 @@ export function renderLinks(graph: Graph, node: InstanceNode): string {
     : [...outbound, "", ...backlinks].join("\n");
 }
 
+/**
+ * Drift tier 1 (source-linkage §6.1): a dead anchor is much more useful with a
+ * candidate attached than without one.
+ */
+function suggestNearest(
+  code: string,
+  language: string,
+  wanted: string,
+  policy: AnchorPolicy,
+): { fix?: string } {
+  const target = (wanted.split(".").pop() ?? wanted).toLowerCase();
+  const ranked = extractAnchors(code, language, policy)
+    .map((a) => ({ name: a.fullName, score: similarity(target, a.name.toLowerCase()) }))
+    .filter((c) => c.score > 0.5)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  if (ranked.length === 0) return {};
+  return { fix: `did you mean ${ranked.map((c) => c.name).join(" | ")}?` };
+}
+
 export function validateGraph(graph: Graph): Diagnostic[] {
   const { cfg, schema } = graph;
   const found: Diagnostic[] = [];
@@ -294,12 +322,18 @@ export function validateGraph(graph: Graph): Diagnostic[] {
         const lang = detectLang(res);
         if (lang) {
           const code = readFileSync(abs, "utf8");
-          const line = findSymbolLine(code, lang, parsed.anchor);
-          if (line === null) {
+          const resolved = resolveAnchor(extractAnchors(code, lang, cfg.anchorPolicy), parsed.anchor);
+          if (!resolved.ok && resolved.reason === "ambiguous") {
+            found.push(error(
+              "source/ambiguous-anchor",
+              `"${parsed.anchor}" matches several declarations in ${res}`,
+              { uri: edge.from, fix: `qualify it: ${resolved.candidates.join(" | ")}` },
+            ));
+          } else if (!resolved.ok) {
             found.push(error(
               "graph/missing-symbol",
               `symbol "${parsed.anchor}" not found in ${res}`,
-              { uri: edge.from },
+              { uri: edge.from, ...suggestNearest(code, lang, parsed.anchor, cfg.anchorPolicy) },
             ));
           }
         }
@@ -347,7 +381,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
                 const lang = detectLang(rel);
                 if (!lang) continue;
                 const code = readFileSync(full, "utf8");
-                const revLinks = extractReverseLinks(code, lang);
+                const revLinks = extractReverseLinks(code, lang, cfg.anchorPolicy);
                 for (const rl of revLinks) {
                   // Validate target exists
                   if (!graph.instances.has(rl.target)) {

@@ -18,7 +18,7 @@ import { loadModel } from "./model/load.ts";
 import { writeReport } from "./report.ts";
 import { serialise, type OutputFormat } from "./output.ts";
 import { canonicalise, formatUri, fsExists, parseUri, resolveUri } from "./uri.ts";
-import { detectLang, findSymbolLine } from "./source.ts";
+import { detectLang, extractAnchors, resolveAnchor } from "./source.ts";
 import pack from "@xberg-io/tree-sitter-language-pack";
 import { resolvePath } from "./graph.ts";
 
@@ -53,8 +53,16 @@ function resolveCommand(cfg: Config, raw: string): CommandOutput {
     const lang = detectLang(resolved.path);
     if (lang) {
       const code = readFileSync(absolutePath, "utf8");
-      const found = findSymbolLine(code, lang, uri.anchor);
-      if (found !== null) line = found;
+      const found = resolveAnchor(extractAnchors(code, lang, cfg.anchorPolicy), uri.anchor);
+      if (found.ok) {
+        line = found.anchor.line;
+      } else if (found.reason === "ambiguous") {
+        throw new DesignDocsError(error(
+          "source/ambiguous-anchor",
+          `"${uri.anchor}" matches several declarations in ${resolved.path}`,
+          { uri: raw, fix: `qualify it: ${found.candidates.join(" | ")}` },
+        ));
+      }
     }
   }
 

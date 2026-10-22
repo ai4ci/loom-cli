@@ -97,3 +97,65 @@ test("prefetch command downloads/warms grammars", async () => {
   const out = parse(r.out) as any;
   assert.ok(out.prefetched.length > 0);
 });
+
+test("an ambiguous anchor is an error, not a silent first match", async () => {
+  const root = makeRepo({
+    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    "design/document-model.mmd": MODEL_WITH_SRC,
+    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#run]"),
+    "src/app.ts": "export class Alpha { run() {} }\nexport class Beta { run() {} }\n",
+  });
+  const r = await run(["--cwd", root, "validate"]);
+  assert.equal(r.code, 1);
+  const d = (parse(r.out) as any).diagnostics.find((x: any) => x.code === "source/ambiguous-anchor");
+  assert.ok(d, "expected an ambiguity diagnostic");
+  assert.match(d.fix, /Alpha\.run/);
+  assert.match(d.fix, /Beta\.run/);
+});
+
+test("resolve refuses an ambiguous anchor", async () => {
+  const root = makeRepo({
+    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    "design/document-model.mmd": MODEL_WITH_SRC,
+    "src/app.ts": "export class Alpha { run() {} }\nexport class Beta { run() {} }\n",
+  });
+  const r = await run(["--cwd", root, "resolve", "src://app.ts#run"]);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /source\/ambiguous-anchor/);
+});
+
+test("a dotted anchor disambiguates through the cli", async () => {
+  const root = makeRepo({
+    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    "design/document-model.mmd": MODEL_WITH_SRC,
+    "src/app.ts": "export class Alpha { run() {} }\nexport class Beta { run() {} }\n",
+  });
+  const r = await run(["--cwd", root, "resolve", "src://app.ts#Beta.run"]);
+  assert.equal(r.code, 0);
+  assert.equal((parse(r.out) as any).line, 2);
+});
+
+test("a renamed symbol suggests the nearest candidate", async () => {
+  const root = makeRepo({
+    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    "design/document-model.mmd": MODEL_WITH_SRC,
+    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#runApp]"),
+    "src/app.ts": "export function runApplication() {}\n",
+  });
+  const r = await run(["--cwd", root, "validate"]);
+  assert.equal(r.code, 1);
+  const d = (parse(r.out) as any).diagnostics.find((x: any) => x.code === "graph/missing-symbol");
+  assert.match(d.fix, /runApplication/);
+});
+
+test("the anchor policy is configurable", async () => {
+  const root = makeRepo({
+    ".design-docs.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\nsource:\n  anchorKinds: [Class]\n",
+    "design/document-model.mmd": MODEL_WITH_SRC,
+    "src/app.ts": "export class Alpha { run() {} }\n",
+  });
+  // Only Class is addressable, so the method is not an anchor at all.
+  assert.equal((await run(["--cwd", root, "resolve", "src://app.ts#Alpha"])).code, 0);
+  const r = await run(["--cwd", root, "resolve", "src://app.ts#run"]);
+  assert.equal((parse(r.out) as any).line, undefined, "run must not resolve under this policy");
+});

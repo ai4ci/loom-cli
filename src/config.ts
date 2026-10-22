@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parse } from "yaml";
 import { DesignDocsError, error } from "./diagnostics.ts";
+import { type AnchorPolicy, DEFAULT_ANCHOR_POLICY } from "./source.ts";
 
 /** Schemes that address locations rather than classes (plan §2.4). */
 export const RESERVED_SCHEMES = new Set(["repo", "design"]);
@@ -17,6 +18,8 @@ export interface Config {
   classRoots: Record<string, string[]>;
   /** Grammars to prefetch (plan §Phase 5). */
   languages: string[];
+  /** Which source declarations are addressable (source-linkage §2.1). */
+  anchorPolicy: AnchorPolicy;
   configPath: string | null;
 }
 
@@ -24,6 +27,10 @@ export interface RawConfig {
   designRoot?: string;
   classRoots?: Record<string, string | string[]>;
   languages?: string[];
+  source?: {
+    anchorKinds?: string[];
+    transparentKinds?: string[];
+  };
 }
 
 /** Normalise a configured path to a repo-relative POSIX path with no trailing slash. */
@@ -41,6 +48,10 @@ export function configFrom(repoRoot: string, raw: RawConfig, configPath: string 
     designRoot: toPosix(raw.designRoot ?? "design"),
     classRoots,
     languages: raw.languages ?? [],
+    anchorPolicy: {
+      anchorKinds: raw.source?.anchorKinds ?? DEFAULT_ANCHOR_POLICY.anchorKinds,
+      transparentKinds: raw.source?.transparentKinds ?? DEFAULT_ANCHOR_POLICY.transparentKinds,
+    },
     configPath,
   };
 }
