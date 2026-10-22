@@ -146,9 +146,75 @@ Measured gaps:
 | Go | `type Point struct` is not reported at all. Functions and methods are. |
 | TypeScript | Interface *members* are not reported. `Shape` is addressable, `Shape.area` is not. |
 | Rust | Trait method *signatures* are not reported; only default implementations with bodies. |
+| R | Every function is reported as `name: "function"` — unusable. Needs an adapter: §2.6. |
 
 These are coverage facts, not policy, and they constrain both directions. Check
 a language before planning a workflow that depends on member-level linkage.
+
+### 2.6 Per-language adapters
+
+`process()` is the default source of anchors but it is not universal. Where its
+output is unusable, a per-language adapter derives anchors from the syntax tree
+instead. An adapter must supply, for every anchor:
+
+| Field | Meaning |
+|---|---|
+| `name` | The declared name |
+| `fullName` | Dotted path from the file root, including enclosing anchors |
+| `span` | The whole declaration |
+| `bodySpan` | The block, or absent when the declaration has none (§4.4) |
+
+`bodySpan` is not optional in practice: without it every anchor the adapter
+produces is un-annotatable, because §4.4 keys on exactly that.
+
+**R is the worked example, and currently the only one.** `process()` reports
+every R function as `name: "function"` — the keyword rather than the binding —
+and lambdas as `name: "\\"`. Nesting and body spans are correct; only the names
+are unusable.
+
+What the R adapter recognises:
+
+| Form | Anchor |
+|---|---|
+| `f <- function(x) {…}` | `f` |
+| `f = function(x) {…}` | `f` |
+| `f <- \(x) {…}` | `f` — lambdas still parse as `function_definition` |
+| `g <- function()…` nested inside `f` | `f.g` |
+| `C <- R6Class("C", public = list(m = function() {…}))` | `C.m` |
+| `R <- new_class("R", validator = function(self) {…})` | `R.validator` |
+
+The last two are one rule: **a call argument whose value is a function and whose
+name is an identifier is an anchor, qualified by the nearest enclosing
+assignment's identifier.** S7's `validator` and `constructor` fall out of the R6
+rule for free, and are structurally simpler than R6 — a direct argument of
+`new_class()` rather than one nested inside a `list()`.
+
+What it deliberately does not recognise is registration through a function call,
+where the name is an argument value rather than a binding:
+
+```r
+setMethod("area", "Circle", function(shape) { ... })   # S4
+method(print, Range) <- function(x, ...) { ... }       # S7
+```
+
+Capturing these means pattern-matching on a convention rather than on syntax,
+and inferring a name from a string literal or a nested call. Out of scope.
+
+The assignment rule is therefore **restricted to an identifier left-hand side**.
+Without that restriction S7's `method(print, Range) <- function(…)` is matched
+accidentally — its right-hand side *is* a `function_definition` — and named
+`method(print, Range)`, which collides with the overload qualifier of §2.3:
+`#method(print, Range)` is indistinguishable from a method `method` qualified by
+parameter types `print` and `Range`. An anchor that cannot be spelled
+unambiguously is worse than no anchor.
+
+A reverse link written inside an unrecognised function body still works. With no
+enclosing anchor it attaches to the file (§4.1) — coarse, but correct.
+
+One R idiom reduces coverage further: `f <- function(x) x + 1` has no block, so
+it is not annotatable under §4.4. That is the same exclusion as `int X => 1` in
+C#, but one-liners are far more common in R than expression-bodied members are
+elsewhere.
 
 ## 3. Discovery
 
@@ -425,7 +491,7 @@ New diagnostic codes introduced by this document:
 
 | Capability | State |
 |---|---|
-| Forward anchor resolution, dotted path | **Built** (Phase 5) |
+| Forward anchor resolution, dotted path | **Built** (Phase 5), except R — see below |
 | Reverse link scanning | **Built**, but with the old attribution rule — see below |
 | Broken anchor detection (`graph/missing-symbol`) | **Built**, detection only |
 | `refs` reverse lookup | **Built** |
@@ -436,6 +502,21 @@ New diagnostic codes introduced by this document:
 | Annotation writing (`link` on a `src://` subject) | Specified |
 | Drift tiers §6.1–6.2 | Specified |
 | Body fingerprints §6.3 | Deferred |
+
+**The R adapter needs three fixes before R supports any of this.** Measured
+against the built implementation:
+
+1. It discards `bodySpan`, so every R anchor is un-annotatable under §4.4. The
+   `braced_expression` node is already in the tree; it just is not carried
+   through.
+2. It emits flat names, so a nested function is `helper` rather than
+   `fit_model.helper`. Two inner functions of the same name in different outer
+   functions therefore collide, which §2.2 turns into a hard error rather than a
+   wrong answer — but neither becomes addressable.
+3. It recognises neither R6 nor S7 argument-defined functions, so both OO
+   systems currently produce no anchors at all. It also matches
+   `method(…) <- function(…)` accidentally, producing the colliding name
+   described in §2.6.
 
 **The attribution rule in §4.1 is a behaviour change, not a refinement.** The
 built scanner uses outer-span containment plus a ±2-line lookahead, so a comment
