@@ -1,6 +1,8 @@
 ## More complex use of `src` and `resource`
 
-This example demonstrates advanced path handling and zero-configuration discovery in Loom.
+This document is the normative specification for path resolution and class
+discovery in Loom. The mermaid model in §1, the configuration section §2, and
+the worked example in §4 together illustrate the rules defined in §5.
 
 ### 1. Mermaid UML model with path annotations
 
@@ -124,7 +126,7 @@ Every class in the model resolves to a single unique path from `$REPO_ROOT`:
    - Distinct classes may nest directories inside one another (e.g. `src/main` inside `src`), which is permitted.
 5. **Repo boundary & existence checks**:
    - It is a validation error if any resolved path escapes `$REPO_ROOT` (e.g. using `..`).
-   - Loom emits a warning during validation if a resolved class directory does not exist on disk, helping users and agents catch path typos early.
+   - Loom emits a warning during validation if a resolved class directory does not exist on disk. The warning fires for **every** missing root, not only those outside a UML parent, so that typos in class names and in `@path` arguments are surfaced consistently for both human and agent consumers.
 6. **Path-to-URI canonicalisation**:
    - Paths resolve to the most specific matching class URI scheme (longest matching root prefix wins).
    - If a path matches no class root, it falls back to `repo://relative/path`.
