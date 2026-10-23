@@ -32,7 +32,8 @@ Determine the document classes and lifecycle needs:
 
 ## Step 2: Define the Mermaid Model (`document-model.mmd`)
 
-Place the model at `$DESIGN_DOCS_ROOT/document-model.mmd` (typically `design/document-model.mmd`).
+Place the model at `$LOOM_DEFAULT_ROOT/document-model.mmd` (typically `design/document-model.mmd`).
+`$LOOM_DEFAULT_ROOT` is determined by where you place this file.
 
 ### Rules & Conventions
 - **Instantiable Classes**: Concrete classes that become Markdown files.
@@ -90,7 +91,8 @@ Loom operates without configuration files. It discovers `document-model.mmd` in 
   - `LOOM_DEFAULT_RESOURCE_ROOT`: Defaults to `resource`.
   - `LOOM_ANCHOR_KINDS`: Comma-separated structure kinds for code anchors.
 
-Class paths and directory mappings are declared directly in the model via `%% @path <class> <path>` directives.
+Class paths and directory mappings are declared directly in the model via `%% @path <class> <path>` directives
+a the beginning of the mermaid class file.
 
 Run initial validation to verify graph structure:
 ```bash

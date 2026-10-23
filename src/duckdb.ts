@@ -5,7 +5,7 @@ import { absolute, type Config } from "./config.ts";
 import { LoomError, error } from "./diagnostics.ts";
 import type { Graph } from "./graph.ts";
 import { effectiveAttributes, isInstantiable } from "./model/schema.ts";
-import type { Attribute } from "./model/types.ts";
+import type { Attribute, SchemaIR } from "./model/types.ts";
 import { embedder, hashBody, type Embedder } from "./embeddings.ts";
 
 export const DATABASE_FILENAME = ".loom.duckdb";
@@ -17,10 +17,12 @@ export function databasePath(cfg: Config): string {
 /**
  * Attribute types map to native DuckDB types so comparisons and aggregates
  * need no casts (plan §Phase 4). Enumerations are VARCHAR with membership
- * enforced at validation rather than by a database constraint.
+ * enforced at validation rather than by a database constraint. Class-typed
+ * attributes become DuckDB STRUCTs so subfields are queryable and misspellings
+ * fail loudly (plan "Later — composite attributes").
  */
-function columnType(attribute: Attribute): string {
-  let base = "VARCHAR";
+function columnType(schema: SchemaIR, attribute: Attribute): string {
+  let base: string;
   if (attribute.type.kind === "primitive") {
     base = {
       string: "VARCHAR",
@@ -31,21 +33,32 @@ function columnType(attribute: Attribute): string {
       bool: "BOOLEAN",
       date: "DATE",
     }[attribute.type.name];
+  } else if (attribute.type.kind === "class") {
+    base = structType(schema, attribute.type.className);
+  } else if (attribute.type.kind === "enum") {
+    base = "VARCHAR";
+  } else {
+    base = "VARCHAR";
   }
-  // Class-typed attributes will become STRUCT when composite attributes land.
   return attribute.list ? `${base}[]` : base;
+}
+
+/** Recursive STRUCT projection for a class-typed attribute (plan "Later — composite attributes"). */
+function structType(schema: SchemaIR, className: string): string {
+  const fields = effectiveAttributes(schema, className).map((a) => `${quote(a.name)} ${columnType(schema, a)}`);
+  return `STRUCT(${fields.join(", ")})`;
 }
 
 function quote(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
 
-function literal(value: unknown, attribute: Attribute): string {
+function literal(schema: SchemaIR, attribute: Attribute, value: unknown): string {
   if (value === undefined || value === null) return "NULL";
 
   if (attribute.list) {
     const items = Array.isArray(value) ? value : [value];
-    return `[${items.map((item) => literal(item, { ...attribute, list: false })).join(", ")}]`;
+    return `[${items.map((item) => literal(schema, { ...attribute, list: false }, item)).join(", ")}]`;
   }
 
   if (attribute.type.kind === "primitive") {
@@ -63,7 +76,23 @@ function literal(value: unknown, attribute: Attribute): string {
         break;
     }
   }
+
+  if (attribute.type.kind === "class") {
+    return structLiteral(schema, attribute.type.className, value);
+  }
+
   return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function structLiteral(schema: SchemaIR, className: string, value: unknown): string {
+  if (typeof value !== "object" || value === null) return "NULL";
+  const record = value as Record<string, unknown>;
+  const fields = effectiveAttributes(schema, className).map((a) => {
+    const v = record[a.name];
+    const fieldLiteral = literal(schema, a, v);
+    return `${quote(a.name)}: ${fieldLiteral}`;
+  });
+  return `{${fields.join(", ")}}`;
 }
 
 export interface TableSummary {
@@ -105,7 +134,7 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
       "uri VARCHAR PRIMARY KEY",
       "id VARCHAR",
       "path VARCHAR",
-      ...attributes.map((a) => `${quote(a.name)} ${columnType(a)}`),
+      ...attributes.map((a) => `${quote(a.name)} ${columnType(schema, a)}`),
     ];
     await connection.run(`CREATE TABLE ${quote(className)} (${columns.join(", ")})`);
 
@@ -118,7 +147,7 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
         `'${node.uri.replace(/'/g, "''")}'`,
         `'${node.id.replace(/'/g, "''")}'`,
         `'${node.path.replace(/'/g, "''")}'`,
-        ...attributes.map((a) => literal(node.data[a.name], a)),
+        ...attributes.map((a) => literal(schema, a, node.data[a.name])),
       ];
       await connection.run(`INSERT INTO ${quote(className)} VALUES (${values.join(", ")})`);
     }
@@ -178,7 +207,12 @@ function plain(value: unknown): unknown {
     if (typeof record["days"] === "number") {
       return new Date(record["days"] * 86_400_000).toISOString().slice(0, 10);
     }
-    if (record["items"] !== undefined) return plain(record["items"]);
+    // DuckDB wraps STRUCTs as `{entries: {...}}` and lists as `{items: [...]}`
+    // (plan "Later — composite attributes"). Flatten both for plain output.
+    if ("entries" in record && record["entries"] !== null && typeof record["entries"] === "object") {
+      return plain(record["entries"]);
+    }
+    if ("items" in record) return plain(record["items"]);
     return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, plain(v)]));
   }
   return value;
