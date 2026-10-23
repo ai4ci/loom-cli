@@ -172,6 +172,31 @@ loom query "SELECT uri, title, status FROM issue WHERE status = 'open'"
 loom query "SELECT subject, relation, object FROM edge WHERE relation = 'blocks'"
 ```
 
+#### Class-typed attributes project as STRUCTs
+Nested values (e.g. `reporter: { name, email }`) become DuckDB `STRUCT(...)`
+columns (lists become `STRUCT(...)[]`). Subfields are queryable without
+casts and misspellings fail loudly with a Binder Error — the preferred
+behaviour over JSON columns.
+
+```sql
+-- direct subfield access
+SELECT reporter.name, reporter.address.city FROM issue;
+
+-- aggregate over a list of structs
+SELECT u.name FROM issue, UNNEST(reviewers) u;
+
+-- DESCRIBE reveals the nested schema so an agent can discover it
+DESCRIBE issue;
+```
+
+#### Semantic search across markdown bodies
+The rebuild also populates an `embedding` table (one vector per
+instance). Search with `loom similar`:
+```bash
+loom similar "authentication token expiration" --limit 5
+loom similar issue://fix-login.md
+```
+
 ## 4. Troubleshooting Common Diagnostics
 
 | Diagnostic Code | Meaning | Recovery / Fix |
