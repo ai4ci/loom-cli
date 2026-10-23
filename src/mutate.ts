@@ -2,7 +2,7 @@ import { Document } from "yaml";
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Op } from "./changeset.ts";
-import { absolute, classRootsFor, type Config } from "./config.ts";
+import { absolute, type Config } from "./config.ts";
 import { type Diagnostic, error } from "./diagnostics.ts";
 import { getLinksBlock, setLinksBlock, stringifyInstance } from "./document.ts";
 import {
@@ -16,6 +16,7 @@ import {
 import { effectiveRelations, isInstantiable, isSubclassOf } from "./model/schema.ts";
 import type { SchemaIR } from "./model/types.ts";
 import { applyEdits, type AnnotationRequest, planAnnotations, verify } from "./annotate.ts";
+import { classRoot, type ClassRoots } from "./path-resolution.ts";
 import { formatUri, parseUri } from "./uri.ts";
 
 export interface PendingWrite {
@@ -37,8 +38,9 @@ function asList(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [value];
 }
 
-function pathFor(cfg: Config, className: string, id: string): string {
-  return `${classRootsFor(cfg, className)[0]!}/${id}`;
+function pathFor(roots: ClassRoots, className: string, id: string): string {
+  const root = classRoot(roots, className);
+  return root === "" ? id : `${root}/${id}`;
 }
 
 /**
@@ -75,7 +77,7 @@ function applyOps(graph: Graph, ops: Op[]): Diagnostic[] {
           uri: op.uri,
           className: parsed.scheme,
           id: parsed.path,
-          path: pathFor(cfg, parsed.scheme, parsed.path),
+          path: pathFor(graph.roots, parsed.scheme, parsed.path),
           data,
           file: { frontmatter: new Document(data), markdown: "", eol: "\n" },
           source: "",
@@ -135,7 +137,7 @@ function applyOps(graph: Graph, ops: Op[]): Diagnostic[] {
         const previousUri = node.uri;
         node.uri = op.to;
         node.id = target.path;
-        node.path = pathFor(cfg, node.className, target.path);
+        node.path = pathFor(graph.roots, node.className, target.path);
         if (node.file.frontmatter?.has("id")) node.file.frontmatter.set("id", target.path);
         node.data = node.file.frontmatter?.toJS() as Record<string, unknown> ?? node.data;
         graph.instances.set(node.uri, node);
@@ -192,8 +194,8 @@ function isSourceLink(op: Op, schema: SchemaIR): boolean {
   }
 }
 
-export function planChangeset(cfg: Config, schema: SchemaIR, ops: Op[]): MutationPlan {
-  const { graph, diagnostics } = loadGraph(cfg, schema);
+export function planChangeset(cfg: Config, schema: SchemaIR, roots: ClassRoots, ops: Op[]): MutationPlan {
+  const { graph, diagnostics } = loadGraph(cfg, schema, roots);
 
   const before = new Map<string, string>();
   for (const node of graph.instances.values()) before.set(node.path, node.source);
@@ -268,7 +270,7 @@ function planSourceLinks(
     });
   }
 
-  const planned = planAnnotations(cfg, requests, cfg.anchorPolicy, (p) =>
+  const planned = planAnnotations(cfg, graph.roots, requests, cfg.anchorPolicy, (p) =>
     readFileSync(absolute(cfg, p), "utf8"));
   diagnostics.push(...planned.diagnostics);
   if (diagnostics.some((d) => d.severity === "error")) return { writes: [], diagnostics };

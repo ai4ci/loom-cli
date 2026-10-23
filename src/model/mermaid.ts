@@ -150,12 +150,28 @@ function glyphOf(text: string): string {
   return text.replace(/\s+/g, "");
 }
 
-export function parseModel(text: string): { schema: SchemaIR; diagnostics: Diagnostic[] } {
+export function parseModel(text: string): {
+  schema: SchemaIR;
+  diagnostics: Diagnostic[];
+  /** Top-level `%%`-prefixed comment lines, in source order. */
+  comments: { text: string; line: number }[];
+} {
   const diagnostics: Diagnostic[] = [];
   const tree = pack.getParser("mermaid").parse(text) as unknown as { rootNode(): Node };
   const root = tree.rootNode();
   const slice = (n: Node) => text.slice(n.startByte(), n.endByte());
   const lineOf = (n: Node) => n.startPosition().row + 1;
+
+  // The mermaid grammar collapses the whole file into a single `diagram_class`
+  // node, so comments are not separately reported as children. Scan the
+  // source line by line to collect `%% @path` annotations.
+  const comments: { text: string; line: number }[] = [];
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const trimmed = line.trim();
+    if (trimmed.startsWith("%%")) comments.push({ text: trimmed, line: i + 1 });
+  }
 
   walk(root, (n) => {
     if (n.isError() || n.isMissing()) {
@@ -357,5 +373,5 @@ export function parseModel(text: string): { schema: SchemaIR; diagnostics: Diagn
     }
   }
 
-  return { schema: { classes, relations }, diagnostics };
+  return { schema: { classes, relations }, diagnostics, comments };
 }

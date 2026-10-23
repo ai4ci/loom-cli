@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { absolute, classRootsFor, RESERVED_SCHEMES, type Config } from "./config.ts";
+import { absolute, RESERVED_SCHEMES, type Config } from "./config.ts";
 import { LoomError, error } from "./diagnostics.ts";
 import { type Graph } from "./graph.ts";
 import { isInstantiable } from "./model/schema.ts";
+import { classRoot } from "./path-resolution.ts";
 import { type Anchor, detectLang, extractAnchors } from "./source.ts";
 import { formatUri, parseUri, type ParsedUri } from "./uri.ts";
 
@@ -125,14 +126,14 @@ export function listUri(cfg: Config, graph: Graph, raw: string, options: ListOpt
   const isSource = !isInstantiable(graph.schema, scheme);
   if (bare) {
     const entries = isSource
-      ? listDirectory(cfg, scheme, classRootsFor(cfg, scheme)[0]!, "")
+      ? listDirectory(cfg, scheme, classRoot(graph.roots, scheme), "")
       : listInstances(cfg, graph, scheme);
     return { parent: raw, entries: applyLinkFilters(entries, options) };
   }
 
   const uri = parseUri(raw);
-  const root = classRootsFor(cfg, uri.scheme)[0]!;
-  const relative = `${root}/${uri.path}`;
+  const root = classRoot(graph.roots, uri.scheme);
+  const relative = root === "" ? uri.path : `${root}/${uri.path}`;
   const full = absolute(cfg, relative);
 
   if (!isSource) {
@@ -177,10 +178,10 @@ export interface Located {
  * caller wanting something coarser can take it. A line with no linkable
  * ancestor reports the file rather than inventing a node.
  */
-export function locateLine(cfg: Config, raw: string, line: number): Located {
+export function locateLine(cfg: Config, roots: import("./path-resolution.ts").ClassRoots, raw: string, line: number): Located {
   const uri = parseUri(raw);
-  const root = classRootsFor(cfg, uri.scheme)[0]!;
-  const relative = `${root}/${uri.path}`;
+  const root = classRoot(roots, uri.scheme);
+  const relative = root === "" ? uri.path : `${root}/${uri.path}`;
   const full = absolute(cfg, relative);
 
   if (!existsSync(full)) {

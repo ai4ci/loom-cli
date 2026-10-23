@@ -2,6 +2,12 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { absolute, type Config } from "../config.ts";
 import { LoomError, type Diagnostic, error } from "../diagnostics.ts";
+import {
+  classRoot as pickClassRoot,
+  extractPathAnnotations,
+  resolveClassRoots,
+  type ClassRoots,
+} from "../path-resolution.ts";
 import { parseModel } from "./mermaid.ts";
 import { validateModel } from "./schema.ts";
 import type { SchemaIR } from "./types.ts";
@@ -12,7 +18,8 @@ export interface LoadedModel {
   /** Absolute path the model was read from. */
   path: string;
   schema: SchemaIR;
-  /** Syntax and model-level findings combined. */
+  roots: ClassRoots;
+  /** Syntax, model-level and path-resolution findings combined. */
   diagnostics: Diagnostic[];
 }
 
@@ -36,6 +43,24 @@ export function loadModel(cfg: Config, override?: string): LoadedModel {
     }));
   }
 
-  const { schema, diagnostics } = parseModel(readFileSync(target, "utf8"));
-  return { path: target, schema, diagnostics: [...diagnostics, ...validateModel(schema, cfg)] };
+  const { schema, diagnostics, comments } = parseModel(readFileSync(target, "utf8"));
+  const annotations = extractPathAnnotations(comments);
+  const { roots, diagnostics: pathDiagnostics } = resolveClassRoots(
+    schema,
+    annotations,
+    cfg.repoRoot,
+    cfg.designRoot,
+  );
+  const modelDiagnostics = validateModel(schema);
+  return {
+    path: target,
+    schema,
+    roots,
+    diagnostics: [...diagnostics, ...pathDiagnostics, ...modelDiagnostics],
+  };
+}
+
+/** Lookup helper retained for backward compat with code that imports it. */
+export function classRoot(roots: ClassRoots, name: string): string {
+  return pickClassRoot(roots, name);
 }

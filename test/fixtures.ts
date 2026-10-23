@@ -1,5 +1,7 @@
 /** A model exercising every construct the Phase 1 parser must handle. */
 export const MODEL = `classDiagram
+    %% @path issue design/issue
+    %% @path src src
     class designDoc {
         <<abstract>>
         +string title
@@ -27,6 +29,9 @@ export const MODEL = `classDiagram
 
 /** A model with cross-file constraints: inbound cardinality, resources, paths. */
 export const GRAPH_MODEL = `classDiagram
+    %% @path issue design/issue
+    %% @path decision design/decision
+    %% @path resource design/resource
     class issue {
         +string title
         +IssueStatus status

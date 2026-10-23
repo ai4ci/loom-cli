@@ -7,14 +7,11 @@ import {
   isSubclassOf,
   validateModel,
 } from "../src/model/schema.ts";
-import { configFrom } from "../src/config.ts";
 import { MODEL } from "./fixtures.ts";
 
-const cfg = configFrom("/repo", { classRoots: { issue: "design/issue", src: ["src"] } });
-
-function codesOf(model: string, config = cfg): string[] {
+function codesOf(model: string): string[] {
   const { schema, diagnostics } = parseModel(model);
-  return [...diagnostics, ...validateModel(schema, config)].map((d) => d.code);
+  return [...diagnostics, ...validateModel(schema)].map((d) => d.code);
 }
 
 test("the reference model validates clean", () => {
@@ -103,11 +100,6 @@ test("an inheritance cycle is rejected", () => {
     .includes("model/inheritance-cycle"));
 });
 
-test("an abstract class given a class root is rejected", () => {
-  const withRoot = configFrom("/repo", { classRoots: { designDoc: "design/doc" } });
-  assert.ok(codesOf(MODEL, withRoot).includes("model/abstract-has-root"));
-});
-
 test("structured attributes on a reserved class are rejected", () => {
   assert.ok(codesOf("classDiagram\n    class src {\n        +string x\n    }\n")
     .includes("model/reserved-has-attributes"));
@@ -166,7 +158,7 @@ test("a class that can be a relation target without a title is warned about", ()
     class b
     a --> b : rel
 `);
-  const d = validateModel(schema, cfg).find((x) => x.code === "model/no-title-attribute");
+  const d = validateModel(schema).find((x) => x.code === "model/no-title-attribute");
   assert.ok(d);
   assert.equal(d.severity, "warning");
 });

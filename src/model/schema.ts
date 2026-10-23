@@ -1,4 +1,3 @@
-import type { Config } from "../config.ts";
 import { type Diagnostic, error, warning } from "../diagnostics.ts";
 import {
   type Attribute,
@@ -49,11 +48,20 @@ export function inReservedFamily(schema: SchemaIR, name: string): boolean {
   return RESERVED_FAMILIES.some((family) => isSubclassOf(schema, name, family));
 }
 
-/** A class with files of its own: concrete, not an enum, not code or a resource. */
+/**
+ * A class with files of its own: concrete, not an enum, not one of the
+ * reserved-family roots themselves.
+ *
+ * Subclasses of `src`/`resource` ARE instantiable — they each declare their
+ * own `%% @path`. Only the bare roots are non-instantiable: they are abstract
+ * shapes of the source/resource family rather than concrete kinds.
+ */
 export function isInstantiable(schema: SchemaIR, name: string): boolean {
   const def = schema.classes.get(name);
   if (!def) return false;
-  return !isAbstract(def) && !isEnumeration(def) && !inReservedFamily(schema, name);
+  if (isAbstract(def) || isEnumeration(def)) return false;
+  if (def.name === "src" || def.name === "resource") return false;
+  return true;
 }
 
 /** Classes named as the type of some attribute — value types (plan §1.10). */
@@ -97,7 +105,7 @@ function valueTypeCycle(schema: SchemaIR, start: string): boolean {
   return false;
 }
 
-export function validateModel(schema: SchemaIR, cfg: Config): Diagnostic[] {
+export function validateModel(schema: SchemaIR): Diagnostic[] {
   const found: Diagnostic[] = [];
   const valueTypes = valueTypeNames(schema);
   const relationTargets = new Set(schema.relations.map((r) => r.to));
@@ -125,15 +133,6 @@ export function validateModel(schema: SchemaIR, cfg: Config): Diagnostic[] {
 
     if (hasInheritanceCycle(schema, def.name)) {
       found.push(error("model/inheritance-cycle", `class "${def.name}" is its own ancestor`, at()));
-    }
-
-    const nonInstantiable = isAbstract(def) || isEnumeration(def);
-    if (nonInstantiable && cfg.classRoots[def.name] !== undefined) {
-      found.push(error(
-        "model/abstract-has-root",
-        `"${def.name}" is not instantiable and must not have a class root`,
-        at({ fix: `remove classRoots.${def.name} from the config` }),
-      ));
     }
 
     if (inReservedFamily(schema, def.name) && def.attributes.length > 0) {
@@ -189,15 +188,30 @@ export function validateModel(schema: SchemaIR, cfg: Config): Diagnostic[] {
     }
   }
 
+  // A relation endpoint that names a class only implied by the relation (i.e.
+  // never declared with `class`) is treated as a typo. `path/collision` will
+  // surface the same class when its directory is missing, but here we flag the
+  // omission at parse time so the model is self-describing. Reserved-family
+  // classes (`src`, `resource`) are always considered declared — they may be
+  // subclassed or simply referenced, and never get a `class` line.
+  const declared = new Set<string>();
+  for (const def of schema.classes.values()) {
+    if (def.declarations > 0 || inReservedFamily(schema, def.name)) declared.add(def.name);
+  }
   for (const relation of schema.relations) {
-    for (const endpoint of [relation.from, relation.to]) {
-      if (!schema.classes.has(endpoint)) {
-        found.push(error(
-          "model/unknown-class",
-          `relation "${relation.name}" names unknown class "${endpoint}"`,
-          { line: relation.line },
-        ));
-      }
+    if (!declared.has(relation.from)) {
+      found.push(error(
+        "model/unknown-class",
+        `relation "${relation.name}" names undeclared class "${relation.from}"`,
+        { line: relation.line },
+      ));
+    }
+    if (!declared.has(relation.to)) {
+      found.push(error(
+        "model/unknown-class",
+        `relation "${relation.name}" names undeclared class "${relation.to}"`,
+        { line: relation.line },
+      ));
     }
   }
 

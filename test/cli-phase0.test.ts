@@ -2,16 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parse } from "yaml";
 import { run } from "../src/cli.ts";
-import { instance, makeRepo } from "./helpers.ts";
+import { defaultModel, instance, makeRepo } from "./helpers.ts";
+
+const MODEL = defaultModel({ issue: "design/issue" });
 
 function repo(): string {
   return makeRepo({
-    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src, R]\n",
+    ".loom.yaml": "designRoot: design\n",
+    "design/document-model.mmd": MODEL,
     "design/issue/first.md": instance(
       "class: issue\nid: first.md\ntitle: The thing is broken\nstatus: open",
       "\n<!-- loom:links start -->\n- blocks: [Other](other.md)\n<!-- loom:links end -->\n\nProse.\n",
     ),
-    "R/model.R": "fit <- function(x) x\n",
   });
 }
 
@@ -22,14 +24,6 @@ test("resolve maps a class uri to its repo-relative path", async () => {
   assert.equal(out.path, "design/issue/first.md");
   assert.equal(out.uri, "issue://first.md");
   assert.equal(out.exists, true);
-});
-
-test("resolve picks the root that exists for a multi-root class", async () => {
-  const r = await run(["--cwd", repo(), "resolve", "src://model.R"]);
-  const out = parse(r.out) as Record<string, unknown>;
-  assert.deepEqual(out.candidates, ["src/model.R", "R/model.R"]);
-  assert.equal(out.path, "R/model.R");
-  assert.equal(out.ambiguous, false);
 });
 
 test("resolve round-trips a repo uri back to the compact scheme", async () => {

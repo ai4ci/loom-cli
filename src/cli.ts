@@ -13,15 +13,15 @@ import { indexCommand } from "./index.ts";
 import { getLinksBlock, parseInstance } from "./document.ts";
 import { applyFixes } from "./fix.ts";
 import { commit, planChangeset } from "./mutate.ts";
-import { loadGraph, validateGraph } from "./graph.ts";
+import { loadGraph, resolvePath, validateGraph } from "./graph.ts";
 import { validateInstance } from "./instance.ts";
 import { loadModel } from "./model/load.ts";
 import { writeReport } from "./report.ts";
 import { serialise, type OutputFormat } from "./output.ts";
-import { canonicalise, formatUri, fsExists, parseUri, resolveUri } from "./uri.ts";
+import { canonicalise, formatUri, parseUri, resolveUri } from "./uri.ts";
 import { detectLang, extractAnchors, resolveAnchor } from "./source.ts";
+import type { ClassRoots } from "./path-resolution.ts";
 import pack from "@xberg-io/tree-sitter-language-pack";
-import { resolvePath } from "./graph.ts";
 
 export interface CliRun {
   code: number;
@@ -40,14 +40,25 @@ interface GlobalOptions {
   cwd?: string;
 }
 
-function resolveTarget(raw: string, cfg: Config) {
-  const uri = parseUri(raw);
-  const resolved = resolveUri(uri, cfg, fsExists(cfg));
-  return { uri, resolved, absolutePath: absolute(cfg, resolved.path) };
+interface LoadedContext {
+  cfg: Config;
+  roots: ClassRoots;
 }
 
-function resolveCommand(cfg: Config, raw: string): CommandOutput {
-  const { uri, resolved, absolutePath } = resolveTarget(raw, cfg);
+function loadContext(startDir?: string): LoadedContext {
+  const cfg = loadConfig(startDir ?? process.cwd());
+  return { cfg, roots: loadModel(cfg).roots };
+}
+
+function resolveTarget(raw: string, ctx: LoadedContext) {
+  const uri = parseUri(raw);
+  const resolved = resolveUri(uri, ctx.roots);
+  return { uri, resolved, absolutePath: absolute(ctx.cfg, resolved.path) };
+}
+
+function resolveCommand(ctx: LoadedContext, raw: string): CommandOutput {
+  const { cfg, roots } = ctx;
+  const { uri, resolved, absolutePath } = resolveTarget(raw, ctx);
   let line: number | undefined;
 
   if (existsSync(absolutePath) && uri.anchor) {
@@ -69,35 +80,34 @@ function resolveCommand(cfg: Config, raw: string): CommandOutput {
 
   return {
     value: {
-      uri: formatUri(canonicalise(resolved.path, cfg, uri.anchor)),
+      uri: formatUri(canonicalise(resolved.path, roots, uri.anchor)),
       scheme: uri.scheme,
       path: resolved.path,
       absolutePath,
       ...(uri.anchor === undefined ? {} : { anchor: uri.anchor }),
       ...(line === undefined ? {} : { line }),
-      candidates: resolved.candidates,
-      ambiguous: resolved.ambiguous,
       exists: existsSync(absolutePath),
     },
   };
 }
 
-function readInstance(raw: string, cfg: Config) {
-  const { uri, resolved, absolutePath } = resolveTarget(raw, cfg);
+function readInstance(raw: string, ctx: LoadedContext) {
+  const { roots } = ctx;
+  const { uri, resolved, absolutePath } = resolveTarget(raw, ctx);
   if (!existsSync(absolutePath)) {
     throw new LoomError(error("instance/not-found", `no file at ${resolved.path}`, {
       uri: formatUri(uri),
     }));
   }
   return {
-    canonical: canonicalise(resolved.path, cfg, uri.anchor),
+    canonical: canonicalise(resolved.path, roots, uri.anchor),
     path: resolved.path,
     file: parseInstance(readFileSync(absolutePath, "utf8")),
   };
 }
 
-function showCommand(cfg: Config, raw: string): CommandOutput {
-  const { canonical, path, file } = readInstance(raw, cfg);
+function showCommand(ctx: LoadedContext, raw: string): CommandOutput {
+  const { canonical, path, file } = readInstance(raw, ctx);
   return {
     value: {
       uri: formatUri(canonical),
@@ -115,9 +125,10 @@ function modelCheckCommand(cfg: Config, override?: string): CommandOutput {
   return { value: { model: model.path, ...report }, code: report.ok ? 0 : 1 };
 }
 
-function validateOneCommand(cfg: Config, raw: string, override?: string): CommandOutput {
+function validateOneCommand(ctx: LoadedContext, raw: string, override?: string): CommandOutput {
+  const { cfg, roots } = ctx;
   const { schema } = loadModel(cfg, override);
-  const { canonical, path, file } = readInstance(raw, cfg);
+  const { canonical, path, file } = readInstance(raw, ctx);
 
   if (RESERVED_SCHEMES.has(canonical.scheme)) {
     throw new LoomError(error(
@@ -129,7 +140,7 @@ function validateOneCommand(cfg: Config, raw: string, override?: string): Comman
 
   const data = (file.frontmatter?.toJS() ?? {}) as Record<string, unknown>;
   const uri = formatUri({ scheme: canonical.scheme, path: canonical.path });
-  const report = summarise(validateInstance(schema, cfg, {
+  const report = summarise(validateInstance(schema, {
     uri,
     className: canonical.scheme,
     data,
@@ -138,13 +149,14 @@ function validateOneCommand(cfg: Config, raw: string, override?: string): Comman
 }
 
 function validateAllCommand(
-  cfg: Config,
+  ctx: LoadedContext,
   options: { model?: string; fix?: boolean },
 ): CommandOutput {
-  const { schema } = loadModel(cfg, options.model);
+  const { cfg } = ctx;
+  const { schema, roots } = loadModel(cfg, options.model);
 
   const check = () => {
-    const { graph, diagnostics } = loadGraph(cfg, schema);
+    const { graph, diagnostics } = loadGraph(cfg, schema, roots);
     return { graph, report: summarise([...diagnostics, ...validateGraph(graph)]) };
   };
 
@@ -184,9 +196,10 @@ function parseAssignments(pairs: string[]): Record<string, unknown> {
   return attrs;
 }
 
-function applyOps(cfg: Config, ops: Op[], options: { dryRun?: boolean }): CommandOutput {
+function applyOps(ctx: LoadedContext, ops: Op[], options: { dryRun?: boolean }): CommandOutput {
+  const { cfg, roots } = ctx;
   const { schema } = loadModel(cfg);
-  const plan = planChangeset(cfg, schema, ops);
+  const plan = planChangeset(cfg, schema, roots, ops);
   const report = summarise(plan.diagnostics);
 
   if (!report.ok) return { value: report, code: 1 };
@@ -215,33 +228,32 @@ function applyOps(cfg: Config, ops: Op[], options: { dryRun?: boolean }): Comman
   };
 }
 
-async function rebuildCommand(cfg: Config): Promise<CommandOutput> {
+async function rebuildCommand(ctx: LoadedContext): Promise<CommandOutput> {
+  const { cfg, roots } = ctx;
   const { schema } = loadModel(cfg);
-  const { graph } = loadGraph(cfg, schema);
+  const { graph } = loadGraph(cfg, schema, roots);
   return { value: await rebuild(graph) };
 }
 
-async function queryCommand(cfg: Config, sql: string): Promise<CommandOutput> {
-  // A missing database is a stale cache, not a user error: rebuild it.
-  if (!existsSync(absolute(cfg, databasePath(cfg)))) await rebuildCommand(cfg);
+async function queryCommand(ctx: LoadedContext, sql: string): Promise<CommandOutput> {
+  const { cfg } = ctx;
+  if (!existsSync(absolute(cfg, databasePath(cfg)))) await rebuildCommand(ctx);
   return { value: await query(cfg, sql) };
 }
 
 async function similarCommand(
-  cfg: Config,
+  ctx: LoadedContext,
   query_: string,
   options: { limit?: number },
 ): Promise<CommandOutput> {
-  if (!existsSync(absolute(cfg, databasePath(cfg)))) await rebuildCommand(cfg);
-  const { schema } = loadModel(cfg);
-  const { graph } = loadGraph(cfg, schema);
+  const { cfg } = ctx;
+  if (!existsSync(absolute(cfg, databasePath(cfg)))) await rebuildCommand(ctx);
+  const { schema, roots } = loadModel(cfg);
+  const { graph } = loadGraph(cfg, schema, roots);
 
-  // Determine the query vector. A uri embeds the body of the referenced
-  // document (so `similar issue://x.md` finds the most related siblings).
   const emb = embedder();
   let queryVec: Float32Array;
   let queryLabel = "text";
-  // Only treat the argument as a uri if it has a scheme separator.
   if (/^[a-zA-Z+.-]+:\/\//.test(query_)) {
     const parsed = parseUri(query_);
     const target = formatUri({ scheme: parsed.scheme, path: parsed.path });
@@ -257,7 +269,6 @@ async function similarCommand(
     queryVec = await emb.embed(query_);
   }
 
-  // Score every row from the embedding table.
   const cols = Array.from({ length: emb.dimensions }, (_, i) => `"v${i}"`).join(", ");
   const result = await query(cfg, `SELECT uri, ${cols} FROM embedding`);
   const scored: { uri: string; score: number }[] = [];
@@ -281,24 +292,24 @@ async function similarCommand(
   };
 }
 
-/** Strip the protected region so it doesn't bias the embedding. */
 function stripForEmbed(markdown: string): string {
   return markdown.replace(/<!-- loom:links start -->[\s\S]*?<!-- loom:links end -->/g, "").trim();
 }
 
-function applyCommand(cfg: Config, file: string, options: { dryRun?: boolean }): CommandOutput {
+function applyCommand(ctx: LoadedContext, file: string, options: { dryRun?: boolean }): CommandOutput {
   const { ops, diagnostics } = parseChangeset(readTextFile(file, "utf8"));
   if (diagnostics.length > 0) return { value: summarise(diagnostics), code: 1 };
-  return applyOps(cfg, ops, options);
+  return applyOps(ctx, ops, options);
 }
 
 function lsCommand(
-  cfg: Config,
+  ctx: LoadedContext,
   raw: string,
   options: { depth?: string; kind?: string; linked?: boolean; unlinked?: boolean },
 ): CommandOutput {
+  const { cfg, roots } = ctx;
   const { schema } = loadModel(cfg);
-  const { graph } = loadGraph(cfg, schema);
+  const { graph } = loadGraph(cfg, schema, roots);
   return {
     value: listUri(cfg, graph, raw, {
       depth: options.depth === undefined ? 1 : Number(options.depth),
@@ -309,20 +320,20 @@ function lsCommand(
   };
 }
 
-function locateCommand(cfg: Config, raw: string, options: { line?: string }): CommandOutput {
+function locateCommand(ctx: LoadedContext, raw: string, options: { line?: string }): CommandOutput {
   if (options.line === undefined) {
     throw new LoomError(error("cli/missing-option", "locate needs --line <n>"));
   }
-  return { value: locateLine(cfg, raw, Number(options.line)) };
+  return { value: locateLine(ctx.cfg, ctx.roots, raw, Number(options.line)) };
 }
 
-function refsCommand(cfg: Config, raw: string): CommandOutput {
+function refsCommand(ctx: LoadedContext, raw: string): CommandOutput {
+  const { cfg, roots } = ctx;
   const { schema } = loadModel(cfg);
-  const { graph } = loadGraph(cfg, schema);
+  const { graph } = loadGraph(cfg, schema, roots);
   const uri = parseUri(raw);
-  const targetCanonical = formatUri(canonicalise(resolvePath(uri, cfg), cfg, uri.anchor));
+  const targetCanonical = formatUri(canonicalise(resolveUri(uri, roots).path, roots, uri.anchor));
 
-  // Find all documents with edges pointing to this target or containing reverse links
   const matches = graph.edges.filter((e) => e.to === targetCanonical || e.to.startsWith(`${targetCanonical}#`));
 
   return {
@@ -352,36 +363,32 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .option("--json", "emit JSON instead of YAML")
     .option("--cwd <dir>", "directory to resolve configuration from");
 
-  const runWith = (action: (cfg: Config, ...args: string[]) => CommandOutput) =>
-    (...args: unknown[]) => {
-      const options = program.opts<GlobalOptions>();
-      const cfg = loadConfig(options.cwd ?? process.cwd());
-      // commander passes the Command object last; command options second-last.
-      const positional = args.slice(0, -2) as string[];
-      const commandOptions = (args.at(-2) ?? {}) as { model?: string };
-      const result = action(cfg, ...positional, ...(commandOptions.model === undefined ? [] : [commandOptions.model]));
-      emit(serialise(result.value, options.json ? "json" : ("yaml" as OutputFormat)));
-      if (result.code) setCode(result.code);
-    };
+  const finish = (result: CommandOutput): void => {
+    const options = program.opts<GlobalOptions>();
+    emit(serialise(result.value, options.json ? "json" : ("yaml" as OutputFormat)));
+    if (result.code) setCode(result.code);
+  };
+  const ctx = () => loadContext(program.opts<GlobalOptions>().cwd);
+  const cfg = () => ctx().cfg;
 
   program
     .command("resolve")
     .argument("<uri>", "design uri to resolve")
     .description("resolve a uri to a repo-relative path")
-    .action(runWith(resolveCommand));
+    .action((raw: string) => finish(resolveCommand(ctx(), raw)));
 
   program
     .command("show")
     .argument("<uri>", "design uri of an instance")
     .description("show an instance's frontmatter, links and markdown")
-    .action(runWith(showCommand));
+    .action((raw: string) => finish(showCommand(ctx(), raw)));
 
   const model = program.command("model").description("document model commands");
   model
     .command("check")
     .option("--model <path>", "check a proposed model instead of the installed one")
     .description("parse and validate the document model")
-    .action(runWith(modelCheckCommand));
+    .action((options: { model?: string }) => finish(modelCheckCommand(cfg(), options.model)));
 
   program
     .command("validate")
@@ -389,22 +396,12 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .option("--model <path>", "validate against a proposed model")
     .option("--fix", "apply the unambiguous repairs")
     .description("validate the repository, or one instance, against the document model")
-    .action((uri: string | undefined, commandOptions: { model?: string; fix?: boolean }) => {
-      const options = program.opts<GlobalOptions>();
-      const cfg = loadConfig(options.cwd ?? process.cwd());
+    .action((uri: string | undefined, options: { model?: string; fix?: boolean }) => {
       const result = uri === undefined
-        ? validateAllCommand(cfg, commandOptions)
-        : validateOneCommand(cfg, uri, commandOptions.model);
-      emit(serialise(result.value, options.json ? "json" : ("yaml" as OutputFormat)));
-      if (result.code) setCode(result.code);
+        ? validateAllCommand(ctx(), options)
+        : validateOneCommand(ctx(), uri, options.model);
+      finish(result);
     });
-
-  const finish = (result: CommandOutput): void => {
-    const options = program.opts<GlobalOptions>();
-    emit(serialise(result.value, options.json ? "json" : ("yaml" as OutputFormat)));
-    if (result.code) setCode(result.code);
-  };
-  const configNow = () => loadConfig(program.opts<GlobalOptions>().cwd ?? process.cwd());
 
   program
     .command("apply")
@@ -412,7 +409,7 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .option("--dry-run", "show what would be written without writing it")
     .description("apply a changeset transactionally")
     .action((file: string, options: { dryRun?: boolean }) => {
-      finish(applyCommand(configNow(), file, options));
+      finish(applyCommand(ctx(), file, options));
     });
 
   program
@@ -422,7 +419,7 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .option("--dry-run", "show what would be written without writing it")
     .description("move an instance and rewrite every inbound uri")
     .action((from: string, to: string, options: { dryRun?: boolean }) => {
-      finish(applyOps(configNow(), [{ op: "rename", from, to }], options));
+      finish(applyOps(ctx(), [{ op: "rename", from, to }], options));
     });
 
   program
@@ -431,7 +428,7 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .argument("[assignments...]", "key=value attributes")
     .description("create an instance")
     .action((uri: string, assignments: string[]) => {
-      finish(applyOps(configNow(), [{ op: "create", uri, attrs: parseAssignments(assignments) }], {}));
+      finish(applyOps(ctx(), [{ op: "create", uri, attrs: parseAssignments(assignments) }], {}));
     });
 
   program
@@ -440,7 +437,7 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .argument("<assignments...>", "key=value attributes")
     .description("set attributes on an instance")
     .action((uri: string, assignments: string[]) => {
-      finish(applyOps(configNow(), [{ op: "set", uri, attrs: parseAssignments(assignments) }], {}));
+      finish(applyOps(ctx(), [{ op: "set", uri, attrs: parseAssignments(assignments) }], {}));
     });
 
   for (const verb of ["link", "unlink"] as const) {
@@ -455,7 +452,7 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
         const op = options.line === undefined
           ? { op: verb, from, rel, to }
           : { op: verb, from, rel, to, line: Number(options.line) };
-        finish(applyOps(configNow(), [op], {}));
+        finish(applyOps(ctx(), [op], {}));
       });
   }
 
@@ -464,31 +461,25 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .argument("<uri>", "uri of the instance")
     .description("delete an instance")
     .action((uri: string) => {
-      finish(applyOps(configNow(), [{ op: "delete", uri }], {}));
+      finish(applyOps(ctx(), [{ op: "delete", uri }], {}));
     });
 
   program
     .command("rebuild")
     .description("rebuild the derived database from the files")
-    .action(async () => {
-      finish(await rebuildCommand(configNow()));
-    });
+    .action(async () => finish(await rebuildCommand(ctx())));
 
   program
     .command("query")
     .argument("<sql>", "sql to run against the derived database")
     .description("query the derived database")
-    .action(async (sql: string) => {
-      finish(await queryCommand(configNow(), sql));
-    });
+    .action(async (sql: string) => finish(await queryCommand(ctx(), sql)));
 
   program
     .command("refs")
     .argument("<srcUri>", "source code uri to check references for")
     .description("find design documents referencing a source symbol")
-    .action((srcUri: string) => {
-      finish(refsCommand(configNow(), srcUri));
-    });
+    .action((srcUri: string) => finish(refsCommand(ctx(), srcUri)));
 
   program
     .command("ls")
@@ -499,7 +490,7 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .option("--unlinked", "only entries nothing points at")
     .description("list what can be linked to")
     .action((uri: string, options: { depth?: string; kind?: string; linked?: boolean; unlinked?: boolean }) => {
-      finish(lsCommand(configNow(), uri, options));
+      finish(lsCommand(ctx(), uri, options));
     });
 
   program
@@ -508,22 +499,20 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .option("--line <n>", "line number to locate")
     .description("the address of a line: its innermost linkable ancestor")
     .action((uri: string, options: { line?: string }) => {
-      finish(locateCommand(configNow(), uri, options));
+      finish(locateCommand(ctx(), uri, options));
     });
 
   program
     .command("prefetch")
     .description("prefetch configured tree-sitter language grammars")
-    .action(() => {
-      finish(prefetchCommand(configNow()));
-    });
+    .action(() => finish(prefetchCommand(cfg())));
 
   program
     .command("index")
     .option("--check", "exit 1 if any index is stale")
     .description("regenerate navigational indexes")
     .action(async (options: { check?: boolean }) => {
-      const result = await indexCommand(configNow(), options);
+      const result = await indexCommand(ctx(), options);
       if (options.check && result.unchanged.length > 0) {
         finish({ value: { ok: false, stale: result.unchanged }, code: 1 });
         return;
@@ -538,7 +527,7 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .description("rank documents by semantic similarity to a query or existing uri")
     .action(async (queryArg: string, options: { limit?: string }) => {
       const limit = options.limit !== undefined ? Number(options.limit) : undefined;
-      finish(await similarCommand(configNow(), queryArg, { limit }));
+      finish(await similarCommand(ctx(), queryArg, { limit }));
     });
 
   return program;

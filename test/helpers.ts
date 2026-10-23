@@ -21,3 +21,24 @@ export function makeRepo(files: Record<string, string>): string {
 export function instance(frontmatter: string, markdown = ""): string {
   return `---\n${frontmatter.trim()}\n---\n${markdown}`;
 }
+
+/**
+ * Build a model with `%% @path <class> <path>` annotations mapping the
+ * class schemes used by CLI tests to where their files live in the repo.
+ * Tests that need the model for `validate`/`show` etc. compose this with the
+ * instance files they create.
+ */
+export function defaultModel(annotations: Record<string, string> = {}): string {
+  const lines = [
+    "classDiagram",
+    ...Object.entries(annotations).map(([cls, p]) => `    %% @path ${cls} ${p}`),
+    "    class issue {",
+    "        +string title",
+    "        +string status",
+    "    }",
+    "    class decision {",
+    "        +string title",
+    "    }",
+  ];
+  return lines.join("\n") + "\n";
+}

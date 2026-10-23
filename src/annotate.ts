@@ -1,6 +1,7 @@
 import pack from "@xberg-io/tree-sitter-language-pack";
-import { absolute, classRootsFor, type Config } from "./config.ts";
+import { absolute, type Config } from "./config.ts";
 import { type Diagnostic, error } from "./diagnostics.ts";
+import { classRoot, type ClassRoots } from "./path-resolution.ts";
 import {
   type Anchor,
   type AnchorPolicy,
@@ -154,6 +155,7 @@ export interface PlannedAnnotation {
  */
 export function planAnnotations(
   cfg: Config,
+  roots: ClassRoots,
   requests: AnnotationRequest[],
   policy: AnchorPolicy,
   read: (repoRelative: string) => string,
@@ -164,8 +166,8 @@ export function planAnnotations(
 
   for (const request of requests) {
     const uri = parseUri(request.from);
-    const root = classRootsFor(cfg, uri.scheme)[0]!;
-    const repoRelative = `${root}/${uri.path}`;
+    const root = classRoot(roots, uri.scheme);
+    const repoRelative = root === "" ? uri.path : `${root}/${uri.path}`;
 
     let file = parsed.get(repoRelative);
     if (file === undefined) {

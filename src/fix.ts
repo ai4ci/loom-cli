@@ -8,8 +8,8 @@ import { resolvePath } from "./graph.ts";
 import { getLinksBlock, setLinksBlock, stringifyInstance } from "./document.ts";
 import { type Graph, type InstanceNode, renderLinks } from "./graph.ts";
 import { effectiveRelations } from "./model/schema.ts";
+import { classRoot } from "./path-resolution.ts";
 import { canonicalise, formatUri, parseUri } from "./uri.ts";
-import { classRootsFor } from "./config.ts";
 
 /**
  * Only the unambiguous repairs (plan §Phase 2): regenerate a link block that
@@ -52,7 +52,7 @@ function inferredRenames(graph: Graph): Map<string, string> {
     if (parsed.anchor === undefined) continue;
     if (!isSubclassOf(graph.schema, parsed.scheme, "src")) continue;
 
-    const repoRelative = resolvePath(parsed, graph.cfg);
+    const repoRelative = resolvePath(parsed, graph.roots);
     let file = parsedFiles.get(repoRelative);
     if (file === undefined) {
       const lang = detectLang(repoRelative);
@@ -110,12 +110,13 @@ function rewriteRenamedAnchors(
 function compactForm(raw: string, graph: Graph): string | null {
   try {
     const parsed = parseUri(raw);
-    const repoRelative = parsed.scheme === "repo"
-      ? parsed.path
-      : parsed.scheme === "design"
-        ? `${graph.cfg.designRoot}/${parsed.path}`
-        : `${classRootsFor(graph.cfg, parsed.scheme)[0]!}/${parsed.path}`;
-    return formatUri(canonicalise(repoRelative, graph.cfg, parsed.anchor));
+    // Unknown classes (or `design://`, which isn't a real class) fall back to
+    // the repo-relative interpretation, which canonicalise() can then collapse
+    // to the right class scheme if a class root happens to match.
+    const repoRelative = parsed.scheme === "repo" || !graph.roots.has(parsed.scheme)
+      ? (parsed.scheme === "repo" ? parsed.path : `${parsed.scheme}/${parsed.path}`)
+      : `${classRoot(graph.roots, parsed.scheme)}/${parsed.path}`;
+    return formatUri(canonicalise(repoRelative, graph.roots, parsed.anchor));
   } catch {
     return null;
   }

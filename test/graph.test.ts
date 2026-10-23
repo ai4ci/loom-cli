@@ -6,7 +6,7 @@ import { loadGraph, renderLinks, validateGraph } from "../src/graph.ts";
 import { instance, makeRepo } from "./helpers.ts";
 import { GRAPH_MODEL } from "./fixtures.ts";
 
-const CONFIG = "designRoot: design\nclassRoots:\n  issue: design/issue\n  decision: design/decision\n";
+const CONFIG = "designRoot: design\n";
 
 function build(files: Record<string, string>) {
   const root = makeRepo({
@@ -15,8 +15,8 @@ function build(files: Record<string, string>) {
     ...files,
   });
   const cfg = loadConfig(root);
-  const { schema } = loadModel(cfg);
-  return { root, cfg, schema, ...loadGraph(cfg, schema) };
+  const { schema, roots } = loadModel(cfg);
+  return { root, cfg, schema, roots, ...loadGraph(cfg, schema, roots) };
 }
 
 function codes(files: Record<string, string>): string[] {
@@ -70,7 +70,6 @@ test("a markdown file under a class root with no frontmatter is an orphan", () =
 });
 
 test("inbound cardinality is enforced across files", () => {
-  // decided-by allows at most one issue per decision.
   const found = codes({
     "design/issue/a.md": OPEN("A", "decided-by: [decision://d.md]"),
     "design/issue/b.md": OPEN("B", "decided-by: [decision://d.md]"),
@@ -152,7 +151,7 @@ test("a stale protected link block is reported", () => {
 
 test("a non-canonical uri in the yaml is reported as fixable", () => {
   const built = build({
-    "design/issue/a.md": OPEN("A", "blocks: [design://issue/b.md]"),
+    "design/issue/a.md": OPEN("A", "blocks: [repo://design/issue/b.md]"),
     "design/issue/b.md": OPEN("B"),
   });
   const d = validateGraph(built.graph).find((x) => x.code === "graph/non-canonical-uri");

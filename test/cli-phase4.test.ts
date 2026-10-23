@@ -7,14 +7,12 @@ import { run } from "../src/cli.ts";
 import { instance, makeRepo } from "./helpers.ts";
 import { GRAPH_MODEL } from "./fixtures.ts";
 
-const CONFIG = "designRoot: design\nclassRoots:\n  issue: design/issue\n  decision: design/decision\n";
-
 const OPEN = (title: string, extra = "") =>
   instance(`class: issue\ntitle: ${title}\nstatus: open${extra ? `\n${extra}` : ""}`);
 
 function repo(): string {
   return makeRepo({
-    ".loom.yaml": CONFIG,
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": GRAPH_MODEL,
     "design/issue/a.md": OPEN("Aye", "blocks: [issue://b.md]\nspec: notes/s.md"),
     "design/issue/b.md": OPEN("Bee"),
@@ -59,8 +57,9 @@ test("attributes get native column types", async () => {
 
 test("a date attribute compares without a cast", async () => {
   const root = makeRepo({
-    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n",
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": `classDiagram
+    %% @path issue /design/issue
     class issue {
         +string title
         +date created
@@ -106,8 +105,9 @@ test("rebuild picks up a change to an instance", async () => {
 
 test("a list attribute becomes a duckdb list", async () => {
   const root = makeRepo({
-    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n",
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": `classDiagram
+    %% @path issue /design/issue
     class issue {
         +string title
         +List~string~ tags

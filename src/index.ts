@@ -5,6 +5,7 @@ import { getLinksBlock, setLinksBlock, stringifyInstance, parseInstance } from "
 import { loadModel } from "./model/load.ts";
 import type { SchemaIR } from "./model/types.ts";
 import { query } from "./duckdb.ts";
+import { classRoot, type ClassRoots } from "./path-resolution.ts";
 
 export interface FilterView {
   class: string;
@@ -93,20 +94,32 @@ async function runView(cfg: Config, view: IndexView): Promise<{ uri: string; tit
   }));
 }
 
-function relativeLink(cfg: Config, indexPath: string, target: { uri: string }): string {
-  // The file lives at <designRoot>/<scheme>/<innerPath>; the index sits at
-  // some path under designRoot. Build the designRoot-relative path directly
-  // rather than via canonicalise, which would strip the class root segment.
+function relativeLink(
+  cfg: Config,
+  roots: ClassRoots,
+  indexPath: string,
+  target: { uri: string },
+): string {
+  // Resolve the target uri to a repo-relative path using the class roots,
+  // so an index links to wherever the class actually lives.
   const match = /^([a-zA-Z+.-]+):\/\/(.+)$/.exec(target.uri);
   if (!match) return target.uri;
-  const filePath = `${cfg.designRoot}/${match[1]}/${match[2]}`;
+  const scheme = match[1]!;
+  const innerPath = match[2]!;
+  const root = classRoot(roots, scheme);
+  const filePath = root === "" ? innerPath : `${root}/${innerPath}`;
   const indexDir = path.posix.dirname(indexPath);
   return path.posix.relative(indexDir, filePath);
 }
 
-async function renderIndexBlock(cfg: Config, def: IndexDefinition, rows: { uri: string; title: string }[]): Promise<string> {
+async function renderIndexBlock(
+  cfg: Config,
+  roots: ClassRoots,
+  def: IndexDefinition,
+  rows: { uri: string; title: string }[],
+): Promise<string> {
   if (rows.length === 0) return "_No matching instances._";
-  const lines = rows.map((r) => `- [${r.title}](${relativeLink(cfg, def.path, r)})`);
+  const lines = rows.map((r) => `- [${r.title}](${relativeLink(cfg, roots, def.path, r)})`);
   return lines.join("\n");
 }
 
@@ -119,7 +132,11 @@ export interface IndexUpdate {
  * Regenerate every index file. Each is a normal markdown file whose
  * frontmatter declares a view; the body is a protected generated region.
  */
-export async function regenerateIndexes(cfg: Config, schema: SchemaIR): Promise<IndexUpdate[]> {
+export async function regenerateIndexes(
+  cfg: Config,
+  schema: SchemaIR,
+  roots: ClassRoots,
+): Promise<IndexUpdate[]> {
   const definitions = loadIndexDefinitions(cfg);
   const updates: IndexUpdate[] = [];
 
@@ -128,7 +145,7 @@ export async function regenerateIndexes(cfg: Config, schema: SchemaIR): Promise<
     const file = parseInstance(readFileSync(absolutePath, "utf8"));
     const existing = getLinksBlock(file.markdown);
     const rows = await runView(cfg, def.view);
-    const expected = await renderIndexBlock(cfg, def, rows);
+    const expected = await renderIndexBlock(cfg, roots, def, rows);
 
     if (existing !== null && existing === expected) {
       updates.push({ path: def.path, changed: false });
@@ -143,7 +160,11 @@ export async function regenerateIndexes(cfg: Config, schema: SchemaIR): Promise<
   return updates;
 }
 
-export async function checkIndexes(cfg: Config, schema: SchemaIR): Promise<string[]> {
+export async function checkIndexes(
+  cfg: Config,
+  schema: SchemaIR,
+  roots: ClassRoots,
+): Promise<string[]> {
   const definitions = loadIndexDefinitions(cfg);
   const stale: string[] = [];
 
@@ -151,7 +172,7 @@ export async function checkIndexes(cfg: Config, schema: SchemaIR): Promise<strin
     const file = parseInstance(readFileSync(absolute(cfg, def.path), "utf8"));
     const existing = getLinksBlock(file.markdown);
     const rows = await runView(cfg, def.view);
-    const expected = await renderIndexBlock(cfg, def, rows);
+    const expected = await renderIndexBlock(cfg, roots, def, rows);
     if (existing !== expected) stale.push(def.path);
   }
 
@@ -163,23 +184,26 @@ export interface IndexCommandResult {
   unchanged: string[];
 }
 
-export async function indexCommand(cfg: Config, options: { check?: boolean }): Promise<IndexCommandResult> {
+export async function indexCommand(
+  ctx: { cfg: Config; roots: ClassRoots },
+  options: { check?: boolean },
+): Promise<IndexCommandResult> {
+  const { cfg, roots } = ctx;
   const { schema } = loadModel(cfg);
   if (options.check) {
-    const stale = await checkIndexes(cfg, schema);
+    const stale = await checkIndexes(cfg, schema, roots);
     return {
       updated: [],
       unchanged: stale,
     };
   }
-  // Rebuild the database if it doesn't exist; queries need it.
   if (!existsSync(absolute(cfg, `${cfg.designRoot}/.loom.duckdb`))) {
     const { loadGraph } = await import("./graph.ts");
     const { rebuild } = await import("./duckdb.ts");
-    const { graph } = loadGraph(cfg, schema);
+    const { graph } = loadGraph(cfg, schema, roots);
     await rebuild(graph);
   }
-  const updates = await regenerateIndexes(cfg, schema);
+  const updates = await regenerateIndexes(cfg, schema, roots);
   return {
     updated: updates.filter((u) => u.changed).map((u) => u.path).sort(),
     unchanged: updates.filter((u) => !u.changed).map((u) => u.path).sort(),

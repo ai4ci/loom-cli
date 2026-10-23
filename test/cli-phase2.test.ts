@@ -7,11 +7,9 @@ import { run } from "../src/cli.ts";
 import { instance, makeRepo } from "./helpers.ts";
 import { GRAPH_MODEL } from "./fixtures.ts";
 
-const CONFIG = "designRoot: design\nclassRoots:\n  issue: design/issue\n  decision: design/decision\n";
-
 function repo(files: Record<string, string>): string {
   return makeRepo({
-    ".loom.yaml": CONFIG,
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": GRAPH_MODEL,
     ...files,
   });
@@ -109,6 +107,7 @@ test("validate --model analyses the impact of a proposed model", async () => {
   const proposed = path.join(root, "proposed.mmd");
   // Dropping the enumeration makes every existing status value invalid.
   writeFileSync(proposed, `classDiagram
+    %% @path issue /design/issue
     class issue {
         +string title
         +int status
@@ -123,7 +122,10 @@ test("validate --model analyses the impact of a proposed model", async () => {
 test("validate --model does not touch the report file", async () => {
   const root = repo({ "design/issue/a.md": OPEN("A") });
   const proposed = path.join(root, "proposed.mmd");
-  writeFileSync(proposed, "classDiagram\n    class issue {\n        +string title\n    }\n");
+  writeFileSync(proposed, `classDiagram
+    %% @path issue /design/issue
+    class issue { +string title }
+`);
   await run(["--cwd", root, "validate", "--model", proposed]);
   assert.throws(() => readFileSync(path.join(root, "design/VALIDATION.md"), "utf8"));
 });

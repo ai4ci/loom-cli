@@ -2,14 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseModel } from "../src/model/mermaid.ts";
 import { validateInstance } from "../src/instance.ts";
-import { configFrom } from "../src/config.ts";
 import { MODEL } from "./fixtures.ts";
 
-const cfg = configFrom("/repo", { classRoots: { issue: "design/issue", src: ["src"] } });
 const { schema } = parseModel(MODEL);
 
 function codes(data: Record<string, unknown>, className = "issue"): string[] {
-  return validateInstance(schema, cfg, {
+  return validateInstance(schema, {
     uri: `${className}://a.md`,
     className,
     data,
@@ -72,7 +70,7 @@ test("a subclass is accepted where the parent class is the declared target", () 
     class bug
     issue <|-- bug
 `).schema;
-  const found = validateInstance(sub, cfg, {
+  const found = validateInstance(sub, {
     uri: "issue://a.md",
     className: "issue",
     data: { ...VALID, blocks: ["bug://b.md"] },
@@ -97,7 +95,7 @@ test("outbound cardinality is enforced", () => {
     }
     a "0..*" --> "1" b : one
 `).schema;
-  const tooMany = validateInstance(limited, cfg, {
+  const tooMany = validateInstance(limited, {
     uri: "a://x.md",
     className: "a",
     data: { title: "t", one: ["b://p.md", "b://q.md"] },

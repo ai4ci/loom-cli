@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { canonicalise, equivalent, formatUri, parseUri, resolveUri } from "../src/uri.ts";
-import { configFrom } from "../src/config.ts";
+import type { ClassRoots } from "../src/path-resolution.ts";
 
-const cfg = configFrom("/repo", {
-  designRoot: "design",
-  classRoots: { issue: "design/issue", src: ["src", "R"], test: ["tests"] },
-});
+const roots: ClassRoots = new Map([
+  ["issue", "design/issue"],
+  ["src", "src"],
+  ["test", "tests"],
+]);
 
 test("parseUri splits scheme, path and anchor", () => {
   assert.deepEqual(parseUri("issue://my-first-issue.md"), {
@@ -42,56 +43,36 @@ test("formatUri is the inverse of parseUri", () => {
 });
 
 test("resolveUri maps schemes to repo-relative paths", () => {
-  assert.equal(resolveUri(parseUri("repo://README.md"), cfg).path, "README.md");
-  assert.equal(resolveUri(parseUri("design://issue/a.md"), cfg).path, "design/issue/a.md");
-  assert.equal(resolveUri(parseUri("issue://a.md"), cfg).path, "design/issue/a.md");
-  assert.equal(resolveUri(parseUri("test://unit/a.R"), cfg).path, "tests/unit/a.R");
+  assert.equal(resolveUri(parseUri("repo://README.md"), roots).path, "README.md");
+  assert.equal(resolveUri(parseUri("issue://a.md"), roots).path, "design/issue/a.md");
+  assert.equal(resolveUri(parseUri("src://a/b.R"), roots).path, "src/a/b.R");
+  assert.equal(resolveUri(parseUri("test://unit/a.R"), roots).path, "tests/unit/a.R");
 });
 
-test("resolveUri defaults an unconfigured class to designRoot/<class>", () => {
-  assert.equal(resolveUri(parseUri("decision://d1.md"), cfg).path, "design/decision/d1.md");
-});
-
-test("resolveUri reports every candidate for a multi-root class", () => {
-  const r = resolveUri(parseUri("src://a/b.R"), cfg);
-  assert.deepEqual(r.candidates, ["src/a/b.R", "R/a/b.R"]);
-  assert.equal(r.path, "src/a/b.R", "first root wins absent an existence check");
-});
-
-test("resolveUri lets an existence check pick a later root", () => {
-  const r = resolveUri(parseUri("src://a/b.R"), cfg, (p) => p === "R/a/b.R");
-  assert.equal(r.path, "R/a/b.R");
-  assert.equal(r.ambiguous, false);
-});
-
-test("resolveUri flags ambiguity when several roots match", () => {
-  const r = resolveUri(parseUri("src://a/b.R"), cfg, () => true);
-  assert.equal(r.ambiguous, true);
+test("resolveUri returns the path unchanged for an unknown class", () => {
+  assert.throws(() => resolveUri(parseUri("decision://d1.md"), roots), /unknown class/i);
 });
 
 test("canonicalise picks the most compact scheme", () => {
-  assert.equal(formatUri(canonicalise("design/issue/a.md", cfg)), "issue://a.md");
-  assert.equal(formatUri(canonicalise("design/notes.md", cfg)), "design://notes.md");
-  assert.equal(formatUri(canonicalise("README.md", cfg)), "repo://README.md");
-  assert.equal(formatUri(canonicalise("tests/unit/a.R", cfg)), "test://unit/a.R");
+  assert.equal(formatUri(canonicalise("design/issue/a.md", roots)), "issue://a.md");
+  assert.equal(formatUri(canonicalise("README.md", roots)), "repo://README.md");
+  assert.equal(formatUri(canonicalise("tests/unit/a.R", roots)), "test://unit/a.R");
 });
 
-test("canonicalise prefers the longest matching root when roots nest", () => {
-  // design/issue nests inside design, so the class scheme must win.
-  assert.equal(formatUri(canonicalise("design/issue/deep/a.md", cfg)), "issue://deep/a.md");
+test("canonicalise falls back to repo when no class matches", () => {
+  assert.equal(formatUri(canonicalise("design/notes.md", roots)), "repo://design/notes.md");
 });
 
 test("canonicalise preserves an anchor", () => {
-  assert.equal(formatUri(canonicalise("src/a/b.R", cfg, "fn")), "src://a/b.R#fn");
+  assert.equal(formatUri(canonicalise("src/a/b.R", roots, "fn")), "src://a/b.R#fn");
 });
 
 test("equivalent compares resolved paths across schemes", () => {
-  assert.equal(equivalent("design://issue/a.md", "issue://a.md", cfg), true);
-  assert.equal(equivalent("repo://design/issue/a.md", "issue://a.md", cfg), true);
-  assert.equal(equivalent("issue://a.md", "issue://b.md", cfg), false);
+  assert.equal(equivalent("repo://design/issue/a.md", "issue://a.md", roots), true);
+  assert.equal(equivalent("issue://a.md", "issue://b.md", roots), false);
 });
 
 test("equivalent distinguishes anchors", () => {
-  assert.equal(equivalent("src://a.R#one", "src://a.R#two", cfg), false);
-  assert.equal(equivalent("src://a.R#one", "src://a.R#one", cfg), true);
+  assert.equal(equivalent("src://a.R#one", "src://a.R#two", roots), false);
+  assert.equal(equivalent("src://a.R#one", "src://a.R#one", roots), true);
 });

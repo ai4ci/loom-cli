@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { absolute, classRootsFor, configFrom, type Config } from "./config.ts";
+import { absolute, type Config } from "./config.ts";
 import { type Diagnostic, error } from "./diagnostics.ts";
 import { getLinksBlock, type InstanceFile, parseInstance } from "./document.ts";
 import {
@@ -19,9 +19,10 @@ import {
   isSubclassOf,
 } from "./model/schema.ts";
 import type { Cardinality, SchemaIR } from "./model/types.ts";
+import { classRoot, type ClassRoots } from "./path-resolution.ts";
 import { contentAtHead, inferRename } from "./drift.ts";
 import { similarity } from "./similarity.ts";
-import { canonicalise, formatUri, parseUri } from "./uri.ts";
+import { canonicalise, formatUri, parseUri, resolveUri } from "./uri.ts";
 
 export interface InstanceNode {
   /** Canonical uri, e.g. `issue://a.md`. */
@@ -46,101 +47,57 @@ export interface Edge {
 export interface Graph {
   cfg: Config;
   schema: SchemaIR;
+  roots: ClassRoots;
   instances: Map<string, InstanceNode>;
   edges: Edge[];
 }
 
 /**
- * Every class that can own files needs a root for canonicalisation, including
- * ones the config does not mention (plan §1.5).
+ * Load every instance file and the edges between them. Class roots come from
+ * the schema (resolved by `path-resolution.ts`), not the config.
  */
-export function effectiveConfig(cfg: Config, schema: SchemaIR): Config {
-  const classRoots = { ...cfg.classRoots };
-  for (const name of schema.classes.keys()) {
-    if (classRoots[name] !== undefined) continue;
-    if (!isInstantiable(schema, name) && !inReservedFamily(schema, name)) continue;
-    classRoots[name] = classRootsFor(cfg, name);
-  }
-  return configFrom(cfg.repoRoot, {
-    designRoot: cfg.designRoot,
-    classRoots,
-    languages: cfg.languages,
-  }, cfg.configPath);
-}
-
-function markdownFilesUnder(cfg: Config, root: string): string[] {
-  const start = absolute(cfg, root);
-  if (!existsSync(start) || !statSync(start).isDirectory()) return [];
-
-  const found: string[] = [];
-  const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.isFile() && entry.name.endsWith(".md")) found.push(full);
-    }
-  };
-  walk(start);
-  return found.sort();
-}
-
-function toRepoRelative(cfg: Config, absolutePath: string): string {
-  return path.relative(cfg.repoRoot, absolutePath).split(path.sep).join("/");
-}
-
-/** Relation values accept a single uri or a list of them. */
-function asList(value: unknown): unknown[] {
-  if (value === undefined || value === null) return [];
-  return Array.isArray(value) ? value : [value];
-}
-
-function withinCardinality(count: number, cardinality: Cardinality): boolean {
-  if (count < cardinality.min) return false;
-  return cardinality.max === null || count <= cardinality.max;
-}
-
 export function loadGraph(
-  rawCfg: Config,
+  cfg: Config,
   schema: SchemaIR,
+  roots: ClassRoots,
 ): { graph: Graph; diagnostics: Diagnostic[] } {
-  const cfg = effectiveConfig(rawCfg, schema);
   const diagnostics: Diagnostic[] = [];
   const instances = new Map<string, InstanceNode>();
 
   for (const [className] of schema.classes) {
     if (!isInstantiable(schema, className)) continue;
+    const root = classRoot(roots, className);
+    if (root === "") continue;
 
-    for (const root of classRootsFor(cfg, className)) {
-      for (const absolutePath of markdownFilesUnder(cfg, root)) {
-        const repoRelative = toRepoRelative(cfg, absolutePath);
-        const file = parseInstance(readFileSync(absolutePath, "utf8"));
-        const data = file.frontmatter?.toJS() as Record<string, unknown> | undefined;
+    for (const absolutePath of markdownFilesUnder(cfg, root)) {
+      const repoRelative = toRepoRelative(cfg, absolutePath);
+      const file = parseInstance(readFileSync(absolutePath, "utf8"));
+      const data = file.frontmatter?.toJS() as Record<string, unknown> | undefined;
 
-        if (!data || typeof data !== "object" || Array.isArray(data)) {
-          diagnostics.push(error(
-            "graph/orphan-file",
-            `${repoRelative} sits under the ${className} root but has no frontmatter`,
-            { fix: "add a yaml header, or move the file outside the class root" },
-          ));
-          continue;
-        }
-
-        const id = repoRelative.slice(root.length + 1);
-        const uri = formatUri({ scheme: className, path: id });
-        instances.set(uri, {
-          uri,
-          className,
-          id,
-          path: repoRelative,
-          data,
-          file,
-          source: readFileSync(absolutePath, "utf8"),
-        });
+      if (!data || typeof data !== "object" || Array.isArray(data)) {
+        diagnostics.push(error(
+          "graph/orphan-file",
+          `${repoRelative} sits under the ${className} root but has no frontmatter`,
+          { fix: "add a yaml header, or move the file outside the class root" },
+        ));
+        continue;
       }
+
+      const id = repoRelative.slice(root.length + 1);
+      const uri = formatUri({ scheme: className, path: id });
+      instances.set(uri, {
+        uri,
+        className,
+        id,
+        path: repoRelative,
+        data,
+        file,
+        source: readFileSync(absolutePath, "utf8"),
+      });
     }
   }
 
-  const graph: Graph = { cfg, schema, instances, edges: [] };
+  const graph: Graph = { cfg, schema, roots, instances, edges: [] };
   rebuildEdges(graph);
   return { graph, diagnostics };
 }
@@ -159,7 +116,7 @@ export function rebuildEdges(graph: Graph): void {
           edges.push({
             from: node.uri,
             relation: relation.name,
-            to: formatUri(canonicalise(resolvePath(parsed, graph.cfg), graph.cfg, parsed.anchor)),
+            to: formatUri(canonicalise(resolveUri(parsed, graph.roots).path, graph.roots, parsed.anchor)),
           });
         } catch {
           // reported by validateInstance
@@ -170,10 +127,14 @@ export function rebuildEdges(graph: Graph): void {
   graph.edges = edges;
 }
 
-export function resolvePath(parsed: { scheme: string; path: string }, cfg: Config): string {
-  if (parsed.scheme === "repo") return parsed.path;
-  if (parsed.scheme === "design") return `${cfg.designRoot}/${parsed.path}`;
-  return `${classRootsFor(cfg, parsed.scheme)[0]!}/${parsed.path}`;
+/** Resolve a URI to a repo-relative path using the loaded roots. */
+export function resolvePath(parsed: { scheme: string; path: string }, roots: ClassRoots): string {
+  return resolveUri(parsed, roots).path;
+}
+
+/** Repo-relative path for a class, or empty string when the class is non-instantiable. */
+export function rootFor(graph: Graph, className: string): string {
+  return classRoot(graph.roots, className);
 }
 
 function titleOf(graph: Graph, uri: string): string {
@@ -186,7 +147,7 @@ function titleOf(graph: Graph, uri: string): string {
 function relativeLink(graph: Graph, fromPath: string, targetUri: string): string {
   const node = graph.instances.get(targetUri);
   const parsed = parseUri(targetUri);
-  const targetPath = node?.path ?? resolvePath(parsed, graph.cfg);
+  const targetPath = node?.path ?? resolveUri(parsed, graph.roots).path;
   return path.posix.relative(path.posix.dirname(fromPath), targetPath);
 }
 
@@ -245,7 +206,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
   const found: Diagnostic[] = [];
 
   for (const node of graph.instances.values()) {
-    found.push(...validateInstance(schema, cfg, {
+    found.push(...validateInstance(schema, {
       uri: node.uri,
       className: node.className,
       data: node.data,
@@ -273,7 +234,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
         let canonical: string;
         try {
           const parsed = parseUri(raw);
-          canonical = formatUri(canonicalise(resolvePath(parsed, cfg), cfg, parsed.anchor));
+          canonical = formatUri(canonicalise(resolveUri(parsed, graph.roots).path, graph.roots, parsed.anchor));
         } catch {
           continue;
         }
@@ -307,7 +268,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     const targetClass = parseUri(edge.to).scheme;
 
     if (isSubclassOf(schema, targetClass, "resource")) {
-      if (!existsSync(absolute(cfg, resolvePath(parseUri(edge.to), cfg)))) {
+      if (!existsSync(absolute(cfg, resolveUri(parseUri(edge.to), graph.roots).path))) {
         found.push(error("graph/missing-resource", `${edge.to} does not exist`, { uri: edge.from }));
       }
       continue;
@@ -315,7 +276,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     // src targets resolve through the syntax tree (Phase 5).
     if (isSubclassOf(schema, targetClass, "src")) {
       const parsed = parseUri(edge.to);
-      const res = resolvePath(parsed, cfg);
+      const res = resolveUri(parsed, graph.roots).path;
       const abs = absolute(cfg, res);
       if (!existsSync(abs)) {
         found.push(error("graph/missing-source-file", `${edge.to} does not exist`, { uri: edge.from }));
@@ -382,47 +343,81 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     }
   }
 
-    // Scan source files for reverse-link comments (plan §Phase 5)
-    for (const [name] of schema.classes) {
-      if (isSubclassOf(schema, name, "src")) {
-        for (const root of classRootsFor(cfg, name)) {
-          const absRoot = absolute(cfg, root);
-          if (!existsSync(absRoot)) continue;
-          const scanDir = (dir: string) => {
-            for (const entry of readdirSync(dir, { withFileTypes: true })) {
-              const full = path.join(dir, entry.name);
-              if (entry.isDirectory()) scanDir(full);
-              else if (entry.isFile()) {
-                const rel = toRepoRelative(cfg, full);
-                const lang = detectLang(rel);
-                if (!lang) continue;
-                const code = readFileSync(full, "utf8");
-                const revLinks = extractReverseLinks(code, lang, cfg.anchorPolicy);
-                for (const rl of revLinks) {
-                  // Validate target exists
-                  if (!graph.instances.has(rl.target)) {
-                    found.push(error(
-                      "source/dangling-reverse-link",
-                      `comment points to non-existent ${rl.target}`,
-                      { uri: `${name}://${toRepoRelative(cfg, full).slice(root.length + 1)}`, line: rl.line },
-                    ));
-                  }
-                  // Validate relation is permitted on this src subclass
-                  if (!schema.relations.some((r) => r.name === rl.relation && isSubclassOf(schema, name, r.from))) {
-                    found.push(error(
-                      "source/invalid-reverse-relation",
-                      `relation "${rl.relation}" is not permitted from ${name}`,
-                      { uri: `${name}://${toRepoRelative(cfg, full).slice(root.length + 1)}`, line: rl.line },
-                    ));
-                  }
-                }
-              }
-            }
-          };
-          scanDir(absRoot);
+  // Scan source files for reverse-link comments (plan §Phase 5)
+  for (const [name] of schema.classes) {
+    if (!isSubclassOf(schema, name, "src")) continue;
+    const root = classRoot(graph.roots, name);
+    if (root === "") continue;
+    const absRoot = absolute(cfg, root);
+    if (!existsSync(absRoot)) continue;
+    scanSourceTree(cfg, absRoot, (rel, lang, code) => {
+      for (const rl of extractReverseLinks(code, lang, cfg.anchorPolicy)) {
+        if (!graph.instances.has(rl.target)) {
+          found.push(error(
+            "source/dangling-reverse-link",
+            `comment points to non-existent ${rl.target}`,
+            { uri: `${name}://${rel}`, line: rl.line },
+          ));
+        }
+        if (!schema.relations.some((r) => r.name === rl.relation && isSubclassOf(schema, name, r.from))) {
+          found.push(error(
+            "source/invalid-reverse-relation",
+            `relation "${rl.relation}" is not permitted from ${name}`,
+            { uri: `${name}://${rel}`, line: rl.line },
+          ));
         }
       }
-    }
-
-    return found;
+    });
   }
+
+  return found;
+}
+
+function scanSourceTree(
+  cfg: Config,
+  dir: string,
+  visit: (repoRelative: string, lang: string, code: string) => void,
+): void {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) scanSourceTree(cfg, full, visit);
+    else if (entry.isFile()) {
+      const lang = detectLang(full);
+      if (!lang) continue;
+      const code = readFileSync(full, "utf8");
+      const rel = path.relative(cfg.repoRoot, full).split(path.sep).join("/");
+      visit(rel, lang, code);
+    }
+  }
+}
+
+function markdownFilesUnder(cfg: Config, root: string): string[] {
+  const start = absolute(cfg, root);
+  if (!existsSync(start) || !statSync(start).isDirectory()) return [];
+
+  const found: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile() && entry.name.endsWith(".md")) found.push(full);
+    }
+  };
+  walk(start);
+  return found.sort();
+}
+
+function toRepoRelative(cfg: Config, absolutePath: string): string {
+  return path.relative(cfg.repoRoot, absolutePath).split(path.sep).join("/");
+}
+
+/** Relation values accept a single uri or a list of them. */
+function asList(value: unknown): unknown[] {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function withinCardinality(count: number, cardinality: Cardinality): boolean {
+  if (count < cardinality.min) return false;
+  return cardinality.max === null || count <= cardinality.max;
+}

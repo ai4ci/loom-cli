@@ -1,4 +1,3 @@
-import type { Config } from "./config.ts";
 import { type Diagnostic, error } from "./diagnostics.ts";
 import {
   effectiveAttributes,
@@ -164,7 +163,6 @@ function checkAttributes(
  */
 export function validateInstance(
   schema: SchemaIR,
-  _cfg: Config,
   input: InstanceInput,
 ): Diagnostic[] {
   const { uri, className, data } = input;

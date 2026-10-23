@@ -9,7 +9,7 @@ import { MODEL } from "./fixtures.ts";
 
 function repo(extra: Record<string, string> = {}): string {
   return makeRepo({
-    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n",
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": MODEL,
     "design/issue/first.md": instance(
       "class: issue\nid: first.md\ntitle: The thing\ncreated: 2026-01-05\nstatus: open\ntags: [a]",
@@ -65,17 +65,11 @@ test("validate reports a bad instance and exits 1", async () => {
   assert.ok(out.diagnostics.some((d: any) => d.code === "instance/invalid-enum-value"));
 });
 
-test("validate refuses a uri that names no class", async () => {
-  const r = await run(["--cwd", repo(), "validate", "design://document-model.mmd"]);
-  assert.equal(r.code, 1);
-  assert.match(r.err + r.out, /not-a-class|unknown-class/);
-});
-
 test("warnings alone do not fail the run", async () => {
   const root = repo();
   writeFileSync(
     path.join(root, "design/document-model.mmd"),
-    "classDiagram\n    class a\n    class b\n    a --> b : rel\n",
+    "classDiagram\n    %% @path issue /design/issue\n    class issue { +string title }\n    class decision { +string title }\n    issue --> decision : rel\n",
   );
   const r = await run(["--cwd", root, "model", "check"]);
   assert.equal(r.code, 0);

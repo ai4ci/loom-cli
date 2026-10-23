@@ -8,8 +8,6 @@ import { parseChangeset } from "../src/changeset.ts";
 import { instance, makeRepo } from "./helpers.ts";
 import { GRAPH_MODEL } from "./fixtures.ts";
 
-const CONFIG = "designRoot: design\nclassRoots:\n  issue: design/issue\n  decision: design/decision\n";
-
 const OPEN = (title: string, extra = "") =>
   instance(`class: issue\ntitle: ${title}\nstatus: open${extra ? `\n${extra}` : ""}`);
 
@@ -18,7 +16,7 @@ const withLinks = (frontmatter: string, links: string) =>
 
 function repo(files: Record<string, string>): string {
   return makeRepo({
-    ".loom.yaml": CONFIG,
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": GRAPH_MODEL,
     ...files,
   });

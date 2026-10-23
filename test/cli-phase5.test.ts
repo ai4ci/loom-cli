@@ -5,19 +5,26 @@ import { run } from "../src/cli.ts";
 import { instance, makeRepo } from "./helpers.ts";
 
 const MODEL_WITH_SRC = `classDiagram
+    %% @path issue /design/issue
+    %% @path src /src
+    %% @path R /R
     class issue {
         +string title
     }
+
+    class src
+    class R
+    src <|-- R
 
     issue "1" --> "0..*" src : implemented-by
 `;
 
 function repo(): string {
   return makeRepo({
-    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src, R]\n",
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance(
-      "class: issue\ntitle: One\nimplemented-by: [src://app.ts#runApp, src://model.R#fitModel]",
+      "class: issue\ntitle: One\nimplemented-by: [src://app.ts#runApp, R://model.R#fitModel]",
     ),
     "src/app.ts": `
 export function runApp() {
@@ -43,9 +50,9 @@ test("resolve resolves src:// with anchor to line number", async () => {
   assert.equal(out.line, 2);
 });
 
-test("resolve resolves R function with anchor across multi-root to line number", async () => {
+test("resolve resolves R subclass src:// with anchor to line number", async () => {
   const root = repo();
-  const r = await run(["--cwd", root, "resolve", "src://model.R#fitModel"]);
+  const r = await run(["--cwd", root, "resolve", "R://model.R#fitModel"]);
   assert.equal(r.code, 0);
   const out = parse(r.out) as any;
   assert.equal(out.path, "R/model.R");
@@ -55,7 +62,7 @@ test("resolve resolves R function with anchor across multi-root to line number",
 
 test("validate catches missing symbol in source code", async () => {
   const root = makeRepo({
-    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#missing]"),
     "src/app.ts": "export function exists() {}",
@@ -68,7 +75,7 @@ test("validate catches missing symbol in source code", async () => {
 
 test("validate catches dangling reverse link comment in source file", async () => {
   const root = makeRepo({
-    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance("class: issue\ntitle: One"),
     "src/app.ts": `
@@ -100,7 +107,7 @@ test("prefetch command downloads/warms grammars", async () => {
 
 test("an ambiguous anchor is an error, not a silent first match", async () => {
   const root = makeRepo({
-    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#run]"),
     "src/app.ts": "export class Alpha { run() {} }\nexport class Beta { run() {} }\n",
@@ -111,11 +118,12 @@ test("an ambiguous anchor is an error, not a silent first match", async () => {
   assert.ok(d, "expected an ambiguity diagnostic");
   assert.match(d.fix, /Alpha\.run/);
   assert.match(d.fix, /Beta\.run/);
+  assert.match(d.message, /matches several declarations/);
 });
 
 test("resolve refuses an ambiguous anchor", async () => {
   const root = makeRepo({
-    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "src/app.ts": "export class Alpha { run() {} }\nexport class Beta { run() {} }\n",
   });
@@ -126,7 +134,7 @@ test("resolve refuses an ambiguous anchor", async () => {
 
 test("a dotted anchor disambiguates through the cli", async () => {
   const root = makeRepo({
-    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "src/app.ts": "export class Alpha { run() {} }\nexport class Beta { run() {} }\n",
   });
@@ -137,7 +145,7 @@ test("a dotted anchor disambiguates through the cli", async () => {
 
 test("a renamed symbol suggests the nearest candidate", async () => {
   const root = makeRepo({
-    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\n",
+    ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#runApp]"),
     "src/app.ts": "export function runApplication() {}\n",
@@ -150,11 +158,10 @@ test("a renamed symbol suggests the nearest candidate", async () => {
 
 test("the anchor policy is configurable", async () => {
   const root = makeRepo({
-    ".loom.yaml": "designRoot: design\nclassRoots:\n  issue: design/issue\n  src: [src]\nsource:\n  anchorKinds: [Class]\n",
+    ".loom.yaml": "designRoot: design\nsource:\n  anchorKinds: [Class]\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "src/app.ts": "export class Alpha { run() {} }\n",
   });
-  // Only Class is addressable, so the method is not an anchor at all.
   assert.equal((await run(["--cwd", root, "resolve", "src://app.ts#Alpha"])).code, 0);
   const r = await run(["--cwd", root, "resolve", "src://app.ts#run"]);
   assert.equal((parse(r.out) as any).line, undefined, "run must not resolve under this policy");
