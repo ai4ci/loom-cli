@@ -75,12 +75,16 @@ function firstOfKind(node: Node, kind: string): Node | null {
 export function parseCardinality(raw: string | undefined): Cardinality {
   if (raw === undefined) return { ...UNBOUNDED };
   const text = raw.replace(/^["']|["']$/g, "").trim();
-  if (text === "" || text === "*" || text === "n") return { ...UNBOUNDED };
+  // Mermaid doesn't define `one` or `many`, but they're symmetrical keywords
+  // for the `n`/`*` shorthands and a misspelt `*` is much more likely to read
+  // as `many` than as anything else.
+  if (text === "" || text === "*" || text === "n" || text === "many") return { ...UNBOUNDED };
+  if (text === "one") return { min: 1, max: 1 };
 
-  const range = /^(\d+)\.\.(\d+|\*|n)$/.exec(text);
+  const range = /^(\d+)\.\.(\d+|\*|n|many)$/.exec(text);
   if (range) {
     const upper = range[2]!;
-    return { min: Number(range[1]), max: upper === "*" || upper === "n" ? null : Number(upper) };
+    return { min: Number(range[1]), max: upper === "*" || upper === "n" || upper === "many" ? null : Number(upper) };
   }
   if (/^\d+$/.test(text)) return { min: Number(text), max: Number(text) };
   return { ...UNBOUNDED };

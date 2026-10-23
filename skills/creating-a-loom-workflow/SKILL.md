@@ -33,7 +33,8 @@ Determine the document classes and lifecycle needs:
 ## Step 2: Define the Mermaid Model (`document-model.mmd`)
 
 Place the model at `$LOOM_DEFAULT_ROOT/document-model.mmd` (typically `design/document-model.mmd`).
-`$LOOM_DEFAULT_ROOT` is determined by where you place this file.
+`$LOOM_DEFAULT_ROOT` is determined by where you place this file, or can be explicitly
+set as an env var.
 
 ### Rules & Conventions
 - **Instantiable Classes**: Concrete classes that become Markdown files.
@@ -103,9 +104,9 @@ loom validate
 
 ## Step 4: Configure Navigational Index Views
 
-Human readers navigate the corpus via Markdown links. Create index files under `designRoot` with `class: index` and a `view`.
+Human readers navigate the corpus via Markdown links. Create index files under `$LOOM_DEFAULT_ROOT` with `class: index` and a `view`.
 
-### Filter View Example (`design/INDEX.md`)
+### Filter View Example (`$LOOM_DEFAULT_ROOT/INDEX.md`)
 ```markdown
 ---
 class: index
@@ -123,7 +124,7 @@ view:
 <!-- loom:links end -->
 ```
 
-### SQL Query View Example (`design/adrs/INDEX.md`)
+### SQL Query View Example (`$LOOM_DEFAULT_ROOT/adrs/INDEX.md`)
 ```markdown
 ---
 class: index
@@ -166,7 +167,9 @@ For example, for an Issue Tracker:
 
 ## Step 6: Generate the Project-Specific Workflow Skill
 
-To ensure future agents operate reliably within this specific repository, create a dedicated skill (e.g. `skills/<project>-design-workflow/SKILL.md` or in the repository's skill directory).
+To ensure future agents operate reliably within this specific repository, create a dedicated skill (e.g. `<project>-design-workflow/SKILL.md` in the repository's skill directory).
+
+Reference this skill in the `AGENTS.md` file.
 
 ### Template for Generated Workflow Skill:
 
@@ -178,12 +181,12 @@ description: Procedures, validation rules, and lifecycle transitions for managin
 
 # <Project> Design Docs Workflow
 
-This repository uses `loom` governed by `design/document-model.mmd`.
+This repository uses `loom` governed by `$LOOM_DEFAULT_ROOT/document-model.mmd`.
 Refer to `using-loom-cli` for general CLI operation syntax.
 
 ## 1. Document Classes & Locations
-- Issues: `issue://<name>.md` -> `design/issues/<name>.md`
-- ADRs: `adr://<name>.md` -> `design/adrs/<name>.md`
+- Issues: `issue://<name>.md` -> `$LOOM_DEFAULT_ROOT/issues/<name>.md`
+- ADRs: `adr://<name>.md` -> `$LOOM_DEFAULT_ROOT/adrs/<name>.md`
 
 ## 2. Common Operations
 

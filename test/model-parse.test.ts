@@ -121,6 +121,22 @@ test("cardinality shorthands parse", () => {
   assert.deepEqual(r2.toCardinality, { min: 2, max: 2 });
 });
 
+test("'one' and 'many' keywords parse as 1..1 and 0..*", () => {
+  const { schema, diagnostics } = parseModel(`classDiagram
+    class a
+    class b
+    a "many" --> "one" b : r1
+    a "1..many" --> "many" b : r2
+`);
+  assert.deepEqual(diagnostics, []);
+  const r1 = schema.relations.find((r) => r.name === "r1")!;
+  const r2 = schema.relations.find((r) => r.name === "r2")!;
+  assert.deepEqual(r1.fromCardinality, { min: 0, max: null });
+  assert.deepEqual(r1.toCardinality, { min: 1, max: 1 });
+  assert.deepEqual(r2.fromCardinality, { min: 1, max: null });
+  assert.deepEqual(r2.toCardinality, { min: 0, max: null });
+});
+
 test("a relation with no cardinality defaults to 0..*", () => {
   const { schema } = parseModel("classDiagram\n    class a\n    class b\n    a --> b : r\n");
   const r = schema.relations.find((x) => x.name === "r")!;

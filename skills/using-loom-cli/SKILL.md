@@ -7,6 +7,10 @@ description: How to install, invoke, and use the loom CLI to inspect, validate, 
 
 `loom` treats Markdown files in a repository as typed instances in a graph governed by a Mermaid class diagram (`document-model.mmd`). This skill covers CLI installation, invocation rules, common operations, and error recovery.
 
+`loom` will generally auto detect the Mermaid class diagram location and base
+the root of its documentation in the parent directory. `$LOOM_DEFAULT_ROOT` can 
+be explicitly set to skip that detection.
+
 ## 1. Installation & Environment
 
 ### Project Installation
