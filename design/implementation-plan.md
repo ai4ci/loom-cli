@@ -75,19 +75,27 @@ covariant endpoints. The only other structured inputs are the changeset and the
 config, both small and fixed, where hand-written checks give better messages.
 Same reasoning as the exclusion of zod in §1.3.
 
-### 1.5 Class roots come from config, not from mermaid
+### 1.5 Class roots: convention, model annotations, and zero-config
 
-Scope §IA.4 requires each class to declare its root path. Mermaid has no natural
-syntax for this, and stretching it (notes, fake attributes) makes the model file
-worse. Instead: the default root is `$DESIGN_DOCS_ROOT/<class>`, overridden in
-config. Mermaid is used only for what it expresses natively — classes,
-attributes, types, relationships, cardinalities, and the `<<enumeration>>` and
-`<<abstract>>` annotations.
+Class roots are resolved directly from the Mermaid model and directory
+conventions rather than external config files:
 
-A class may declare **more than one** root. This is what makes the `src` family
-work (§1.9): a `test` class extending `src` points at `tests/` while `src`
-itself points at `src/`. Abstract classes (§1.8) have no root at all, since they
-have no instances.
+- **Root discovery**: The repository root `$REPO_ROOT` is the git root. The model
+  `document-model.mmd` is discovered by searching the repository (or via
+  `LOOM_DEFAULT_ROOT`), establishing `$LOOM_DEFAULT_ROOT` as its parent directory.
+- **Root inheritance**: By default, classes inherit directory structure from
+  their UML parents (e.g. `src <|-- main` resolves under `$REPO_ROOT/src/main`).
+  Classes without parents resolve relative to `$LOOM_DEFAULT_ROOT`.
+- **In-model overrides (`%% @path`)**: Document-level comment directives
+  `%% @path <class> <path>` customize roots. Absolute paths (leading `/`) resolve
+  from `$REPO_ROOT`; relative paths resolve relative to the UML parent (or the
+  terminal anchors `src`, `resource`, and `$LOOM_DEFAULT_ROOT`).
+- **Unique root per class**: Each concrete class resolves to a single unique
+  directory. Two classes resolving to the exact same directory is a validation
+  error. Multi-root variations are expressed cleanly via UML inheritance (e.g.
+  `src <|-- test`). Abstract classes (§1.8) have no root at all.
+- See [complex-path-examples.md](./complex-path-examples.md) for complete rules
+  and worked examples.
 
 ### 1.6 Relations are per-relation keys in the YAML
 
@@ -264,23 +272,19 @@ rewriting. See "Later — composite attributes".
 These are the user-facing contracts. They are fixed early because every later
 phase depends on them.
 
-### 2.1 Config — `$REPO_ROOT/.loom.yaml` (optional)
+### 2.1 Model & root discovery (zero configuration)
 
-```yaml
-designRoot: design          # default: design
-classRoots:                 # default: <designRoot>/<class>
-  issue: design/issues
-  src:  [src, R]            # a class may list several roots; first match wins
-  test: [tests, testthat]   # src subclass with its own roots (§1.9)
-languages: [r, typescript, python]   # grammars to prefetch (§Phase 5)
-```
+Loom is zero-configuration by default. The repository root `$REPO_ROOT` is the git
+project root. The document model is discovered at `$LOOM_DEFAULT_ROOT/document-model.mmd`.
 
-`classRoots` is uniform: `src`-family classes are configured the same way as
-document classes, they simply tend to have several roots and live outside
-`designRoot`. Abstract classes must not appear here.
+Optional environment variables:
+- `LOOM_DEFAULT_ROOT`: Overrides model search, specifying the folder relative to `$REPO_ROOT`.
+- `LOOM_DEFAULT_SRC_ROOT`: Overrides default `src` root (default: `src`).
+- `LOOM_DEFAULT_RESOURCE_ROOT`: Overrides default `resource` root (default: `resource`).
+- `LOOM_ANCHOR_KINDS`: Comma-separated structure kinds to treat as anchors.
+- `LOOM_TRANSPARENT_KINDS`: Comma-separated structure kinds to treat as transparent.
 
-Repo root is the git root unless the file is found elsewhere. Absent config is
-valid and means all defaults.
+Custom class roots are configured inside `document-model.mmd` via `%% @path` directives.
 
 ### 2.2 Class instance file
 

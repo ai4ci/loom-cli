@@ -6,21 +6,22 @@ A local wiki based on yaml headers + markdown, which allows linkage to other
 resources such as code. Yaml has a constrained 
 structure defined by a mermaid UML model, and is validated on every edit.
 
-## Inforamtion architecture
+## Information architecture
 
 1. The repository root `$REPO_ROOT` which can be linked to using a 
-`repo://relative/path/from/root` uri scheme.
-2. A design docs folder `$DESIGN_DOCS_ROOT` (default `$REPO_ROOT/design`) which can be linked to using a 
-`design://relative/path/in/design.md` uri scheme from outside the repository or
-from non markdown content. In most cases design will be under the $REPO_ROOT
-3. A mermaid class diagram file that defines classes and relationships as `$DESIGN_DOCS_ROOT\document-model.mmd`.
-4. Each class in the document model defines the relative path from the 
-reposity root where they can be found - the `$CLASS_ROOT` (one per class). 
-The default would be in a folder under `$DESIGN_DOCS_ROOT` defined by the class, 
-e.g a class of `issue` would be found at `$DESIGN_DOCS_ROOT/issue`.
+`repo://relative/path/from/root` uri scheme. This is the git project root.
+2. A design docs folder `$LOOM_DEFAULT_ROOT` (default is the parent of the `document-model.mmd`) 
+which can be linked to using a 
+`repo://$LOOM_DEFAULT_ROOT/relative/path.md` uri scheme from outside the repository or
+from non markdown content. `$LOOM_DEFAULT_ROOT` will be under the `$REPO_ROOT`
+3. A mermaid class diagram file that defines classes and relationships as `$LOOM_DEFAULT_ROOT/document-model.mmd`.
+4. Each class in the document model can be resolved to a unique path from the 
+repository root where they can be found - the `$CLASS_ROOT` (one per class). 
+The default would be in a folder under `$LOOM_DEFAULT_ROOT` defined by the class, 
+e.g a class of `issue` would be found at `$LOOM_DEFAULT_ROOT/issue`.
 5. Each specific class instance has an `instance-id` as a relative path from the `$CLASS_ROOT`, 
 which will locate it. For example the first issue with instance-id: `my-first-issue.md` will be found at
-`$DESIGN_DOCS_ROOT\issue\my-first-issue.md`
+`$LOOM_DEFAULT_ROOT/issue/my-first-issue.md`
 6. each class instance of a given type can be referenced with the class as a uri scheme
 e.g. `my-first-issue.md` can be referred to as `issue://my-first-issue.md` 
 7. entities have structured yaml data block with format defined by the document
@@ -40,18 +41,20 @@ language concrete syntax tree. e.g. `src://my/package/MyClass.java#myFunction`
 11. `src` entities differ from other design entities as there is not a 1:1 
 relationship from a `src` class instance and the file it is found in, so requiring 
 structured yaml is difficult because of deep linking to specific regions of code.
-11. reverse linkage from source code to design documents is through in code comments
+12. reverse linkage from source code to design documents is through in code comments
 that specify the linkage type, as defined by the document model, and uri target.
 e.g. `// my-link-type: issue://my-first-issue.md`
 These are validated as coming from an individual function by identifying the
 comment location in the concrete syntax tree.
-12. static resources such as pdfs, images can be linked to using the reserved
+13. static resources such as pdfs, images can be linked to using the reserved
 class `resource`. These can be linked to but not linked from. They must not 
 have structured yaml data defined in the document model.
-13. all uri schemes are resolved relative to repo root before detection of 
-equivalence (e.g. `design://issue/my-first-issue.md == issue://my-first-issue.md`), 
+14. all uri schemes are resolved relative to repo root before detection of 
+equivalence (e.g. `repo://$LOOM_DEFAULT_ROOT/issue/my-first-issue.md == issue://my-first-issue.md`), 
 as with RDF but stored in the data all uris should be expressed using most 
 compact scheme.
+
+see [./source-linkage.md] and [./complex-path-examples.md]
 
 ## CLI requirements
 
@@ -69,24 +72,24 @@ independently of a yaml structured data update, and protected markdown links.
 design folder which can be queried using SQL (e.g. DuckDB).
 5. The tool maintains a database of the relationships in the repository as a 
 `instance-id`, `relationship-type`, `instance-id` triple store.
-5. The tools maintain navigational indexes in the top level of the design folder
+6. The tools maintain navigational indexes in the top level of the design folder
 as markdown file using relative wiki links based on a configured view of the metadata 
 (e.g. only open issues) stored in yaml metadata of the index.
-6. The tool indexes the unprotected markdown content of each class instance and stores a
+7. The tool indexes the unprotected markdown content of each class instance and stores a
 vector embedding that can be queried using similarity search.
-7. The tools detect anomalies and inconsistencies due to direct editing of the 
+8. The tools detect anomalies and inconsistencies due to direct editing of the 
 markdown files and correct them where possible using the structured yaml as the
 primary source of truth.
-8. The tools detect validation failures across the whole design document folder 
+9. The tools detect validation failures across the whole design document folder 
 and linked source code surfacing it as a list of documentation issues in the top level of the
 design folder. This can detect both errors introduced by direct plain text edits 
 and wholesale model changes due to extension of the document-model.
-9. In the case of a document-model change the validation can be performed on a 
+10. In the case of a document-model change the validation can be performed on a 
 proposed version of the model to detect document model authoring errors and 
 analyse impact.
-10. the tool can traverse links to source code and identify the specific line number of
+11. the tool can traverse links to source code and identify the specific line number of
 source code from `src://` uris in design documentation using the concrete syntax tree.
-11. the tools can identify design documents that reference a specific function
+12. the tools can identify design documents that reference a specific function
 in the source code, using reverse lookup in design documents.
 
 ## ADR

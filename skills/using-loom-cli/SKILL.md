@@ -42,7 +42,7 @@ loom resolve issue://a.md --json     # Error: unrecognized option
 ```
 
 - `--json`: Output machine-readable JSON instead of human-friendly YAML.
-- `--cwd <path>`: Run as if invoked from `<path>` (defaults to `process.cwd()`). Config discovery walks up looking for `.loom.yaml`.
+- `--cwd <path>`: Run as if invoked from `<path>` (defaults to `process.cwd()`). Repository root is discovered via git.
 
 ### Output Contracts
 Every command produces one of three shapes:

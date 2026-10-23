@@ -30,9 +30,11 @@ loom resolve issue://a.md --json      # not recognised as global
 
 There is no `--version` flag. See §7.
 
-Configuration is found by walking up from `--cwd` for `.loom.yaml`,
-falling back to the nearest git root with all defaults applied. See
-implementation-plan §2.1 for the file's shape.
+The repository root `$REPO_ROOT` is the git project root. Loom operates with zero
+configuration: `document-model.mmd` is discovered automatically in the repository
+(or specified via the `LOOM_DEFAULT_ROOT` environment variable). Class roots are
+derived from model inheritance and `%% @path` directives in the model. See
+[complex-path-examples.md](./complex-path-examples.md).
 
 ## 2. Output contract
 

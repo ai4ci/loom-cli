@@ -78,25 +78,9 @@ classDiagram
     src "0..*" --> "0..*" issue : implements
 ```
 
-### 2. Configure Loom (`.loom.yaml`)
-Create `.loom.yaml` at your repository root:
+Loom requires zero configuration files: it finds `document-model.mmd` automatically inside the git repository. Document classes without explicit roots resolve under the model's directory (here `design/issue` and `design/adr`). Custom paths can be declared via `%% @path <class> <path>` in the model.
 
-```yaml
-designRoot: design
-
-classRoots:
-  issue: design/issues
-  adr: design/adrs
-  src:
-    - src
-    - lib
-
-languages:
-  - typescript
-  - python
-```
-
-### 3. Validate the Graph
+### 2. Validate the Graph
 ```bash
 loom validate
 ```
@@ -162,7 +146,7 @@ Loom includes dedicated Agent Skills under `skills/`:
    Comprehensive operational manual for an agent working in a Loom-governed repository. Explains command invocations, JSON output contracts, changeset construction, AST annotation rules, and diagnostic troubleshooting.
 
 2. **`skills/creating-a-loom-workflow`**:
-   A meta-skill that walks an agent through creating a custom, domain-specific Loom architecture: designing the Mermaid model, writing `.loom.yaml`, configuring index views, formalizing state transition rules, and generating project-tailored workflow skills.
+   A meta-skill that walks an agent through creating a custom, domain-specific Loom architecture: designing the Mermaid model, configuring index views, formalizing state transition rules, and generating project-tailored workflow skills.
 
 To enable these in an agent harness (such as Pi or OpenCode), copy or link the skill directories into your agent's skill path.
 

@@ -1,6 +1,6 @@
 ---
 name: creating-a-loom-workflow
-description: Meta-skill for designing, configuring, and deploying a loom system for a specific repository. Use when setting up loom in a new or existing codebase, authoring a Mermaid document model (`document-model.mmd`), writing `.loom.yaml`, setting up human-navigable index views, defining document lifecycle transition rules (e.g. issue states, review workflows), or generating a project-specific workflow skill.
+description: Meta-skill for designing, configuring, and deploying a loom system for a specific repository. Use when setting up loom in a new or existing codebase, authoring a Mermaid document model (`document-model.mmd`), configuring path annotations, setting up human-navigable index views, defining document lifecycle transition rules (e.g. issue states, review workflows), or generating a project-specific workflow skill.
 ---
 
 # Creating a Loom Workflow
@@ -80,38 +80,19 @@ loom model check
 
 ---
 
-## Step 3: Configure Top-Level YAML (`.loom.yaml`)
+## Step 3: Zero Configuration & Model Placement
 
-Create `.loom.yaml` in the project root:
+Loom operates without configuration files. It discovers `document-model.mmd` in the git repository:
+- The parent directory of `document-model.mmd` becomes `$LOOM_DEFAULT_ROOT` (e.g. `docs` or `design`).
+- Optional environment overrides:
+  - `LOOM_DEFAULT_ROOT`: Specifies the root directory relative to repository root if multiple models exist.
+  - `LOOM_DEFAULT_SRC_ROOT`: Defaults to `src`.
+  - `LOOM_DEFAULT_RESOURCE_ROOT`: Defaults to `resource`.
+  - `LOOM_ANCHOR_KINDS`: Comma-separated structure kinds for code anchors.
 
-```yaml
-# Root directory for design documents
-designRoot: design
+Class paths and directory mappings are declared directly in the model via `%% @path <class> <path>` directives.
 
-# Map concrete classes to their storage directories (relative to repo root)
-classRoots:
-  issue: design/issues
-  adr: design/adrs
-  # src class roots (source code roots)
-  src:
-    - src
-    - lib
-
-# Languages to prefetch for Tree-Sitter parsing
-languages:
-  - typescript
-  - python
-
-# Anchor policy for source linking (defaults: Function, Method, Class, Interface, etc.)
-source:
-  anchors:
-    - Function
-    - Method
-    - Class
-    - Interface
-```
-
-Run initial validation to ensure configuration is active:
+Run initial validation to verify graph structure:
 ```bash
 loom validate
 ```

@@ -45,12 +45,12 @@ language; it needs an allowlist over a fixed set.
 > A **linkable anchor** is a named structural item whose kind is in the
 > configured anchor-kind set, addressed by its dotted path from the file root.
 
-```yaml
-# .loom.yaml
-src:
-  anchorKinds: [Function, Method, Class, Struct, Interface, Enum, Trait]
-  transparentKinds: [Impl, Module, Namespace]
-```
+Default anchor kinds:
+- `anchorKinds`: `[Function, Method, Class, Struct, Interface, Enum, Trait]`
+- `transparentKinds`: `[Impl, Module, Namespace]`
+
+These can be overridden via environment variables `LOOM_ANCHOR_KINDS` and
+`LOOM_TRANSPARENT_KINDS` (comma-separated).
 
 `transparentKinds` are not addressable themselves, but their children still
 contribute to the tree. This exists because of Rust: `impl Draw for Sq` is
@@ -517,7 +517,7 @@ New diagnostic codes introduced by this document:
 |---|---|
 | Forward anchor resolution, dotted path | **Built** |
 | Reverse link scanning | **Built** |
-| Anchor-kind policy, transparent kinds | **Built**, configurable under `source:` |
+| Anchor-kind policy, transparent kinds | **Built**, default with env override |
 | Uniqueness as a hard error | **Built** |
 | Overload qualification | **Built** |
 | R adapter: bodySpan, nesting, R6/S7 | **Built** |
