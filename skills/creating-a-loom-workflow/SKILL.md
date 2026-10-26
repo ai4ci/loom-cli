@@ -191,7 +191,10 @@ To ensure future agents operate reliably within this specific repository, create
 
 Reference this skill in the `AGENTS.md` file.
 
-Copy the `document-model.mmd` file into the skills references subdirectory for future re-use.
+Copy the `document-model.mmd` file into the skill's `references/` subdirectory for future re-use.
+
+For complete, end-to-end examples of document models paired with their companion workflow skills (including Agile feature tracking and Getting Things Done), see:
+- [`references/example-workflows.md`](references/example-workflows.md)
 
 ### Example template for Generated Workflow Skill:
 
