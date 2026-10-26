@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { existsSync, readFileSync } from "node:fs";
 import { Command } from "commander";
 import { absolute, loadConfig, RESERVED_SCHEMES, type Config } from "./config.ts";
@@ -345,7 +347,7 @@ function refsCommand(ctx: LoadedContext, raw: string): CommandOutput {
 }
 
 function prefetchCommand(cfg: Config): CommandOutput {
-  const languages = cfg.languages.length > 0 ? cfg.languages : ["mermaid", "typescript", "r", "python"];
+  const languages = cfg.languages.length > 0 ? cfg.languages : ["mermaid", "typescript", "r", "python", "java"];
   pack.prefetch(languages);
   return {
     value: {

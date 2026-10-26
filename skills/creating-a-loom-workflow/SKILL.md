@@ -1,15 +1,15 @@
 ---
 name: creating-a-loom-workflow
-description: Meta-skill for designing, configuring, and deploying a loom system for a specific repository. Use when setting up loom in a new or existing codebase, authoring a Mermaid document model (`document-model.mmd`), configuring path annotations, setting up human-navigable index views, defining document lifecycle transition rules (e.g. issue states, review workflows), or generating a project-specific workflow skill.
+description: Meta-skill for designing, configuring, and deploying a loom system for a specific repository. Use when setting up loom in a new or existing project, authoring a loom Mermaid document model (`document-model.mmd`), configuring path annotations, setting up human-navigable index views, defining document lifecycle transition rules (e.g. issue states, review workflows), or generating or updating a project-specific methodology.
 ---
 
 # Creating a Loom Workflow
 
-This meta-skill guides an agent through establishing a documentation architecture using `loom`, tailoring the schema, configuring the tooling, generating navigation, and codifying the repository's document lifecycle into a project-specific workflow skill.
+This meta-skill guides an agent through establishing a documentation architecture and project methodology using `loom`, tailoring the schema, configuring the tooling, generating navigation, and codifying the repository's document lifecycle into a project-specific methodology skill.
 
 ## When to Use This Skill
 
-- Setting up `loom` in a repository for the first time.
+- Setting up `loom` in a repository for the first time, or updating an existing methodology.
 - Modeling design artefacts (ADRs, RFCs, Issues, Requirements, Test Plans, Services).
 - Defining document lifecycle transition rules (e.g. `draft` -> `review` -> `accepted` -> `implemented`).
 - Creating a companion project-specific workflow skill (e.g. `manage-architecture-docs`, `issue-lifecycle-workflow`) tailored to the repository's domain model.
@@ -17,6 +17,10 @@ This meta-skill guides an agent through establishing a documentation architectur
 ---
 
 ## Step 1: Discover & Map Requirements
+
+What is the nature of the project and how best does documentation and workflow support the project?
+
+For example a software development project may use a agile workflow, a project management project may use prince, a research project may have altogether different methodology. Loom can support any anrbitrary methodology. You will need to discuss what methodology fits best with the project given the objectives and research alternatives.
 
 Determine the document classes and lifecycle needs:
 1. **Document Types**: What kinds of artefacts exist? (e.g. `adr`, `issue`, `rfc`, `spec`, `testplan`).
@@ -102,8 +106,8 @@ It discovers `document-model.mmd` in the git repository:
 - The parent directory of `document-model.mmd` becomes `$LOOM_DEFAULT_ROOT` (e.g. `docs` or `design`).
 - Optional environment overrides:
   - `LOOM_DEFAULT_ROOT`: Specifies the root directory relative to repository root if multiple models exist.
-  - `LOOM_DEFAULT_SRC_ROOT`: Defaults to `src`.
-  - `LOOM_DEFAULT_RESOURCE_ROOT`: Defaults to `resource`.
+  - `LOOM_DEFAULT_SRC_ROOT`: Defaults to `src`. Where suporting code lives/
+  - `LOOM_DEFAULT_RESOURCE_ROOT`: Defaults to `resource`. Where data resources, inputs or outputs live.
 
 Class paths and directory mappings are declared directly in the model via `%% @path <class> <path>` directives
 at the beginning of the mermaid class file (see Appendix A).
@@ -180,26 +184,31 @@ For example, for an Issue Tracker:
 
 ## Step 6: Generate the Project-Specific Workflow Skill
 
-To ensure future agents operate reliably within this specific repository, create a dedicated skill (e.g. `<project>-design-workflow/SKILL.md` in the repository's skill directory).
+To ensure future agents operate reliably within this specific repository, create a dedicated skill (e.g. `<project>-design-workflow/SKILL.md` in the repository's skill directory - `.agents/skills`).
 
 Reference this skill in the `AGENTS.md` file.
 
-### Template for Generated Workflow Skill:
+Copy the `document-model.mmd` file into the skills references subdirectory for future re-use.
+
+### Example template for Generated Workflow Skill:
+
+This template needs to be adapted to reflect the project workflow and document model.
 
 ```markdown
 ---
-name: <project>-design-workflow
-description: Procedures, validation rules, and lifecycle transitions for managing design docs in <project>. Use when creating, updating, or reviewing design documents, transitioning issue/ADR states, or linking source code.
+name: <project>-methodology
+description: Procedures, validation rules, and lifecycle transitions for managing workflow in <project>. 
+Use when creating, updating, or reviewing project documentation, tracking and updating project state, or linking in supporting code or data.
 ---
 
-# <Project> Design Docs Workflow
+# <Project> methodology
 
-This repository uses `loom` governed by `$LOOM_DEFAULT_ROOT/document-model.mmd`.
-Refer to `using-loom-cli` for general CLI operation syntax.
+This repository uses \`loom\` governed by \`$LOOM_DEFAULT_ROOT/document-model.mmd\`.
+Refer to \`using-loom-cli\` for general CLI operation syntax.
 
 ## 1. Document Classes & Locations
-- Issues: `issue://<name>.md` -> `$LOOM_DEFAULT_ROOT/issues/<name>.md`
-- ADRs: `adr://<name>.md` -> `$LOOM_DEFAULT_ROOT/adrs/<name>.md`
+- Issues: \`issue://<name>.md\` -> \`$LOOM_DEFAULT_ROOT/issues/<name>.md\`
+- ADRs: \`adr://<name>.md\` -> \`$LOOM_DEFAULT_ROOT/adrs/<name>.md\`
 
 ## 2. Common Operations
 
@@ -237,6 +246,7 @@ Always run before committing changes to design docs:
 1. \`loom validate --fix\`
 2. \`loom index\`
 3. Verify zero errors in \`design/VALIDATION.md\`
+
 ```
 
 ---
