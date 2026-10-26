@@ -157,6 +157,24 @@ markdown: "\nProse.\n"  # everything after the frontmatter, verbatim
 
 Exits 1 with `instance/not-found` when the file is missing.
 
+### `body get <uri>`
+
+Read the editable prose: everything in the markdown that is neither the yaml
+header nor the protected link block.
+
+```yaml
+uri: issue://a.md
+path: design/issue/a.md
+body: "Alpha.\n\nSee [D1](decision://d1.md).\n"
+```
+
+`show` returns the markdown verbatim, including the link block and the relative
+links as they sit on disk. `body get` returns only the part the agent owns, and
+**rewrites relative markdown links as design uris** so the agent reasons in the
+same uri space as every other command. Links that are not repo-relative paths —
+urls, `mailto:`, in-page `#fragments`, site-absolute paths — pass through
+untouched, as do paths that reach outside the repository.
+
 ### `ls <uri>`
 
 List what can be linked to. The uri space is one hierarchy in which `#anchor`
@@ -295,7 +313,10 @@ ops:
   - { op: unlink, from: "issue://a.md", rel: blocks, to: "issue://b.md" }
   - { op: rename, from: "issue://a.md", to: "issue://archive/a.md" }
   - { op: delete, uri: "issue://a.md" }
+  - { op: body,   uri: "issue://a.md", mode: append, text: "More prose.\n" }
 ```
+
+`body` takes `mode: set | append | patch`.
 
 On success:
 
@@ -337,6 +358,22 @@ output shape.
 | `set <uri> <key=value...>` | `set` |
 | `link <from> <relation> <to>` | `link` |
 | `unlink <from> <relation> <to>` | `unlink` |
+| `body set <uri> <text>` | `body` (mode `set`) |
+| `body append <uri> <text>` | `body` (mode `append`) |
+| `body patch <uri> <diff>` | `body` (mode `patch`) |
+
+`body` is the write half of `body get`: it edits the prose and cannot reach the
+yaml header or the protected link block, which loom continues to own. The three
+modes replace the prose, add to the end of it, or apply a unified diff to it.
+
+Text is supplied in the uri form `body get` returns, and **design uris are
+written to disk as relative markdown links**, so the file stays navigable in an
+ordinary markdown renderer and on GitHub. A `patch` is matched against the
+prose in uri form, so a diff built from `body get` output applies directly.
+
+Hunk headers are treated as a hint only; a hunk is placed by matching its
+context exactly, with no fuzz. A hunk that matches nothing is
+`body/patch-failed` and nothing is written.
 
 `link` and `unlink` **dispatch on the subject's scheme**. A design instance
 writes the relation into its yaml; a `src://` subject writes a comment into the
@@ -420,15 +457,20 @@ references:
 
 ### `prefetch`
 
-Download and cache the tree-sitter grammars named in `languages` in the config,
-defaulting to `mermaid`, `typescript`, `r`, `python`.
-
-```yaml
-prefetched: [mermaid, typescript, r, python]
+```
+loom prefetch <languages...>
 ```
 
-Grammars download on first use, so an offline or sandboxed run fails unless
-this has been run. Make it part of setup.
+Download and cache the named tree-sitter grammars. There is no default set and
+no configured one — naming at least one language is required.
+
+```yaml
+prefetched: [typescript, python]
+```
+
+Grammars loom is not told about download lazily, on the first parse of a file
+in that language. Prefetch exists for offline or sandboxed runs, where that
+lazy download would fail: name there whatever the repository actually contains.
 
 ### `similar <query> [--limit <n>]`
 
@@ -503,6 +545,7 @@ Codes are stable identifiers; match on these rather than on message text.
 | `changeset/` | changeset parsing and application | see below |
 | `query/` | derived database | `no-database`, `failed` |
 | `ls/` | discovery | `not-found`, `not-a-class`, `not-a-directory` |
+| `body/` | prose editing | `patch-failed` |
 
 **`model/`** — `syntax`, `unknown-type`, `untyped-attribute`,
 `malformed-member`, `duplicate-class`, `unknown-class`, `name-collision`,

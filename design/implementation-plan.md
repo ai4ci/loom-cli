@@ -546,15 +546,16 @@ subclass.
 
 **Commands.** `loom resolve <src-uri>` (now returns a line number),
 `loom refs <src-uri>` (which documents reference this function),
-`loom prefetch` (download the configured grammars).
+`loom prefetch <languages...>` (download named grammars).
 
 **Two things to settle in a spike.** First, `CommentInfo.associatedNode` is
 documented as "name of the syntax node this comment is directly associated
 with", which is ambiguous between the node *type* and the declared identifier —
 do not depend on it; derive enclosure from spans and treat the field as a
-cross-check. Second, grammars download on first use, so an offline or sandboxed
-run fails unless `prefetch` has been run; the configured language list must be
-explicit and `prefetch` must be part of the documented setup.
+cross-check. Second, grammars download on first use, which is the normal path;
+an offline or sandboxed run fails unless `prefetch` has been run first, so
+`prefetch` names its languages on the command line and is part of the
+documented setup for those environments.
 
 **Done when.** Fixture source files in R, TypeScript and Python resolve named
 functions and methods to correct line numbers, a fixture with a `test` subclass

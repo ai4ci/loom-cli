@@ -40,9 +40,9 @@ loom --help
 ```
 
 ### 3. Grammar Prefetch
-Loom bundles Tree-Sitter parsers for multi-language AST inspection (TypeScript, Python, R, Mermaid). For offline or isolated environments, warm the parser cache:
+Loom uses Tree-Sitter parsers for multi-language AST inspection. Grammars download lazily, on the first parse of a file in that language. For offline or isolated environments, warm the cache first by naming the languages the repository contains:
 ```bash
-loom prefetch
+loom prefetch typescript python r
 ```
 
 ---

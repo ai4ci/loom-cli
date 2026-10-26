@@ -31,9 +31,11 @@ node /path/to/loom/dist/src/cli.js --help
 ```
 
 ### Language Parser Prefetch
-`loom` uses Tree-Sitter grammars for code parsing and anchor resolution (TS, Python, R, Mermaid). On new environments or offline setups, run:
+`loom` uses Tree-Sitter grammars for code parsing and anchor resolution. Grammars download **lazily**, on the first parse of a file in that language, so normally you need do nothing.
+
+On offline or sandboxed setups that lazy download fails, so warm the cache first by naming the languages the repository contains. At least one language is required — there is no default set:
 ```bash
-loom prefetch
+loom prefetch typescript python r
 ```
 
 ## 2. Invocation Rules & Output Formats
@@ -77,8 +79,11 @@ loom model check
 loom resolve issue://fix-login.md
 loom resolve src://src/auth.ts#login
 
-# Inspect instance YAML frontmatter + markdown body
+# Inspect instance YAML frontmatter + markdown body (verbatim, as on disk)
 loom show issue://fix-login.md
+
+# Read just the editable prose, with relative links shown as design uris
+loom --json body get issue://fix-login.md
 
 # Hierarchical directory and symbol exploration (ls)
 loom ls issue://                       # List all instances of class 'issue'
@@ -127,6 +132,56 @@ loom rename issue://old-name.md issue://new-name.md
 # Delete an instance (fails if inbound relations still exist)
 loom delete issue://old-name.md
 ```
+
+#### Editing the Markdown Body
+
+Edit prose through `loom`, not with a file editor: the body commands cannot
+touch the YAML frontmatter or the protected `<!-- loom:links -->` block, so
+there is no way to corrupt either.
+
+```bash
+# Read the prose (frontmatter and link block excluded)
+loom --json body get issue://fix-login.md
+
+# Replace it
+loom body set issue://fix-login.md "## Cause
+
+Session cookie expires early.
+"
+
+# Add to the end of it
+loom body append issue://fix-login.md "
+## Update
+
+Fixed in 1.2.1.
+"
+
+# Apply a unified diff to it
+loom body patch issue://fix-login.md "@@ -1,3 +1,3 @@
+ ## Cause
+-Session cookie expires early.
++Session cookie expired one hour early.
+"
+
+# Any of the three can be previewed
+loom body set issue://fix-login.md "New prose.
+" --dry-run
+```
+
+**Links are translated in both directions.** Write design URIs; loom converts
+them to relative markdown links on disk, so the file renders correctly on
+GitHub. Read them back and they are URIs again:
+
+```bash
+loom body set issue://a.md "Caused by [the auth ADR](adr://auth.md).
+"
+# on disk:  Caused by [the auth ADR](../adr/auth.md).
+# body get: Caused by [the auth ADR](adr://auth.md).
+```
+
+URLs, `mailto:`, in-page `#fragments` and paths outside the repository are left
+alone. A `patch` whose context does not match fails with `body/patch-failed`
+and writes nothing — re-read with `body get` and rebuild the diff.
 
 #### Batch Mutations (Changesets)
 For multi-step or multi-file mutations:
@@ -211,3 +266,4 @@ loom similar issue://fix-login.md
 | `source/ambiguous-anchor` | Symbol name appears multiple times in file (e.g. nested scope or overload). | Use fully-qualified anchor path (e.g. `Class.method` or `func(int,string)`). |
 | `source/not-annotatable` | Attempted to link source declaration that lacks a block body (e.g. interface signature). | Attach comment to the enclosing class or linking document instead. |
 | `source/verification-failed` | Splicing comment into source caused syntax error or attached to wrong AST node. | Check source file syntax; annotate manually if needed. |
+| `body/patch-failed` | A `loom body patch` hunk matched no part of the prose (or the patch had no `@@` hunks). | Re-read with `loom --json body get` and rebuild the diff against that text. Nothing was written. |

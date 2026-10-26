@@ -92,15 +92,18 @@ loom model check
 ## Step 3: Zero Configuration & Model Placement
 
 Loom operates without a config file by default — class roots are declared
-in the model itself (see Appendix A). The only things that go in an
-optional `.loom.yaml` are **anchor policy** and **grammars**:
+in the model itself (see Appendix A). The only things an optional
+`.loom.yaml` can set are the **design root** and the **anchor policy**:
 
 ```yaml
-anchorPolicy:
-  allowlist: [function_declaration, method_definition, arrow_function, function_definition]
-  transparent: [export_statement, statement_block]
-languages: [typescript, python, r]
+designRoot: design
+source:
+  anchorKinds: [function_declaration, method_definition, arrow_function, function_definition]
+  transparentKinds: [export_statement, statement_block]
 ```
+
+Grammars are not configured: they download lazily on first parse, and
+`loom prefetch <languages...>` warms them for offline use.
 
 It discovers `document-model.mmd` in the git repository:
 - The parent directory of `document-model.mmd` becomes `$LOOM_DEFAULT_ROOT` (e.g. `docs` or `design`).
@@ -222,6 +225,20 @@ When implementing an issue in code:
 \`\`\`bash
 loom link src://src/feature.ts#handleTask implements issue://my-task.md
 \`\`\`
+
+### Writing the Issue's Prose
+Edit the markdown body through loom, never with a file editor — this
+cannot touch the frontmatter or the generated link block:
+\`\`\`bash
+loom --json body get issue://my-task.md
+loom body append issue://my-task.md "
+## Cause
+
+Session cookie expires early.
+"
+\`\`\`
+Write links as design URIs (\`[ADR](adr://auth.md)\`); loom stores them as
+relative markdown links and returns them as URIs.
 
 ## 3. Lifecycle Transition Rules
 
@@ -402,18 +419,19 @@ files). The anchor model is policy-driven; configuration lives in
 `.loom.yaml`:
 
 ```yaml
-anchorPolicy:
-  allowlist: [function_declaration, method_definition, arrow_function, function_definition]
-  transparent: [export_statement, statement_block]
-  languages: [typescript, python, r]
+source:
+  anchorKinds: [function_declaration, method_definition, arrow_function, function_definition]
+  transparentKinds: [export_statement, statement_block]
 ```
 
-- `allowlist`: tree-sitter structure kinds that qualify as anchors. An
+- `anchorKinds`: tree-sitter structure kinds that qualify as anchors. An
   anchor not on this list is rejected.
-- `transparent`: containers that should be descended into without
+- `transparentKinds`: containers that should be descended into without
   becoming anchors themselves.
-- `languages`: grammars to load (defaults: `mermaid`, `typescript`, `r`,
-  `python`).
+
+Grammars are not listed here. They load lazily on the first parse of a
+file in that language; `loom prefetch <languages...>` pre-warms them for
+offline or sandboxed runs.
 
 Ambiguous anchors (the same name at multiple line numbers) are a hard
 error — there is no silent "first match wins" within a single file. Use

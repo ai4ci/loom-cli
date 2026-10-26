@@ -3,8 +3,10 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import type { Op } from "./changeset.ts";
 import { absolute, type Config } from "./config.ts";
-import { type Diagnostic, error } from "./diagnostics.ts";
+import { LoomError, type Diagnostic, error } from "./diagnostics.ts";
 import { getLinksBlock, setLinksBlock, stringifyInstance } from "./document.ts";
+import { applyUnifiedDiff, joinProse, splitProse, toRelative, toUris } from "./body.ts";
+import type { BodyMode } from "./changeset.ts";
 import {
   type Graph,
   type InstanceNode,
@@ -41,6 +43,37 @@ function asList(value: unknown): unknown[] {
 function pathFor(roots: ClassRoots, className: string, id: string): string {
   const root = classRoot(roots, className);
   return root === "" ? id : `${root}/${id}`;
+}
+
+/**
+ * Rewrite an instance's prose, leaving the frontmatter and the protected link
+ * block untouched. The incoming text is written in design uris, which become
+ * relative markdown links on the way to disk; a patch is matched against the
+ * prose in the same uri form the agent read with `loom body get`.
+ */
+function editProse(
+  roots: ClassRoots,
+  node: InstanceNode,
+  mode: BodyMode,
+  text: string,
+): string {
+  const split = splitProse(node.file.markdown);
+  const current = toUris(split.prose, node.path, roots);
+
+  let prose: string;
+  switch (mode) {
+    case "set":
+      prose = text;
+      break;
+    case "append":
+      prose = current === "" || current.endsWith("\n") ? `${current}${text}` : `${current}\n${text}`;
+      break;
+    case "patch":
+      prose = applyUnifiedDiff(current, text);
+      break;
+  }
+
+  return joinProse({ block: split.block, prose: toRelative(prose, node.path, roots) });
 }
 
 /**
@@ -161,6 +194,18 @@ function applyOps(graph: Graph, ops: Op[]): Diagnostic[] {
       case "delete": {
         const node = need(op.uri, "delete");
         if (node) graph.instances.delete(node.uri);
+        break;
+      }
+
+      case "body": {
+        const node = need(op.uri, "body");
+        if (!node) break;
+        try {
+          node.file.markdown = editProse(graph.roots, node, op.mode, op.text);
+        } catch (cause) {
+          if (!(cause instanceof LoomError)) throw cause;
+          found.push({ ...cause.diagnostic, uri: node.uri });
+        }
         break;
       }
     }
