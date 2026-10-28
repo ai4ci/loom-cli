@@ -51,8 +51,10 @@ test("attributes get native column types", async () => {
 
   assert.equal(types.uri, "VARCHAR");
   assert.equal(types.title, "VARCHAR");
-  assert.equal(types.status, "VARCHAR");
   assert.equal(types.spec, "VARCHAR");
+  // An enumeration projects as a native ENUM so ordering follows the model's
+  // declaration order; see cli-phase4-enum.test.ts.
+  assert.equal(types.status, "ENUM('open', 'closed')");
 });
 
 test("a date attribute compares without a cast", async () => {

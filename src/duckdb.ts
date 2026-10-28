@@ -5,7 +5,7 @@ import { absolute, type Config } from "./config.ts";
 import { LoomError, error } from "./diagnostics.ts";
 import type { Graph } from "./graph.ts";
 import { effectiveAttributes, isInstantiable } from "./model/schema.ts";
-import type { Attribute, SchemaIR } from "./model/types.ts";
+import { isEnumeration, type Attribute, type SchemaIR } from "./model/types.ts";
 import { embedder, hashBody, type Embedder } from "./embeddings.ts";
 
 export const DATABASE_FILENAME = ".loom.duckdb";
@@ -16,10 +16,15 @@ export function databasePath(cfg: Config): string {
 
 /**
  * Attribute types map to native DuckDB types so comparisons and aggregates
- * need no casts (plan §Phase 4). Enumerations are VARCHAR with membership
- * enforced at validation rather than by a database constraint. Class-typed
+ * need no casts (plan §Phase 4). Enumerations become native DuckDB ENUM types
+ * so that ORDER BY, MIN/MAX and the comparison operators follow the order the
+ * members are declared in the model rather than alphabetical order. Class-typed
  * attributes become DuckDB STRUCTs so subfields are queryable and misspellings
  * fail loudly (plan "Later — composite attributes").
+ *
+ * The ENUM type is baked into the database at rebuild time, so editing an
+ * enumeration's members in the model requires `loom rebuild` before queries
+ * reflect the change.
  */
 function columnType(schema: SchemaIR, attribute: Attribute): string {
   let base: string;
@@ -36,11 +41,34 @@ function columnType(schema: SchemaIR, attribute: Attribute): string {
   } else if (attribute.type.kind === "class") {
     base = structType(schema, attribute.type.className);
   } else if (attribute.type.kind === "enum") {
-    base = "VARCHAR";
+    base = enumMembers(schema, attribute.type.className) === null
+      ? "VARCHAR"
+      : quote(attribute.type.className);
   } else {
     base = "VARCHAR";
   }
   return attribute.list ? `${base}[]` : base;
+}
+
+/**
+ * Declared members of an enumeration class, or null when the class is not a
+ * usable enumeration. A memberless enumeration is a model error, but `rebuild`
+ * does not validate, so fall back to VARCHAR rather than emitting `ENUM()`.
+ */
+function enumMembers(schema: SchemaIR, className: string): string[] | null {
+  const def = schema.classes.get(className);
+  if (!def || !isEnumeration(def) || def.members.length === 0) return null;
+  return def.members;
+}
+
+/** Every enumeration the database needs a type for, in schema order. */
+function enumTypes(schema: SchemaIR): { name: string; members: string[] }[] {
+  const types: { name: string; members: string[] }[] = [];
+  for (const name of [...schema.classes.keys()].sort()) {
+    const members = enumMembers(schema, name);
+    if (members !== null) types.push({ name, members });
+  }
+  return types;
 }
 
 /** Recursive STRUCT projection for a class-typed attribute (plan "Later — composite attributes"). */
@@ -79,6 +107,15 @@ function literal(schema: SchemaIR, attribute: Attribute, value: unknown): string
 
   if (attribute.type.kind === "class") {
     return structLiteral(schema, attribute.type.className, value);
+  }
+
+  if (attribute.type.kind === "enum") {
+    // An ENUM column rejects a non-member outright, which would abort the whole
+    // rebuild over one bad file. `validate` is the authority on membership, so
+    // project the offending value as NULL instead — the same way a malformed
+    // int or bool is handled above.
+    const members = enumMembers(schema, attribute.type.className);
+    if (members !== null && !members.includes(String(value))) return "NULL";
   }
 
   return `'${String(value).replace(/'/g, "''")}'`;
@@ -125,6 +162,24 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
   const connection = await connect(cfg);
   const tables: TableSummary[] = [];
   const emb = embedder();
+
+  // Enum types first: the column definitions below refer to them by name.
+  for (const { name, members } of enumTypes(schema)) {
+    const values = members.map((m) => `'${m.replace(/'/g, "''")}'`).join(", ");
+    try {
+      await connection.run(`CREATE TYPE ${quote(name)} AS ENUM (${values})`);
+    } catch (cause) {
+      connection.closeSync();
+      // Almost always a clash with a built-in DuckDB type name (`date`, `blob`,
+      // ...). The model is the fixable end, so say so rather than letting a
+      // raw catalog error out.
+      throw new LoomError(error(
+        "query/enum-type",
+        `cannot project enumeration "${name}": ${(cause as Error).message}`,
+        { fix: `rename the "${name}" enumeration in the model; it collides with a built-in database type` },
+      ));
+    }
+  }
 
   for (const className of [...schema.classes.keys()].sort()) {
     if (!isInstantiable(schema, className)) continue;

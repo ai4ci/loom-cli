@@ -24,7 +24,6 @@ classDiagram
     %% @path adr design/decisions
     %% @path src /src
     %% @path test /test
-
     class WorkStatus {
         <<enumeration>>
         backlog
@@ -170,7 +169,6 @@ designRoot: gtd
 ```mermaid
 classDiagram
     %% @path resource gtd/files
-
     class ActionStatus {
         <<enumeration>>
         next

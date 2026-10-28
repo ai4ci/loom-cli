@@ -44,10 +44,13 @@ set as an env var.
 - **Instantiable Classes**: Concrete classes that become Markdown files.
 - **Attributes**: One per line with visibility and type (e.g. `+string title`, `+IssueStatus status`).
   - Supported primitives: `string`, `int`, `float`, `bool`, `date`, `path`, `uri`.
-  - **Cardinality (list)**: `[]` suffix for lists (e.g. `+string[] tags`).
+  - **Cardinality (list)**: mermaid's generic syntax — `+List~string~ tags`. The `[]` suffix (`+string[] tags`) is **rejected by the mermaid grammar** and the attribute is silently dropped, so always use `List~T~`.
   - **Class-typed (composite)**: A non-primitive type embeds a nested YAML block; the frontmatter carries a nested object (or list of objects). Such attributes project as DuckDB STRUCTs (or STRUCT[]) so subfields are queryable (`reporter.name`) and misspellings fail loudly with a Binder Error.
   - **Cardinality (relation)**: The mermaid spec's shorthands are all supported: `1`, `0..1`, `1..*`, `*`, `n`, `1..n`, `0..n`, plus the symmetrical keywords `one` (= `1..1`) and `many` (= `0..*`).
 - **Enumerations**: Label with `<<enumeration>>` and list allowable members.
+  - **Declare members in a meaningful order.** They project into DuckDB as a native `ENUM`, so `ORDER BY`, `MIN`/`MAX` and `list_sort` follow declaration order, not alphabetical order. Declaring a lifecycle in its natural progression (`backlog`, `in_progress`, `review`, `done`) makes boards and reports sort correctly for free.
+  - Changing the members requires `loom rebuild` before queries reflect it.
+  - Do not name an enumeration after a built-in database type (`date`, `blob`, ...) — it cannot be projected.
 - **Abstract Classes**: Label with `<<abstract>>` (not directly instantiated). Used both as supertypes and as the type of class-typed attributes.
 - **Inheritance**: Expressed with `<|--` (e.g. `document <|-- adr`).
 - **Source Code Integration**: Use or subclass the reserved `src` class.

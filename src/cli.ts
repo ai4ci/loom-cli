@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, realpathSync } from "node:fs";
+import path from "node:path";
 import { Command } from "commander";
 import { absolute, loadConfig, RESERVED_SCHEMES, type Config } from "./config.ts";
 import { LoomError, error, summarise } from "./diagnostics.ts";
@@ -30,6 +31,20 @@ export interface CliRun {
   code: number;
   out: string;
   err: string;
+}
+
+/**
+ * The version from the installed package.json. Both `src/` and `dist/` sit one
+ * level below the package root, so the same relative path works whether loom
+ * is run from source or from a build.
+ */
+function packageVersion(): string {
+  try {
+    const manifest = path.join(import.meta.dirname, "..", "package.json");
+    return (JSON.parse(readFileSync(manifest, "utf8")) as { version?: string }).version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 /** A command returns data to emit and, optionally, a non-zero exit code. */
@@ -374,6 +389,7 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
   program
     .name("loom")
     .description("Model-driven markdown documentation graph")
+    .version(packageVersion(), "-v, --version", "print the installed loom version")
     .option("--json", "emit JSON instead of YAML")
     .option("--cwd <dir>", "directory to resolve configuration from");
 

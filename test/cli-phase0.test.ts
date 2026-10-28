@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { parse } from "yaml";
 import { run } from "../src/cli.ts";
 import { defaultModel, instance, makeRepo } from "./helpers.ts";
@@ -16,6 +18,24 @@ function repo(): string {
     ),
   });
 }
+
+test("--version prints the version from package.json", async () => {
+  const manifest = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  ) as { version: string };
+
+  for (const flag of ["--version", "-v"]) {
+    const r = await run([flag]);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.out.trim(), manifest.version);
+  }
+});
+
+test("--version needs no model, config or git repository", async () => {
+  const r = await run(["--cwd", tmpdir(), "--version"]);
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out.trim(), /^\d+\.\d+\.\d+/);
+});
 
 test("resolve maps a class uri to its repo-relative path", async () => {
   const r = await run(["--cwd", repo(), "resolve", "issue://first.md"]);

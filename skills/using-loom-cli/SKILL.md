@@ -55,6 +55,7 @@ loom resolve issue://a.md --json     # Error: unrecognized option
 
 - `--json`: Output machine-readable JSON instead of human-friendly YAML.
 - `--cwd <path>`: Run as if invoked from `<path>` (defaults to `process.cwd()`). Repository root is discovered via git.
+- `-v, --version`: Print the installed loom version and exit. Needs no model, config or git repository — use it to confirm which build is on `PATH`.
 
 ### Output Contracts
 Every command produces one of three shapes:
@@ -250,6 +251,25 @@ SELECT u.name FROM issue, UNNEST(reviewers) u;
 DESCRIBE issue;
 ```
 
+#### Enumerations are native ENUM types
+An `<<enumeration>>` projects as a DuckDB `ENUM` declared in the model's member
+order, so ordering follows the lifecycle rather than the alphabet:
+
+```sql
+-- model order: backlog, in_progress, review, done
+SELECT title, status FROM story ORDER BY status;      -- backlog first
+SELECT MIN(status), MAX(status) FROM story;           -- earliest, latest stage
+SELECT list_sort(stages_seen) FROM story;             -- also declaration order
+```
+
+- **Equality and `ORDER BY` need no cast.** An *ordering* comparison against a
+  bare literal does: DuckDB reads `status > 'backlog'` by casting the enum down
+  to text (alphabetical). Write `status > 'backlog'::WorkStatus` instead.
+- **Run `loom rebuild` after editing an enumeration's members** — the type is
+  baked into the database.
+- A value outside the enumeration reads back as `NULL`; run `loom validate` to
+  find which file is wrong.
+
 #### Semantic search across markdown bodies
 The rebuild also populates an `embedding` table (one vector per
 instance). Search with `loom similar`:
@@ -273,3 +293,4 @@ loom similar issue://fix-login.md
 | `source/not-annotatable` | Attempted to link source declaration that lacks a block body (e.g. interface signature). | Attach comment to the enclosing class or linking document instead. |
 | `source/verification-failed` | Splicing comment into source caused syntax error or attached to wrong AST node. | Check source file syntax; annotate manually if needed. |
 | `body/patch-failed` | A `loom body patch` hunk matched no part of the prose (or the patch had no `@@` hunks). | Re-read with `loom --json body get` and rebuild the diff against that text. Nothing was written. |
+| `query/enum-type` | An `<<enumeration>>` class is named after a built-in database type (`date`, `blob`, ...). | Rename the enumeration in the model, then `loom rebuild`. |

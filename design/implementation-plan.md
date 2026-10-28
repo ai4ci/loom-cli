@@ -505,9 +505,14 @@ a mid-sequence error.
 **Scope.** Project the graph into `$DESIGN_DOCS_ROOT/.loom.duckdb`
 (git-ignored): one table per concrete class with its scalar attributes, plus
 `edge(subject, relation, object)`. Attribute types map to native DuckDB types
-(`date` → `DATE`, `int` → `INTEGER`, enums → `VARCHAR`, with the member list
-enforced at validation rather than by a DB constraint) so that comparisons and
-aggregates need no casts. Class-typed attributes will project as `STRUCT` when
+(`date` → `DATE`, `int` → `INTEGER`, `<<enumeration>>` → a native `ENUM` type
+of the same name, declared in member order) so that comparisons and aggregates
+need no casts. The `ENUM` is what makes `ORDER BY status` sort by the order the
+members are written in the model rather than alphabetically; it is baked into
+the database at rebuild time, so changing an enumeration's members requires
+`loom rebuild` before queries reflect it. Membership is still enforced by
+`validate` — a value outside the enumeration projects as `NULL` rather than
+aborting the rebuild over one bad file. Class-typed attributes will project as `STRUCT` when
 they arrive — see "Later — composite attributes". Abstract classes get no table
 (§1.8);
 `src`-family and `resource` instances get no table either, since they have no
