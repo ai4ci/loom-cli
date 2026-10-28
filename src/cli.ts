@@ -552,7 +552,8 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     body
       .command(mode)
       .argument("<uri>", "design uri of an instance")
-      .argument("<text>", mode === "patch" ? "unified diff to apply to the prose" : "markdown prose")
+      .argument("[text]", mode === "patch" ? "unified diff to apply to the prose" : "markdown prose")
+      .option("--file <path>", "read text or patch from a file instead of argument")
       .option("--dry-run", "show what would be written without writing it")
       .description(
         mode === "set"
@@ -561,7 +562,19 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
             ? "add to the end of the prose"
             : "apply a unified diff to the prose",
       )
-      .action((raw: string, text: string, options: { dryRun?: boolean }) => {
+      .action((raw: string, inlineText: string | undefined, options: { file?: string; dryRun?: boolean }) => {
+        let text = inlineText;
+        if (options.file !== undefined) {
+          if (!existsSync(options.file)) {
+            throw new LoomError(error("cli/file-not-found", `file not found: ${options.file}`));
+          }
+          text = readFileSync(options.file, "utf8");
+        }
+        if (text === undefined) {
+          throw new LoomError(
+            error("cli/missing-argument", `expected <text> argument or --file <path> for body ${mode}`),
+          );
+        }
         finish(applyOps(ctx(), [{ op: "body", uri: raw, mode, text }], options));
       });
   }

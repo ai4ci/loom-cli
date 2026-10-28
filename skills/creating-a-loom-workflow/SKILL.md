@@ -234,7 +234,8 @@ loom link src://src/feature.ts#handleTask implements issue://my-task.md
 
 ### Writing the Issue's Prose
 Edit the markdown body through loom, never with a file editor — this
-cannot touch the frontmatter or the generated link block:
+cannot touch the frontmatter or the generated link block. Use `--file`
+to avoid quoting/escaping multiline text in bash:
 \`\`\`bash
 loom --json body get issue://my-task.md
 loom body append issue://my-task.md "
@@ -242,6 +243,8 @@ loom body append issue://my-task.md "
 
 Session cookie expires early.
 "
+# or write to /tmp/prose.md and load directly:
+loom body set issue://my-task.md --file /tmp/prose.md
 \`\`\`
 Write links as design URIs (\`[ADR](adr://auth.md)\`); loom stores them as
 relative markdown links and returns them as URIs.

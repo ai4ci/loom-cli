@@ -150,11 +150,12 @@ there is no way to corrupt either.
 # Read the prose (frontmatter and link block excluded)
 loom --json body get issue://fix-login.md
 
-# Replace it
+# Replace it (inline or from a file to avoid shell-escaping headaches)
 loom body set issue://fix-login.md "## Cause
 
 Session cookie expires early.
 "
+loom body set issue://fix-login.md --file /tmp/new-body.md
 
 # Add to the end of it
 loom body append issue://fix-login.md "
@@ -162,6 +163,7 @@ loom body append issue://fix-login.md "
 
 Fixed in 1.2.1.
 "
+loom body append issue://fix-login.md --file /tmp/update.md
 
 # Apply a unified diff to it
 loom body patch issue://fix-login.md "@@ -1,3 +1,3 @@
@@ -169,10 +171,12 @@ loom body patch issue://fix-login.md "@@ -1,3 +1,3 @@
 -Session cookie expires early.
 +Session cookie expired one hour early.
 "
+loom body patch issue://fix-login.md --file /tmp/fix.diff
 
 # Any of the three can be previewed
 loom body set issue://fix-login.md "New prose.
 " --dry-run
+loom body set issue://fix-login.md --file /tmp/new-body.md --dry-run
 ```
 
 **Links are translated in both directions.** Write design URIs; loom converts

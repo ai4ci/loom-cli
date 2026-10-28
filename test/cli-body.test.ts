@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parse } from "yaml";
 import { run } from "../src/cli.ts";
@@ -124,6 +124,51 @@ test("body set --dry-run reports the diff without writing", async () => {
   assert.equal(result.code, 0, result.err);
   assert.equal(read(root), before);
   assert.match(result.out, /Replaced\./);
+});
+
+test("body set --file reads text from an external file", async () => {
+  const root = repo();
+  const tmp = path.join(root, "new-content.md");
+  writeFileSync(tmp, "Content from file.\n");
+  const result = await body(root, ["set", "issue://a.md", "--file", tmp]);
+  assert.equal(result.code, 0, result.err);
+  const value = parse((await body(root, ["get", "issue://a.md"])).out) as { body: string };
+  assert.equal(value.body, "Content from file.\n");
+});
+
+test("body patch --file reads diff from an external file", async () => {
+  const root = repo();
+  const tmp = path.join(root, "patch.diff");
+  const diff = "@@ -1,3 +1,3 @@\n Alpha\n-Bravo\n+Bravissimo\n Charlie\n";
+  writeFileSync(tmp, diff);
+  const result = await body(root, ["patch", "issue://a.md", "--file", tmp]);
+  assert.equal(result.code, 0, result.err);
+  const value = parse((await body(root, ["get", "issue://a.md"])).out) as { body: string };
+  assert.equal(value.body, "Alpha\nBravissimo\nCharlie\n");
+});
+
+test("body append --file reads text from an external file", async () => {
+  const root = repo();
+  const tmp = path.join(root, "more.md");
+  writeFileSync(tmp, "Delta\n");
+  const result = await body(root, ["append", "issue://a.md", "--file", tmp]);
+  assert.equal(result.code, 0, result.err);
+  const value = parse((await body(root, ["get", "issue://a.md"])).out) as { body: string };
+  assert.equal(value.body, "Alpha\nBravo\nCharlie\nDelta\n");
+});
+
+test("body set fails cleanly if neither inline text nor --file is provided", async () => {
+  const root = repo();
+  const result = await body(root, ["set", "issue://a.md"]);
+  assert.notEqual(result.code, 0);
+  assert.match(result.err, /cli\/missing-argument/);
+});
+
+test("body set fails cleanly if --file does not exist", async () => {
+  const root = repo();
+  const result = await body(root, ["set", "issue://a.md", "--file", path.join(root, "nonexistent.md")]);
+  assert.notEqual(result.code, 0);
+  assert.match(result.err, /cli\/file-not-found/);
 });
 
 test("prefetch takes the languages to fetch on the command line", async () => {

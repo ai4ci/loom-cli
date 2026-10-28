@@ -361,13 +361,14 @@ output shape.
 | `set <uri> <key=value...>` | `set` |
 | `link <from> <relation> <to>` | `link` |
 | `unlink <from> <relation> <to>` | `unlink` |
-| `body set <uri> <text>` | `body` (mode `set`) |
-| `body append <uri> <text>` | `body` (mode `append`) |
-| `body patch <uri> <diff>` | `body` (mode `patch`) |
+| `body set <uri> [text] [--file <path>]` | `body` (mode `set`) |
+| `body append <uri> [text] [--file <path>]` | `body` (mode `append`) |
+| `body patch <uri> [diff] [--file <path>]` | `body` (mode `patch`) |
 
 `body` is the write half of `body get`: it edits the prose and cannot reach the
 yaml header or the protected link block, which loom continues to own. The three
 modes replace the prose, add to the end of it, or apply a unified diff to it.
+Input can be passed as an inline argument or read from an external file via `--file <path>`.
 
 Text is supplied in the uri form `body get` returns, and **design uris are
 written to disk as relative markdown links**, so the file stays navigable in an
@@ -627,12 +628,15 @@ an easy mistake — `loom validate --json` silently ignores `--json`.
 
 Deferred deliberately; see implementation-plan for the reasoning.
 
-- **Composite attributes.** Class-typed attributes serialised as nested YAML
-  blocks. The syntax and the DuckDB `STRUCT` projection are settled, so adding
-  them is additive.
 - **MCP server.** A thin wrapper exposing `validate`, `query`, `refs`,
-  `similar` and `apply` as MCP tools, held back until this CLI contract has
-  been exercised by real use rather than frozen early.
+  `similar`, `body` and `apply` as first-class agent tools, putting them on
+  equal footing with native edit tools. Deliberately held back until this CLI
+  contract has been exercised by real use rather than frozen early.
+- **In-file agent watermarks.** Scaffolding created documents with an explicit
+  header comment (e.g. `<!-- LOOM MANAGED: Use loom body set/patch, do not edit directly -->`)
+  to deter agent file-editing instincts right at the point of inspection.
+- **Git pre-commit enforcer.** A pre-commit hook checking `loom validate && loom index --check`
+  to mechanically bounce manual link corruption and uncanonicalised relative paths.
 - **Concurrency.** Two agents running `apply` at once can interleave writes.
   There is no lock. The fix, if it becomes necessary, is a lockfile around the
   write phase, not a redesign.
