@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { Command } from "commander";
 import { absolute, loadConfig, RESERVED_SCHEMES, type Config } from "./config.ts";
 import { LoomError, error, summarise } from "./diagnostics.ts";
@@ -619,10 +619,22 @@ export async function run(argv: string[]): Promise<CliRun> {
   }
 }
 
-const invokedDirectly = process.argv[1] !== undefined
-  && import.meta.filename.replace(/\.ts$/, ".js") === process.argv[1].replace(/\.ts$/, ".js");
+function isInvokedDirectly(): boolean {
+  if (process.argv[1] === undefined || !import.meta.filename) return false;
+  try {
+    return (
+      realpathSync(process.argv[1]).replace(/\.ts$/, ".js") ===
+      realpathSync(import.meta.filename).replace(/\.ts$/, ".js")
+    );
+  } catch {
+    return (
+      process.argv[1].replace(/\.ts$/, ".js") ===
+      import.meta.filename.replace(/\.ts$/, ".js")
+    );
+  }
+}
 
-if (invokedDirectly) {
+if (isInvokedDirectly()) {
   const result = await run(process.argv.slice(2));
   if (result.out) process.stdout.write(result.out);
   if (result.err) process.stderr.write(result.err);

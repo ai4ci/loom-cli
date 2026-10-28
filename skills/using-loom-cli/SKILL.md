@@ -21,13 +21,19 @@ npx loom --help
 ```
 
 ### Global or Standalone Link
-To build and use directly from the tool's source repository:
+To build and link into another local project:
 ```bash
 cd /path/to/loom
 npm run build
-npm link
-# or run directly:
-node /path/to/loom/dist/src/cli.js --help
+bun link          # or npm link
+
+# In your target project:
+bun link loom     # or npm link loom
+
+# or run directly without linking:
+node /path/to/loom/dist/cli.js --help
+# or run directly from TypeScript (no build needed):
+bun /path/to/loom/src/cli.ts --help
 ```
 
 ### Language Parser Prefetch
