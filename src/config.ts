@@ -16,8 +16,6 @@ export interface Config {
   repoRoot: string;
   /** Repo-relative POSIX path of the design docs folder. */
   designRoot: string;
-  /** Grammars to prefetch (plan §Phase 5). */
-  languages: string[];
   /** Which source declarations are addressable (source-linkage §2.1). */
   anchorPolicy: AnchorPolicy;
   /** Path of the `.loom.yaml` that produced this config, if any. */
@@ -26,7 +24,6 @@ export interface Config {
 
 export interface RawConfig {
   designRoot?: string;
-  languages?: string[];
   source?: {
     anchorKinds?: string[];
     transparentKinds?: string[];
@@ -37,7 +34,6 @@ export function configFrom(repoRoot: string, raw: RawConfig, configPath: string 
   return {
     repoRoot,
     designRoot: (raw.designRoot ?? "design").replace(/\/+$/, ""),
-    languages: raw.languages ?? [],
     anchorPolicy: {
       anchorKinds: raw.source?.anchorKinds ?? DEFAULT_ANCHOR_POLICY.anchorKinds,
       transparentKinds: raw.source?.transparentKinds ?? DEFAULT_ANCHOR_POLICY.transparentKinds,
@@ -56,9 +52,10 @@ export function absolute(cfg: Config, repoRelative: string): string {
  * repo root is the nearest git root and all defaults apply.
  *
  * `.loom.yaml` is now strictly optional: it can override `designRoot` and
- * `languages` and tweak `anchorPolicy`, but it can never declare class roots
- * (those come from the model). The file remains as an escape hatch for
- * unusual repositories.
+ * tweak `anchorPolicy`, but it can never declare class roots (those come from
+ * the model) and it no longer names grammars — `loom prefetch` takes those on
+ * the command line. The file remains as an escape hatch for unusual
+ * repositories.
  */
 export function loadConfig(startDir: string = process.cwd()): Config {
   let dir = path.resolve(startDir);

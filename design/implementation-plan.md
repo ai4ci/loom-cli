@@ -505,9 +505,14 @@ a mid-sequence error.
 **Scope.** Project the graph into `$DESIGN_DOCS_ROOT/.loom.duckdb`
 (git-ignored): one table per concrete class with its scalar attributes, plus
 `edge(subject, relation, object)`. Attribute types map to native DuckDB types
-(`date` → `DATE`, `int` → `INTEGER`, enums → `VARCHAR`, with the member list
-enforced at validation rather than by a DB constraint) so that comparisons and
-aggregates need no casts. Class-typed attributes will project as `STRUCT` when
+(`date` → `DATE`, `int` → `INTEGER`, `<<enumeration>>` → a native `ENUM` type
+of the same name, declared in member order) so that comparisons and aggregates
+need no casts. The `ENUM` is what makes `ORDER BY status` sort by the order the
+members are written in the model rather than alphabetically; it is baked into
+the database at rebuild time, so changing an enumeration's members requires
+`loom rebuild` before queries reflect it. Membership is still enforced by
+`validate` — a value outside the enumeration projects as `NULL` rather than
+aborting the rebuild over one bad file. Class-typed attributes will project as `STRUCT` when
 they arrive — see "Later — composite attributes". Abstract classes get no table
 (§1.8);
 `src`-family and `resource` instances get no table either, since they have no
@@ -546,15 +551,16 @@ subclass.
 
 **Commands.** `loom resolve <src-uri>` (now returns a line number),
 `loom refs <src-uri>` (which documents reference this function),
-`loom prefetch` (download the configured grammars).
+`loom prefetch <languages...>` (download named grammars).
 
 **Two things to settle in a spike.** First, `CommentInfo.associatedNode` is
 documented as "name of the syntax node this comment is directly associated
 with", which is ambiguous between the node *type* and the declared identifier —
 do not depend on it; derive enclosure from spans and treat the field as a
-cross-check. Second, grammars download on first use, so an offline or sandboxed
-run fails unless `prefetch` has been run; the configured language list must be
-explicit and `prefetch` must be part of the documented setup.
+cross-check. Second, grammars download on first use, which is the normal path;
+an offline or sandboxed run fails unless `prefetch` has been run first, so
+`prefetch` names its languages on the command line and is part of the
+documented setup for those environments.
 
 **Done when.** Fixture source files in R, TypeScript and Python resolve named
 functions and methods to correct line numbers, a fixture with a `test` subclass

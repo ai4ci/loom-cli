@@ -26,9 +26,12 @@ loom resolve issue://a.md --json      # not recognised as global
 |---|---|---|
 | `--json` | off | Emit JSON instead of YAML. Same data, different serialisation. |
 | `--cwd <dir>` | `process.cwd()` | Directory from which configuration is discovered. Everything else resolves relative to the repo root found from here. |
+| `--version`, `-v` | — | Print the installed version and exit 0. Reads it from the package manifest, so it needs no model, config or git repository. |
 | `--help`, `-h` | — | Commander's generated help. Works on the root and on every subcommand. |
 
-There is no `--version` flag. See §7.
+`--version` prints a bare version string rather than a YAML or JSON document:
+it answers "which build is on my PATH", which is asked before any of the
+output-contract machinery in §2 is relevant.
 
 The repository root `$REPO_ROOT` is the git project root. Loom operates with zero
 configuration: `document-model.mmd` is discovered automatically in the repository
@@ -156,6 +159,24 @@ markdown: "\nProse.\n"  # everything after the frontmatter, verbatim
 ```
 
 Exits 1 with `instance/not-found` when the file is missing.
+
+### `body get <uri>`
+
+Read the editable prose: everything in the markdown that is neither the yaml
+header nor the protected link block.
+
+```yaml
+uri: issue://a.md
+path: design/issue/a.md
+body: "Alpha.\n\nSee [D1](decision://d1.md).\n"
+```
+
+`show` returns the markdown verbatim, including the link block and the relative
+links as they sit on disk. `body get` returns only the part the agent owns, and
+**rewrites relative markdown links as design uris** so the agent reasons in the
+same uri space as every other command. Links that are not repo-relative paths —
+urls, `mailto:`, in-page `#fragments`, site-absolute paths — pass through
+untouched, as do paths that reach outside the repository.
 
 ### `ls <uri>`
 
@@ -295,7 +316,10 @@ ops:
   - { op: unlink, from: "issue://a.md", rel: blocks, to: "issue://b.md" }
   - { op: rename, from: "issue://a.md", to: "issue://archive/a.md" }
   - { op: delete, uri: "issue://a.md" }
+  - { op: body,   uri: "issue://a.md", mode: append, text: "More prose.\n" }
 ```
+
+`body` takes `mode: set | append | patch`.
 
 On success:
 
@@ -337,6 +361,23 @@ output shape.
 | `set <uri> <key=value...>` | `set` |
 | `link <from> <relation> <to>` | `link` |
 | `unlink <from> <relation> <to>` | `unlink` |
+| `body set <uri> [text] [--file <path>]` | `body` (mode `set`) |
+| `body append <uri> [text] [--file <path>]` | `body` (mode `append`) |
+| `body patch <uri> [diff] [--file <path>]` | `body` (mode `patch`) |
+
+`body` is the write half of `body get`: it edits the prose and cannot reach the
+yaml header or the protected link block, which loom continues to own. The three
+modes replace the prose, add to the end of it, or apply a unified diff to it.
+Input can be passed as an inline argument or read from an external file via `--file <path>`.
+
+Text is supplied in the uri form `body get` returns, and **design uris are
+written to disk as relative markdown links**, so the file stays navigable in an
+ordinary markdown renderer and on GitHub. A `patch` is matched against the
+prose in uri form, so a diff built from `body get` output applies directly.
+
+Hunk headers are treated as a hint only; a hunk is placed by matching its
+context exactly, with no fuzz. A hunk that matches nothing is
+`body/patch-failed` and nothing is written.
 
 `link` and `unlink` **dispatch on the subject's scheme**. A design instance
 writes the relation into its yaml; a `src://` subject writes a comment into the
@@ -394,6 +435,31 @@ Attribute types map to native DuckDB types, so `created > DATE '2026-01-01'`
 and `sum(weight)` work without casts. The database and its WAL are git-ignored
 by a `.gitignore` written into the design root on first connect.
 
+**Enumerations become native `ENUM` types** named after the class and declared
+in member order, so `ORDER BY status`, `MIN`/`MAX` and `list_sort` follow the
+order written in the model rather than alphabetical order:
+
+```sql
+-- model order: open, in_progress, closed
+SELECT title, status FROM issue ORDER BY status;   -- open first, closed last
+```
+
+Three consequences worth knowing:
+
+- **The type is baked in at rebuild time.** Editing an enumeration's members in
+  the model requires `loom rebuild` before queries reflect the change.
+- **An ordering comparison against a bare string literal is alphabetical.**
+  DuckDB resolves `status > 'open'` by casting the `ENUM` down to `VARCHAR`.
+  Cast the literal instead — `status > 'open'::IssueStatus`. Equality
+  (`status = 'open'`) and `ORDER BY` need no cast.
+- **A value outside the enumeration projects as `NULL`**, the same way a
+  malformed `int` does. `validate` is the authority on membership; one bad file
+  does not abort the rebuild.
+
+An enumeration whose name collides with a built-in database type (`date`,
+`blob`, ...) cannot be projected and fails with `query/enum-type`; rename the
+class in the model.
+
 ### `query <sql>`
 
 Run arbitrary SQL against the derived database.
@@ -420,15 +486,20 @@ references:
 
 ### `prefetch`
 
-Download and cache the tree-sitter grammars named in `languages` in the config,
-defaulting to `mermaid`, `typescript`, `r`, `python`.
-
-```yaml
-prefetched: [mermaid, typescript, r, python]
+```
+loom prefetch <languages...>
 ```
 
-Grammars download on first use, so an offline or sandboxed run fails unless
-this has been run. Make it part of setup.
+Download and cache the named tree-sitter grammars. There is no default set and
+no configured one — naming at least one language is required.
+
+```yaml
+prefetched: [typescript, python]
+```
+
+Grammars loom is not told about download lazily, on the first parse of a file
+in that language. Prefetch exists for offline or sandboxed runs, where that
+lazy download would fail: name there whatever the repository actually contains.
 
 ### `similar <query> [--limit <n>]`
 
@@ -501,8 +572,9 @@ Codes are stable identifiers; match on these rather than on message text.
 | `graph/` | cross-file checks | see below |
 | `source/` | source code addressing and reverse links | `dangling-reverse-link`, `invalid-reverse-relation`, `ambiguous-anchor`, `unsupported-language`, `not-annotatable`, `verification-failed`, `not-found` |
 | `changeset/` | changeset parsing and application | see below |
-| `query/` | derived database | `no-database`, `failed` |
+| `query/` | derived database | `no-database`, `failed`, `enum-type` |
 | `ls/` | discovery | `not-found`, `not-a-class`, `not-a-directory` |
+| `body/` | prose editing | `patch-failed` |
 
 **`model/`** — `syntax`, `unknown-type`, `untyped-attribute`,
 `malformed-member`, `duplicate-class`, `unknown-class`, `name-collision`,
@@ -545,9 +617,6 @@ report can be assembled — but an agent must handle both. A future revision
 could emit the report shape for every failure, with the thrown diagnostic as a
 single-element `diagnostics` array.
 
-**No `--version`.** Commander will not report the package version because
-`.version()` is never called.
-
 **`similar` uses `query: text` as a sentinel** rather than a separate `mode`
 field, so a document literally named `text` would be ambiguous. Harmless today;
 a `mode: text | uri` field would be cleaner.
@@ -559,12 +628,15 @@ an easy mistake — `loom validate --json` silently ignores `--json`.
 
 Deferred deliberately; see implementation-plan for the reasoning.
 
-- **Composite attributes.** Class-typed attributes serialised as nested YAML
-  blocks. The syntax and the DuckDB `STRUCT` projection are settled, so adding
-  them is additive.
 - **MCP server.** A thin wrapper exposing `validate`, `query`, `refs`,
-  `similar` and `apply` as MCP tools, held back until this CLI contract has
-  been exercised by real use rather than frozen early.
+  `similar`, `body` and `apply` as first-class agent tools, putting them on
+  equal footing with native edit tools. Deliberately held back until this CLI
+  contract has been exercised by real use rather than frozen early.
+- **In-file agent watermarks.** Scaffolding created documents with an explicit
+  header comment (e.g. `<!-- LOOM MANAGED: Use loom body set/patch, do not edit directly -->`)
+  to deter agent file-editing instincts right at the point of inspection.
+- **Git pre-commit enforcer.** A pre-commit hook checking `loom validate && loom index --check`
+  to mechanically bounce manual link corruption and uncanonicalised relative paths.
 - **Concurrency.** Two agents running `apply` at once can interleave writes.
   There is no lock. The fix, if it becomes necessary, is a lockfile around the
   write phase, not a redesign.

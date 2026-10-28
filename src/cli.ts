@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import path from "node:path";
 import { Command } from "commander";
 import { absolute, loadConfig, RESERVED_SCHEMES, type Config } from "./config.ts";
 import { LoomError, error, summarise } from "./diagnostics.ts";
@@ -13,6 +14,7 @@ import { databasePath, query, rebuild } from "./duckdb.ts";
 import { cosineSimilarity, embedder } from "./embeddings.ts";
 import { indexCommand } from "./index.ts";
 import { getLinksBlock, parseInstance } from "./document.ts";
+import { splitProse, toUris } from "./body.ts";
 import { applyFixes } from "./fix.ts";
 import { commit, planChangeset } from "./mutate.ts";
 import { loadGraph, resolvePath, validateGraph } from "./graph.ts";
@@ -29,6 +31,20 @@ export interface CliRun {
   code: number;
   out: string;
   err: string;
+}
+
+/**
+ * The version from the installed package.json. Both `src/` and `dist/` sit one
+ * level below the package root, so the same relative path works whether loom
+ * is run from source or from a build.
+ */
+function packageVersion(): string {
+  try {
+    const manifest = path.join(import.meta.dirname, "..", "package.json");
+    return (JSON.parse(readFileSync(manifest, "utf8")) as { version?: string }).version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 /** A command returns data to emit and, optionally, a non-zero exit code. */
@@ -346,12 +362,23 @@ function refsCommand(ctx: LoadedContext, raw: string): CommandOutput {
   };
 }
 
-function prefetchCommand(cfg: Config): CommandOutput {
-  const languages = cfg.languages.length > 0 ? cfg.languages : ["mermaid", "typescript", "r", "python", "java"];
+/**
+ * Warm the grammar cache for named languages. There is no default set and no
+ * configured one: a grammar loom is not told about is downloaded lazily the
+ * first time a file in that language is parsed.
+ */
+function prefetchCommand(languages: string[]): CommandOutput {
   pack.prefetch(languages);
+  return { value: { prefetched: languages } };
+}
+
+function bodyGetCommand(ctx: LoadedContext, raw: string): CommandOutput {
+  const { canonical, path, file } = readInstance(raw, ctx);
   return {
     value: {
-      prefetched: languages,
+      uri: formatUri(canonical),
+      path,
+      body: toUris(splitProse(file.markdown).prose, path, ctx.roots),
     },
   };
 }
@@ -362,6 +389,7 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
   program
     .name("loom")
     .description("Model-driven markdown documentation graph")
+    .version(packageVersion(), "-v, --version", "print the installed loom version")
     .option("--json", "emit JSON instead of YAML")
     .option("--cwd <dir>", "directory to resolve configuration from");
 
@@ -506,8 +534,50 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
 
   program
     .command("prefetch")
-    .description("prefetch configured tree-sitter language grammars")
-    .action(() => finish(prefetchCommand(cfg())));
+    .argument("<languages...>", "tree-sitter grammars to fetch, e.g. typescript python")
+    .description("prefetch named tree-sitter grammars; otherwise they load lazily")
+    .action((languages: string[]) => finish(prefetchCommand(languages)));
+
+  const body = program
+    .command("body")
+    .description("read and edit the prose of an instance, leaving frontmatter and links alone");
+
+  body
+    .command("get")
+    .argument("<uri>", "design uri of an instance")
+    .description("print the prose, with relative links shown as design uris")
+    .action((raw: string) => finish(bodyGetCommand(ctx(), raw)));
+
+  for (const mode of ["set", "append", "patch"] as const) {
+    body
+      .command(mode)
+      .argument("<uri>", "design uri of an instance")
+      .argument("[text]", mode === "patch" ? "unified diff to apply to the prose" : "markdown prose")
+      .option("--file <path>", "read text or patch from a file instead of argument")
+      .option("--dry-run", "show what would be written without writing it")
+      .description(
+        mode === "set"
+          ? "replace the prose"
+          : mode === "append"
+            ? "add to the end of the prose"
+            : "apply a unified diff to the prose",
+      )
+      .action((raw: string, inlineText: string | undefined, options: { file?: string; dryRun?: boolean }) => {
+        let text = inlineText;
+        if (options.file !== undefined) {
+          if (!existsSync(options.file)) {
+            throw new LoomError(error("cli/file-not-found", `file not found: ${options.file}`));
+          }
+          text = readFileSync(options.file, "utf8");
+        }
+        if (text === undefined) {
+          throw new LoomError(
+            error("cli/missing-argument", `expected <text> argument or --file <path> for body ${mode}`),
+          );
+        }
+        finish(applyOps(ctx(), [{ op: "body", uri: raw, mode, text }], options));
+      });
+  }
 
   program
     .command("index")
@@ -548,15 +618,22 @@ export async function run(argv: string[]): Promise<CliRun> {
       code = next;
     },
   );
-  program.exitOverride();
-  program.configureOutput({
-    writeOut: (text) => {
-      out += text;
-    },
-    writeErr: (text) => {
-      err += text;
-    },
-  });
+  // Commander only passes these down to subcommands created after they are
+  // set, and the tree is already built, so walk it. Without this a missing
+  // argument on a subcommand calls process.exit() instead of returning a code.
+  const capture = (command: Command): void => {
+    command.exitOverride();
+    command.configureOutput({
+      writeOut: (text) => {
+        out += text;
+      },
+      writeErr: (text) => {
+        err += text;
+      },
+    });
+    command.commands.forEach(capture);
+  };
+  capture(program);
 
   try {
     await program.parseAsync(argv, { from: "user" });
@@ -571,10 +648,22 @@ export async function run(argv: string[]): Promise<CliRun> {
   }
 }
 
-const invokedDirectly = process.argv[1] !== undefined
-  && import.meta.filename.replace(/\.ts$/, ".js") === process.argv[1].replace(/\.ts$/, ".js");
+function isInvokedDirectly(): boolean {
+  if (process.argv[1] === undefined || !import.meta.filename) return false;
+  try {
+    return (
+      realpathSync(process.argv[1]).replace(/\.ts$/, ".js") ===
+      realpathSync(import.meta.filename).replace(/\.ts$/, ".js")
+    );
+  } catch {
+    return (
+      process.argv[1].replace(/\.ts$/, ".js") ===
+      import.meta.filename.replace(/\.ts$/, ".js")
+    );
+  }
+}
 
-if (invokedDirectly) {
+if (isInvokedDirectly()) {
   const result = await run(process.argv.slice(2));
   if (result.out) process.stdout.write(result.out);
   if (result.err) process.stderr.write(result.err);

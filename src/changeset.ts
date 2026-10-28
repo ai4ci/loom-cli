@@ -7,7 +7,13 @@ export type Op =
   | { op: "link"; from: string; rel: string; to: string; line?: number }
   | { op: "unlink"; from: string; rel: string; to: string; line?: number }
   | { op: "rename"; from: string; to: string }
-  | { op: "delete"; uri: string };
+  | { op: "delete"; uri: string }
+  | { op: "body"; uri: string; mode: BodyMode; text: string };
+
+/** How a body op combines its text with the prose already in the file. */
+export type BodyMode = "set" | "append" | "patch";
+
+const BODY_MODES: BodyMode[] = ["set", "append", "patch"];
 
 const REQUIRED: Record<string, string[]> = {
   create: ["uri", "attrs"],
@@ -16,6 +22,7 @@ const REQUIRED: Record<string, string[]> = {
   unlink: ["from", "rel", "to"],
   rename: ["from", "to"],
   delete: ["uri"],
+  body: ["uri", "mode", "text"],
 };
 
 export function parseChangeset(text: string): { ops: Op[]; diagnostics: Diagnostic[] } {
@@ -60,6 +67,21 @@ export function parseChangeset(text: string): { ops: Op[]; diagnostics: Diagnost
       const attrs = record["attrs"];
       if (typeof attrs !== "object" || attrs === null || Array.isArray(attrs)) {
         diagnostics.push(error("changeset/malformed-op", `${at} attrs must be a mapping`));
+        return;
+      }
+    }
+
+    if (name === "body") {
+      const mode = record["mode"];
+      if (typeof mode !== "string" || !BODY_MODES.includes(mode as BodyMode)) {
+        diagnostics.push(error(
+          "changeset/malformed-op",
+          `${at} mode must be one of ${BODY_MODES.join(", ")}`,
+        ));
+        return;
+      }
+      if (typeof record["text"] !== "string") {
+        diagnostics.push(error("changeset/malformed-op", `${at} text must be a string`));
         return;
       }
     }

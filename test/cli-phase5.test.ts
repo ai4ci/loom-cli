@@ -97,12 +97,12 @@ test("refs command identifies design documents referencing a source function", a
   assert.deepEqual(out.references, [{ from: "issue://one.md", relation: "implemented-by" }]);
 });
 
-test("prefetch command downloads/warms grammars", async () => {
+test("prefetch command downloads/warms the grammars it is named", async () => {
   const root = repo();
-  const r = await run(["--cwd", root, "prefetch"]);
+  const r = await run(["--cwd", root, "prefetch", "typescript"]);
   assert.equal(r.code, 0);
   const out = parse(r.out) as any;
-  assert.ok(out.prefetched.length > 0);
+  assert.deepEqual(out.prefetched, ["typescript"]);
 });
 
 test("an ambiguous anchor is an error, not a silent first match", async () => {

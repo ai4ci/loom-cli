@@ -25,24 +25,37 @@ Loom turns an ordinary repository of Markdown files into a typed, validated, and
 ### 1. Prerequisites
 - Node.js >= 22
 
-### 2. Clone and Link Globally
+### 2. Local Installation & Development Link
+
+#### In a consumer project (Bun or npm)
+In consumer projects using Bun or Node:
 ```bash
-git clone https://github.com/your-org/loom-cli.git # or local checkout
-cd loom-cli
-npm install
+# In the loom-cli directory:
 npm run build
-npm link
+bun link          # or: npm link (if npm prefix is configured in user home)
+
+# In your target project:
+bun link loom     # or: npm link loom
+bun run loom --help
 ```
 
-Verify installation:
+#### Run directly from source without installing (Fastest for local development)
+You do not need to link or compile `dist` while actively editing the codebase. You can run directly from `src/cli.ts` using Bun or Node 22+:
 ```bash
-loom --help
+# With Bun:
+bun /path/to/loom-cli/src/cli.ts --help
+
+# With Node 22+:
+node --experimental-strip-types /path/to/loom-cli/src/cli.ts --help
+
+# Tip: Add a shell alias in ~/.bashrc or ~/.zshrc:
+alias loom="bun /path/to/loom-cli/src/cli.ts"
 ```
 
 ### 3. Grammar Prefetch
-Loom bundles Tree-Sitter parsers for multi-language AST inspection (TypeScript, Python, R, Mermaid). For offline or isolated environments, warm the parser cache:
+Loom uses Tree-Sitter parsers for multi-language AST inspection. Grammars download lazily, on the first parse of a file in that language. For offline or isolated environments, warm the cache first by naming the languages the repository contains:
 ```bash
-loom prefetch
+loom prefetch typescript python r
 ```
 
 ---

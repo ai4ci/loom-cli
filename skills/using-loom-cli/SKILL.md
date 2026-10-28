@@ -21,19 +21,27 @@ npx loom --help
 ```
 
 ### Global or Standalone Link
-To build and use directly from the tool's source repository:
+To build and link into another local project:
 ```bash
 cd /path/to/loom
 npm run build
-npm link
-# or run directly:
-node /path/to/loom/dist/src/cli.js --help
+bun link          # or npm link
+
+# In your target project:
+bun link loom     # or npm link loom
+
+# or run directly without linking:
+node /path/to/loom/dist/cli.js --help
+# or run directly from TypeScript (no build needed):
+bun /path/to/loom/src/cli.ts --help
 ```
 
 ### Language Parser Prefetch
-`loom` uses Tree-Sitter grammars for code parsing and anchor resolution (TS, Python, R, Mermaid). On new environments or offline setups, run:
+`loom` uses Tree-Sitter grammars for code parsing and anchor resolution. Grammars download **lazily**, on the first parse of a file in that language, so normally you need do nothing.
+
+On offline or sandboxed setups that lazy download fails, so warm the cache first by naming the languages the repository contains. At least one language is required — there is no default set:
 ```bash
-loom prefetch
+loom prefetch typescript python r
 ```
 
 ## 2. Invocation Rules & Output Formats
@@ -47,6 +55,7 @@ loom resolve issue://a.md --json     # Error: unrecognized option
 
 - `--json`: Output machine-readable JSON instead of human-friendly YAML.
 - `--cwd <path>`: Run as if invoked from `<path>` (defaults to `process.cwd()`). Repository root is discovered via git.
+- `-v, --version`: Print the installed loom version and exit. Needs no model, config or git repository — use it to confirm which build is on `PATH`.
 
 ### Output Contracts
 Every command produces one of three shapes:
@@ -77,8 +86,11 @@ loom model check
 loom resolve issue://fix-login.md
 loom resolve src://src/auth.ts#login
 
-# Inspect instance YAML frontmatter + markdown body
+# Inspect instance YAML frontmatter + markdown body (verbatim, as on disk)
 loom show issue://fix-login.md
+
+# Read just the editable prose, with relative links shown as design uris
+loom --json body get issue://fix-login.md
 
 # Hierarchical directory and symbol exploration (ls)
 loom ls issue://                       # List all instances of class 'issue'
@@ -127,6 +139,60 @@ loom rename issue://old-name.md issue://new-name.md
 # Delete an instance (fails if inbound relations still exist)
 loom delete issue://old-name.md
 ```
+
+#### Editing the Markdown Body
+
+Edit prose through `loom`, not with a file editor: the body commands cannot
+touch the YAML frontmatter or the protected `<!-- loom:links -->` block, so
+there is no way to corrupt either.
+
+```bash
+# Read the prose (frontmatter and link block excluded)
+loom --json body get issue://fix-login.md
+
+# Replace it (inline or from a file to avoid shell-escaping headaches)
+loom body set issue://fix-login.md "## Cause
+
+Session cookie expires early.
+"
+loom body set issue://fix-login.md --file /tmp/new-body.md
+
+# Add to the end of it
+loom body append issue://fix-login.md "
+## Update
+
+Fixed in 1.2.1.
+"
+loom body append issue://fix-login.md --file /tmp/update.md
+
+# Apply a unified diff to it
+loom body patch issue://fix-login.md "@@ -1,3 +1,3 @@
+ ## Cause
+-Session cookie expires early.
++Session cookie expired one hour early.
+"
+loom body patch issue://fix-login.md --file /tmp/fix.diff
+
+# Any of the three can be previewed
+loom body set issue://fix-login.md "New prose.
+" --dry-run
+loom body set issue://fix-login.md --file /tmp/new-body.md --dry-run
+```
+
+**Links are translated in both directions.** Write design URIs; loom converts
+them to relative markdown links on disk, so the file renders correctly on
+GitHub. Read them back and they are URIs again:
+
+```bash
+loom body set issue://a.md "Caused by [the auth ADR](adr://auth.md).
+"
+# on disk:  Caused by [the auth ADR](../adr/auth.md).
+# body get: Caused by [the auth ADR](adr://auth.md).
+```
+
+URLs, `mailto:`, in-page `#fragments` and paths outside the repository are left
+alone. A `patch` whose context does not match fails with `body/patch-failed`
+and writes nothing — re-read with `body get` and rebuild the diff.
 
 #### Batch Mutations (Changesets)
 For multi-step or multi-file mutations:
@@ -189,6 +255,25 @@ SELECT u.name FROM issue, UNNEST(reviewers) u;
 DESCRIBE issue;
 ```
 
+#### Enumerations are native ENUM types
+An `<<enumeration>>` projects as a DuckDB `ENUM` declared in the model's member
+order, so ordering follows the lifecycle rather than the alphabet:
+
+```sql
+-- model order: backlog, in_progress, review, done
+SELECT title, status FROM story ORDER BY status;      -- backlog first
+SELECT MIN(status), MAX(status) FROM story;           -- earliest, latest stage
+SELECT list_sort(stages_seen) FROM story;             -- also declaration order
+```
+
+- **Equality and `ORDER BY` need no cast.** An *ordering* comparison against a
+  bare literal does: DuckDB reads `status > 'backlog'` by casting the enum down
+  to text (alphabetical). Write `status > 'backlog'::WorkStatus` instead.
+- **Run `loom rebuild` after editing an enumeration's members** — the type is
+  baked into the database.
+- A value outside the enumeration reads back as `NULL`; run `loom validate` to
+  find which file is wrong.
+
 #### Semantic search across markdown bodies
 The rebuild also populates an `embedding` table (one vector per
 instance). Search with `loom similar`:
@@ -211,3 +296,5 @@ loom similar issue://fix-login.md
 | `source/ambiguous-anchor` | Symbol name appears multiple times in file (e.g. nested scope or overload). | Use fully-qualified anchor path (e.g. `Class.method` or `func(int,string)`). |
 | `source/not-annotatable` | Attempted to link source declaration that lacks a block body (e.g. interface signature). | Attach comment to the enclosing class or linking document instead. |
 | `source/verification-failed` | Splicing comment into source caused syntax error or attached to wrong AST node. | Check source file syntax; annotate manually if needed. |
+| `body/patch-failed` | A `loom body patch` hunk matched no part of the prose (or the patch had no `@@` hunks). | Re-read with `loom --json body get` and rebuild the diff against that text. Nothing was written. |
+| `query/enum-type` | An `<<enumeration>>` class is named after a built-in database type (`date`, `blob`, ...). | Rename the enumeration in the model, then `loom rebuild`. |
