@@ -21,13 +21,58 @@ export type ExistsCheck = (repoRelativePath: string) => boolean;
 
 const URI_RE = /^([A-Za-z][A-Za-z0-9+.-]*):\/\/([^]*)$/;
 
+/** `scheme:` written with fewer than the two slashes a design uri needs. */
+const SCHEME_SHORT_SLASH = /^[A-Za-z][A-Za-z0-9+.-]*:(?!\/\/)/;
+
+/** A trailing `.ext`, which makes a slash-free string read as a filename. */
+const FILE_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
+
+/**
+ * Does this read as a filesystem path rather than a design uri? Agents reach
+ * for the path they can see on disk, so this is the single most common bad
+ * input, and it deserves a better answer than "not a design uri".
+ */
+function looksLikePath(raw: string): boolean {
+  if (raw === "") return false;
+  if (raw.includes("/")) return true;
+  if (raw === "." || raw === "..") return true;
+  return FILE_EXTENSION.test(raw);
+}
+
+/**
+ * Explain a rejection in the terms the caller got it wrong in. A bare path
+ * gets its own code so callers that know the class roots can answer with the
+ * exact uri to use instead (see `suggestUri` in cli.ts).
+ */
+function reject(raw: string): never {
+  // `://` present means the caller was aiming at a uri and missed, so the
+  // problem is the scheme, not the shape.
+  if (!raw.includes("://") && SCHEME_SHORT_SLASH.test(raw)) {
+    throw new LoomError(error(
+      "uri/malformed",
+      `a design uri needs two slashes after the scheme: ${JSON.stringify(raw)}`,
+      { uri: raw, fix: `write it as <class>://<id>, e.g. ${raw.replace(/:\/?/, "://")}` },
+    ));
+  }
+
+  if (!raw.includes("://") && looksLikePath(raw)) {
+    throw new LoomError(error(
+      "uri/bare-path",
+      `${JSON.stringify(raw)} is a filesystem path, not a design uri`,
+      {
+        uri: raw,
+        fix: "address the document by class and id, as <class>://<id> "
+          + "(`loom ls <class>://` lists what exists)",
+      },
+    ));
+  }
+
+  throw new LoomError(error("uri/malformed", `not a design uri: ${JSON.stringify(raw)}`, { uri: raw }));
+}
+
 export function parseUri(raw: string): ParsedUri {
   const match = URI_RE.exec(raw.trim());
-  if (!match) {
-    throw new LoomError(
-      error("uri/malformed", `not a design uri: ${JSON.stringify(raw)}`),
-    );
-  }
+  if (!match) reject(raw.trim());
 
   const scheme = match[1]!.toLowerCase();
   let rest = match[2]!;

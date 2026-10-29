@@ -1,4 +1,4 @@
-import { type Diagnostic, error } from "./diagnostics.ts";
+import { LoomError, type Diagnostic, error } from "./diagnostics.ts";
 import {
   effectiveAttributes,
   effectiveRelations,
@@ -74,8 +74,16 @@ function checkScalar(
           try {
             parseUri(value);
             return [];
-          } catch {
-            return [error("instance/invalid-uri", `"${attribute.name}" is not a design uri: ${JSON.stringify(value)}`, { uri })];
+          } catch (cause) {
+            // Keep parseUri's reading of *why* it is not a uri — a bare path
+            // written into frontmatter deserves the same answer as one typed
+            // on the command line.
+            const detail = cause instanceof LoomError ? cause.diagnostic : null;
+            return [error(
+              "instance/invalid-uri",
+              `"${attribute.name}" is not a design uri: ${detail?.message ?? JSON.stringify(value)}`,
+              detail?.fix === undefined ? { uri } : { uri, fix: detail.fix },
+            )];
           }
         case "int":
           return typeof value === "number" && Number.isInteger(value) ? [] : mismatch();
@@ -244,11 +252,12 @@ export function validateInstance(
       let targetClass: string;
       try {
         targetClass = parseUri(target).scheme;
-      } catch {
+      } catch (cause) {
+        const detail = cause instanceof LoomError ? cause.diagnostic : null;
         found.push(error(
           "instance/invalid-uri",
-          `"${relation.name}" target ${JSON.stringify(target)} is not a design uri`,
-          { uri },
+          `"${relation.name}" target ${detail?.message ?? `${JSON.stringify(target)} is not a design uri`}`,
+          detail?.fix === undefined ? { uri } : { uri, fix: detail.fix },
         ));
         continue;
       }

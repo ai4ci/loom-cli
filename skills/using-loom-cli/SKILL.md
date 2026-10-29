@@ -57,6 +57,29 @@ loom resolve issue://a.md --json     # Error: unrecognized option
 - `--cwd <path>`: Run as if invoked from `<path>` (defaults to `process.cwd()`). Repository root is discovered via git.
 - `-v, --version`: Print the installed loom version and exit. Needs no model, config or git repository — use it to confirm which build is on `PATH`.
 
+### Always Address Documents by URI, Never by Path
+
+Every `<uri>` argument takes a design URI, **not** the file path you can see on
+disk. The path is just where the class root happens to point; the URI is the
+address.
+
+```bash
+loom show issue://fix-login.md          # Correct
+loom show design/issue/fix-login.md     # Error: uri/bare-path
+```
+
+If you pass a path, loom refuses it and tells you the URI to use:
+
+```
+uri/bare-path: "design/issue/fix-login.md" is a filesystem path, not a design uri
+  fix: use issue://fix-login.md instead
+```
+
+Copy the suggested URI and re-run. The same rule applies to URIs written into
+frontmatter relations (`blocks: [issue://b.md]`) and to `ops` in a changeset
+file. To go the other way — from a path you already have to its URI — the error
+itself is the quickest answer, and `loom ls <class>://` lists what exists.
+
 ### Output Contracts
 Every command produces one of three shapes:
 1. **Data** (exit 0): structured payload on stdout.
@@ -286,6 +309,8 @@ loom similar issue://fix-login.md
 
 | Diagnostic Code | Meaning | Recovery / Fix |
 |---|---|---|
+| `uri/bare-path` | A filesystem path was given where a design URI belongs (e.g. `design/issue/a.md` instead of `issue://a.md`). | Use the URI named in the diagnostic's `fix`. Nothing was written. |
+| `uri/malformed` | The argument is not a URI at all, or the scheme has only one slash (`issue:/a.md`). | Write it as `<class>://<id>`. |
 | `graph/stale-links` | Protected link block in markdown is out of sync with frontmatter. | Run `loom validate --fix`. |
 | `graph/non-canonical-uri` | A URI has unnecessary path segments or wrong format. | Run `loom validate --fix`. |
 | `graph/renamed-symbol` | Source symbol anchor broken, but matches a renamed symbol since `HEAD`. | Run `loom validate --fix` to rewrite. |
