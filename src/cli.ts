@@ -4,7 +4,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { Command } from "commander";
 import { absolute, loadConfig, RESERVED_SCHEMES, type Config } from "./config.ts";
-import { LoomError, error, summarise } from "./diagnostics.ts";
+import { LoomError, type Diagnostic, error, summarise } from "./diagnostics.ts";
 import { parse as parseYaml } from "yaml";
 import { readFileSync as readTextFile } from "node:fs";
 import { type Op, parseChangeset } from "./changeset.ts";
@@ -214,9 +214,27 @@ function parseAssignments(pairs: string[]): Record<string, unknown> {
   return attrs;
 }
 
+/** Every field of an op that has to be a design uri rather than a path. */
+function uriFields(op: Op): string[] {
+  switch (op.op) {
+    case "link":
+    case "unlink":
+    case "rename":
+      return [op.from, op.to];
+    default:
+      return [op.uri];
+  }
+}
+
 function applyOps(ctx: LoadedContext, ops: Op[], options: { dryRun?: boolean }): CommandOutput {
   const { cfg, roots } = ctx;
   const { schema } = loadModel(cfg);
+
+  // Reject a path-shaped argument here rather than letting it reach the graph,
+  // where a uri that is merely absent reads as "does not exist" — misleading
+  // when the file is sitting right there under a different name.
+  for (const op of ops) uriFields(op).forEach((raw) => void parseUri(raw));
+
   const plan = planChangeset(cfg, schema, roots, ops);
   const report = summarise(plan.diagnostics);
 
@@ -605,6 +623,42 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
   return program;
 }
 
+/**
+ * The uri that addresses a bare path, when the model can be loaded. Best
+ * effort by design: a bad path is reported either way, and a run without a
+ * readable model still gets the generic hint from `parseUri`.
+ */
+function suggestUri(raw: string, cwd?: string): string | null {
+  try {
+    const { cfg, roots } = loadContext(cwd);
+
+    const hash = raw.indexOf("#");
+    const anchor = hash >= 0 ? raw.slice(hash + 1) : undefined;
+    let target = hash >= 0 ? raw.slice(0, hash) : raw;
+
+    if (path.isAbsolute(target)) {
+      const relative = path.relative(cfg.repoRoot, target);
+      // Outside the repository there is no uri to offer.
+      if (relative === "" || relative.startsWith("..")) return null;
+      target = relative;
+    }
+
+    return formatUri(canonicalise(target.split(path.sep).join("/"), roots, anchor));
+  } catch {
+    return null;
+  }
+}
+
+/** Render a thrown diagnostic, including its repair hint when it has one. */
+function renderError(diagnostic: Diagnostic, cwd?: string): string {
+  let fix = diagnostic.fix;
+  if (diagnostic.code === "uri/bare-path" && diagnostic.uri !== undefined) {
+    const suggestion = suggestUri(diagnostic.uri, cwd);
+    if (suggestion !== null) fix = `use ${suggestion} instead`;
+  }
+  return `${diagnostic.code}: ${diagnostic.message}\n${fix === undefined ? "" : `  fix: ${fix}\n`}`;
+}
+
 export async function run(argv: string[]): Promise<CliRun> {
   let out = "";
   let err = "";
@@ -640,7 +694,7 @@ export async function run(argv: string[]): Promise<CliRun> {
     return { code, out, err };
   } catch (cause) {
     if (cause instanceof LoomError) {
-      return { code: 1, out, err: `${cause.diagnostic.code}: ${cause.message}\n` };
+      return { code: 1, out, err: renderError(cause.diagnostic, program.opts<GlobalOptions>().cwd) };
     }
     const exitCode = (cause as { exitCode?: number }).exitCode;
     if (typeof exitCode === "number") return { code: exitCode, out, err };

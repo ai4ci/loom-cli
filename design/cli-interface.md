@@ -39,6 +39,31 @@ configuration: `document-model.mmd` is discovered automatically in the repositor
 derived from model inheritance and `%% @path` directives in the model. See
 [complex-path-examples.md](./complex-path-examples.md).
 
+### `<uri>` arguments are uris, never paths
+
+Every argument spelled `<uri>` takes a design uri — `issue://a.md`, not
+`design/issue/a.md`. The path is an implementation detail of where the class
+root happens to point; the uri is the address.
+
+A path-shaped argument is rejected with `uri/bare-path` rather than being
+silently resolved, and the error names the uri to use instead:
+
+```
+$ loom resolve design/issue/a.md
+uri/bare-path: "design/issue/a.md" is a filesystem path, not a design uri
+  fix: use issue://a.md instead
+```
+
+The suggestion is computed from the class roots, so it handles absolute paths
+inside the repository, `#anchor` suffixes, and paths under no class root (which
+become `repo://`). Where no model can be loaded the generic hint is given
+instead. The same check runs on changeset `ops`, and the same explanation is
+reused by `validate` when a bare path is written into frontmatter.
+
+This matters because the failure it replaces was actively misleading: a path
+passed to `set` or `link` used to be reported as "does not exist", which is
+false — the file is there, under an address loom does not accept.
+
 ## 2. Output contract
 
 **YAML by default, JSON with `--json`.** Storage is YAML and changesets are
@@ -85,10 +110,16 @@ diagnostics:
 
 **Error** — stdout is empty, stderr carries `code: message`, exit 1. Thrown for
 conditions that abort before a report can be assembled: a malformed uri, a
-missing file, a failed SQL statement.
+missing file, a failed SQL statement. A diagnostic carrying a `fix` prints it
+on an indented second line.
 
 ```
 instance/not-found: no file at design/issue/ghost.md
+```
+
+```
+uri/bare-path: "design/issue/a.md" is a filesystem path, not a design uri
+  fix: use issue://a.md instead
 ```
 
 ### Diagnostic record
@@ -566,7 +597,7 @@ Codes are stable identifiers; match on these rather than on message text.
 |---|---|---|
 | `cli/` | argument parsing | `bad-assignment`, `missing-option` |
 | `config/` | configuration | `reserved-scheme` |
-| `uri/` | uri handling | `malformed`, `escapes-root`, `not-a-class` |
+| `uri/` | uri handling | `malformed`, `bare-path`, `escapes-root`, `not-a-class` |
 | `model/` | model parsing and validation | see below |
 | `instance/` | one instance against the model | see below |
 | `graph/` | cross-file checks | see below |

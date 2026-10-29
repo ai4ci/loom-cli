@@ -1,7 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { canonicalise, equivalent, formatUri, parseUri, resolveUri } from "../src/uri.ts";
+import { LoomError } from "../src/diagnostics.ts";
 import type { ClassRoots } from "../src/path-resolution.ts";
+
+/** The diagnostic a parseUri rejection carried, or null if it did not throw. */
+function rejection(raw: string) {
+  try {
+    parseUri(raw);
+    return null;
+  } catch (cause) {
+    return cause instanceof LoomError ? cause.diagnostic : null;
+  }
+}
 
 const roots: ClassRoots = new Map([
   ["issue", "design/issue"],
@@ -29,6 +40,39 @@ test("parseUri normalises redundant path segments", () => {
 test("parseUri rejects malformed input", () => {
   for (const bad of ["not-a-uri", "issue:/single-slash.md", "://no-scheme", ""]) {
     assert.throws(() => parseUri(bad), /uri/i, `expected ${bad} to be rejected`);
+  }
+});
+
+test("a filesystem path is rejected as a bare path, not as generic malformed input", () => {
+  for (const bare of [
+    "design/issue/a.md",
+    "a.md",
+    "./a.md",
+    "../elsewhere/a.md",
+    "/abs/design/issue/a.md",
+    "src/auth.ts#login",
+  ]) {
+    const diagnostic = rejection(bare);
+    assert.equal(diagnostic?.code, "uri/bare-path", `expected ${bare} to be a bare path`);
+  }
+});
+
+test("the bare-path diagnostic carries the offending text and a repair hint", () => {
+  const diagnostic = rejection("design/issue/a.md");
+  assert.equal(diagnostic?.uri, "design/issue/a.md");
+  assert.match(diagnostic?.message ?? "", /design\/issue\/a\.md/);
+  assert.ok(diagnostic?.fix, "expected a fix hint");
+});
+
+test("a scheme with one slash is malformed, and says so", () => {
+  const diagnostic = rejection("issue:/single-slash.md");
+  assert.equal(diagnostic?.code, "uri/malformed");
+  assert.match(`${diagnostic?.message} ${diagnostic?.fix}`, /two slashes|:\/\//);
+});
+
+test("input that is neither uri-shaped nor path-shaped stays malformed", () => {
+  for (const bad of ["not-a-uri", "://no-scheme", ""]) {
+    assert.equal(rejection(bad)?.code, "uri/malformed", `expected ${bad} to stay malformed`);
   }
 });
 
