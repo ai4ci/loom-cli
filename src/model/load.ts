@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { absolute, type Config } from "../config.ts";
+import { absolute, type Config, findModelFiles } from "../config.ts";
 import { LoomError, type Diagnostic, error } from "../diagnostics.ts";
 import {
   classRoot as pickClassRoot,
@@ -23,7 +23,7 @@ export interface LoadedModel {
   diagnostics: Diagnostic[];
 }
 
-export function defaultModelPath(cfg: Config): string {
+function defaultModelPath(cfg: Config): string {
   return absolute(cfg, `${cfg.designRoot}/${MODEL_FILENAME}`);
 }
 
@@ -38,6 +38,23 @@ export function loadModel(cfg: Config, override?: string): LoadedModel {
     : path.resolve(cfg.repoRoot, override);
 
   if (!existsSync(target)) {
+    // If the config didn't find a model and fell back to "design", give a
+    // more helpful error that mentions repo-wide search.
+    const matches = findModelFiles(cfg.repoRoot);
+    if (matches.length === 0) {
+      throw new LoomError(error(
+        "model/not-found",
+        `no document model found — expected ${cfg.designRoot}/${MODEL_FILENAME}`,
+        { fix: `create ${MODEL_FILENAME} under a repo-relative path, or set the LOOM_DEFAULT_ROOT environment variable` },
+      ));
+    }
+    if (matches.length > 1) {
+      throw new LoomError(error(
+        "model/ambiguous",
+        `multiple document models found — set LOOM_DEFAULT_ROOT to disambiguate`,
+        { fix: `set LOOM_DEFAULT_ROOT to the repo-relative directory containing your ${MODEL_FILENAME}, e.g. LOOM_DEFAULT_ROOT=docs` },
+      ));
+    }
     throw new LoomError(error("model/not-found", `no document model at ${target}`, {
       fix: `create ${cfg.designRoot}/${MODEL_FILENAME}`,
     }));

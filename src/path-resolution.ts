@@ -228,16 +228,21 @@ function resolveRelative(
   designRoot: string,
   relative: string,
 ): string {
-  // Relative annotations are taken as a literal repo-relative path: the
-  // author writes `design/issue` because that's where the files actually
-  // sit. They are NOT joined onto the design root — that would create
-  // double `design/design/` paths. The design root is just a default for
-  // classes that don't declare a path at all (handled by the second pass).
-  void name;
-  void def;
-  void schema;
-  void resolved;
-  void designRoot;
+  // Terminal anchors (`src`, `resource`) treat their relative path as
+  // repo-relative (e.g. `%% @path resource data` -> `$REPO_ROOT/data`).
+  if (TERMINAL_ANCHORS.has(name)) return relative;
+
+  // Non-terminal classes: walk up the UML hierarchy to find the first
+  // ancestor that has already been resolved, and join the relative path
+  // onto that ancestor's root. This matches the spec rule that relative
+  // `%% @path` values nest under the parent's root.
+  const ancestor = firstResolvedAncestor(def, schema, resolved);
+  if (ancestor !== undefined) return joinPath(resolved.get(ancestor)!, relative);
+
+  // Orphan class (no UML parent): the relative path is a literal
+  // repo-relative hint, not joined onto the design root. The author
+  // writes `%% @path issue design/issue` because that's where the
+  // files actually sit.
   return relative;
 }
 
@@ -276,6 +281,30 @@ function firstResolvedParent(
 ): string | undefined {
   for (const parent of def.parents) {
     if (resolved.has(parent)) return parent;
+  }
+  return undefined;
+}
+
+/**
+ * Walk the full UML hierarchy to find the first ancestor whose path is
+ * already resolved. Unlike {@link firstResolvedParent}, this follows
+ * grandparents and beyond so that a grandchild class with a relative
+ * `@path` can nest under a grandparent's root even when the intermediate
+ * class has no annotation of its own.
+ */
+function firstResolvedAncestor(
+  def: ClassDef,
+  schema: SchemaIR,
+  resolved: Map<string, string>,
+): string | undefined {
+  const seen = new Set<string>();
+  const queue = [...def.parents];
+  while (queue.length > 0) {
+    const name = queue.shift()!;
+    if (!seen.add(name)) continue;
+    if (resolved.has(name)) return name;
+    const parentDef = schema.classes.get(name);
+    if (parentDef) queue.push(...parentDef.parents);
   }
   return undefined;
 }
