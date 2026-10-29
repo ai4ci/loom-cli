@@ -56,6 +56,7 @@ set as an env var.
 - **Source Code Integration**: Use or subclass the reserved `src` class.
   - Subclasses of `src` define custom root directories or schemes (e.g. `src <|-- test`).
   - Loom forbids structured YAML on the `src` family — anchors carry no frontmatter.
+- **Inline Views**: Define named SQL queries directly in the model with `%% @view <name>`, a multi-line body using continuation `%%` lines. Parameters use `$name` placeholders; list params are comma-separated (see Step 6).
 - **Relations**: Arrow `-->` with cardinality at both ends and relation label:
   ```mermaid
   classDiagram
@@ -188,7 +189,95 @@ For example, for an Issue Tracker:
 
 ---
 
-## Step 6: Generate the Project-Specific Workflow Skill
+## Step 6: Add Inline Views (Live Data in Markdown Files)
+
+Add `%% @view` annotations to `document-model.mmd` for SQL queries you want
+to embed in markdown files. Inline views render live data from the DuckDB graph
+into any `.md` file via `<!-- loom view: ... -->` markers.
+
+### Example: View definition in the model
+
+```mermaid
+classDiagram
+    %% @path issue docs/issues
+
+    class issue {
+        +string title
+        +string status
+    }
+
+    %% @view blocking_issues
+    %% SELECT uri, title, status
+    %% FROM issue
+    %% WHERE status = 'open'
+
+    %% @view by_status
+    %% SELECT status, count(*) AS cnt
+    %% FROM issue
+    %% GROUP BY status
+```
+
+### Example: View marker in a markdown file
+
+```markdown
+## Open Issues
+
+<!-- loom view: blocking_issues -->
+<!-- loom view: end -->
+
+## By Status
+
+<!-- loom view: by_status -->
+<!-- loom view: end -->
+```
+
+Running `loom render` replaces the span between the markers with the query
+result as a markdown table (2–4 columns), bullet list (1 column), or compact
+bold-key list (5+ columns). `loom render --check` is the CI-safe variant
+that exits 1 if any marker would change.
+
+### Parameters
+
+Pass values via query-string syntax; the SQL uses `$name` placeholders:
+
+```markdown
+<!-- loom view: blocking_issues?status=in_progress&limit=5 -->
+```
+
+```mermaid
+    %% @view blocking_issues
+    %% SELECT uri, title, status
+    %% FROM issue
+    %% WHERE status = '$status'
+    %% LIMIT $limit
+```
+
+List params use comma-separated values: `status=open,closed` expands to
+`IN ('open', 'closed')`. Backslash-escaped commas are literal (`foo\,bar` is
+one value).
+
+### Inline SQL (no model definition)
+
+```markdown
+<!-- loom view: SELECT count(*) AS cnt FROM issue -->
+<!-- loom view: end -->
+```
+
+Inline SQL needs no `%% @view` annotation; just write `SELECT` after the marker.
+
+### When to use vs `loom index`
+
+| Feature | `loom index` | `loom render` |
+|---|---|---|
+| Managed link blocks | Yes | No |
+| Editable prose | No | No (read-only output) |
+| Inline in any document | No | Yes |
+| Parameters per invocation | No | Yes (`?key=val`) |
+| CI check | `--check` | `--check` |
+
+---
+
+## Step 7: Generate the Project-Specific Workflow Skill
 
 To ensure future agents operate reliably within this specific repository, create a dedicated skill (e.g. `<project>-design-workflow/SKILL.md` in the repository's skill directory - `.agents/skills`).
 
@@ -271,19 +360,21 @@ relative markdown links and returns them as URIs.
 Always run before committing changes to design docs:
 1. \`loom validate --fix\`
 2. \`loom index\`
-3. Verify zero errors in \`design/VALIDATION.md\`
+3. `loom render` (regenerate any inline view markers)
+4. Verify zero errors in \`design/VALIDATION.md\`
 
 ```
 
 ---
 
-## Step 7: Verification Checklist
+## Step 8: Verification Checklist
 
 1. Model passes `loom model check`.
 2. Graph validates clean with `loom validate`.
 3. Indexes update cleanly with `loom index`.
-4. Git pre-commit or CI check runs `loom validate && loom index --check`.
-5. The companion `using-loom-cli` skill is present and referenced.
+4. Inline views render cleanly with `loom render`.
+5. Git pre-commit or CI check runs `loom validate && loom index --check && loom render --check`.
+6. The companion `using-loom-cli` skill is present and referenced.
 
 ---
 

@@ -250,6 +250,91 @@ loom index
 loom index --check
 ```
 
+### Inline Views (Live Query Results in Any Markdown File)
+
+Scans every `.md` file in the repo for `<!-- loom view: ... -->` markers and
+replaces the content between the marker and its matching `<!-- loom view: end -->`
+with live data from the DuckDB graph.
+
+```bash
+# Render all view markers in every .md file
+loom render
+
+# Dry-run for CI (exits 1 if any marker would change)
+loom render --check
+
+# Print resolved SQL for each view to stderr
+loom render --debug
+```
+
+#### Named views (defined in the model)
+
+In `document-model.mmd`, declare SQL queries with `%% @view <name>`:
+
+```mermaid
+classDiagram
+    %% @path issue docs/issues
+
+    class issue {
+        +string title
+        +string status
+    }
+
+    %% @view open_issues
+    %% SELECT uri, title, status
+    %% FROM issue
+    %% WHERE status = 'open'
+```
+
+Then use the name in any markdown file:
+
+```markdown
+## Open Issues
+
+<!-- loom view: open_issues -->
+<!-- loom view: end -->
+```
+
+#### Inline SQL (no model definition needed)
+
+```markdown
+<!-- loom view: SELECT count(*) AS cnt FROM issue -->
+<!-- loom view: end -->
+```
+
+#### Parameters
+
+Pass parameters via query-string syntax in the marker; the view definition
+references them with `$name`:
+
+```markdown
+<!-- loom view: open_issues?status=in_progress&limit=5 -->
+```
+
+```mermaid
+    %% @view open_issues
+    %% SELECT uri, title, status
+    %% FROM issue
+    %% WHERE status = '$status'
+    %% LIMIT $limit
+```
+
+**List parameters** use comma-separated values (backslash-escaped commas are
+literal): `status=open,in_progress` expands to `status IN ('open', 'in_progress')`.
+
+#### Output rules
+
+| Rows | Columns | Rendered as |
+|---|---|---|
+| 0 | any | `_(no results)_` |
+| 1+ | 1 | bullet list (`- value`) |
+| 1+ | 2–4 | markdown table |
+| 1+ | 5+ | compact bold-key list (`**col:** val  **col2:** val2`) |
+| error | any | `_Query failed: <message>_` |
+| — | — | `_Unknown view "<name>"._` if the name is not defined in the model |
+
+`render` automatically rebuilds the DuckDB database if it does not exist.
+
 ### Querying with SQL (DuckDB)
 The graph and relations project into DuckDB:
 ```bash
