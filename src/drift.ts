@@ -4,7 +4,7 @@ import { type Anchor, type AnchorPolicy, extractAnchors } from "./source.ts";
 import { similarity } from "./similarity.ts";
 
 /**
- * Drift tier 2 (source-linkage §6.2): when an anchor stops resolving, compare
+ * Drift tier 2 (source-linkage §6): when an anchor stops resolving, compare
  * the file against HEAD. A declaration that existed before under the old name
  * and exists now under a new one, with a near-identical body, is a rename.
  */

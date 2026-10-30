@@ -31,7 +31,7 @@ function defaultModelPath(cfg: Config): string {
 /**
  * Read and validate a model. `override` points at a proposed model so its
  * authoring errors and impact can be checked before it is installed
- * (plan §CLI.9).
+ * (architecture §2.4).
  */
 export function loadModel(cfg: Config, override?: string): LoadedModel {
   const target = override === undefined

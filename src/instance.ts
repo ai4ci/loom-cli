@@ -8,7 +8,7 @@ import {
 import type { Attribute, Cardinality, SchemaIR } from "./model/types.ts";
 import { parseUri } from "./uri.ts";
 
-/** Keys every instance carries for self-description (plan §2.2). */
+/** Keys every instance carries for self-description (architecture §3). */
 export const RESERVED_KEYS = ["class", "id"] as const;
 
 export interface InstanceInput {

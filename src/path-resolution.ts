@@ -130,7 +130,7 @@ function under(p: string, root: string): boolean {
 
 /**
  * Compute the repo-relative path for every class in the schema. Resolution
- * follows complex-path-examples §5:
+ * follows architecture §2.2:
  *
  *   1. `src` and `resource` are terminal anchors: their `@path` value is
  *      always repo-relative, no matter absolute or relative. Their default

@@ -83,7 +83,7 @@ function editProse(
 
 /**
  * Apply ops to the in-memory graph. Validation of the result happens in
- * `planChangeset`; nothing here touches the disk (plan §1.2).
+ * `planChangeset`; nothing here touches the disk (architecture §1.2).
  */
 function applyOps(graph: Graph, ops: Op[]): Diagnostic[] {
   const found: Diagnostic[] = [];
@@ -287,7 +287,7 @@ export function planChangeset(
  * Resolve source-side links into file writes: one parse per file, every
  * insertion point taken against the original buffer, edits applied descending
  * by offset, then the result re-parsed to confirm it still parses and that the
- * link attached where it was meant to (source-linkage §4.6).
+ * link attached where it was meant to (source-linkage §4.2).
  */
 function planSourceLinks(
   cfg: Config,

@@ -64,7 +64,7 @@ export function isInstantiable(schema: SchemaIR, name: string): boolean {
   return true;
 }
 
-/** Classes named as the type of some attribute — value types (plan §1.10). */
+/** Classes named as the type of some attribute — value types (architecture §2.5). */
 function valueTypeNames(schema: SchemaIR): Set<string> {
   const names = new Set<string>();
   for (const def of schema.classes.values()) {
@@ -157,7 +157,7 @@ export function validateModel(schema: SchemaIR): Diagnostic[] {
       }
     }
 
-    // Link text comes from `title` (plan §2.2).
+    // Link text comes from `title` (architecture §3).
     if (
       relationTargets.has(def.name)
       && isInstantiable(schema, def.name)

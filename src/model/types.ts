@@ -1,4 +1,4 @@
-/** Attribute type vocabulary (plan §1.7). */
+/** Attribute type vocabulary (architecture §2.5). */
 export type PrimitiveName = "string" | "int" | "float" | "bool" | "date" | "path" | "uri";
 
 export const PRIMITIVES: ReadonlySet<string> = new Set<PrimitiveName>([
@@ -7,7 +7,7 @@ export const PRIMITIVES: ReadonlySet<string> = new Set<PrimitiveName>([
 
 /**
  * Tagged union from the outset so class-typed attributes slot in without
- * touching every consumer (plan §1.10).
+ * touching every consumer (architecture §2.5).
  */
 export type AttributeType =
   | { kind: "primitive"; name: PrimitiveName }

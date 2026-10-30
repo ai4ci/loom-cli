@@ -17,7 +17,7 @@ function renderOne(d: Diagnostic): string {
   return `- \`${d.code}\`${where === "" ? "" : ` ${where}`} — ${d.message}${fix}`;
 }
 
-/** A plain generated file, not an `issue` instance (plan §4). */
+/** A plain generated file, not an `issue` instance (architecture §4). */
 export function renderReport(report: Report): string {
   const sorted = [...report.diagnostics].sort((a, b) => order(a).localeCompare(order(b)));
   const errors = sorted.filter((d) => d.severity === "error");

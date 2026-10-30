@@ -3,7 +3,7 @@ export type Severity = "error" | "warning";
 
 /**
  * A single validation finding. Shape is part of the CLI's public contract
- * (plan §1.4), so fields are added rather than renamed.
+ * (architecture §1.4), so fields are added rather than renamed.
  */
 export interface Diagnostic {
   severity: Severity;
@@ -44,7 +44,7 @@ export interface Report {
   diagnostics: Diagnostic[];
 }
 
-/** Warnings do not fail a run; errors do (plan §1.4). */
+/** Warnings do not fail a run; errors do (architecture §1.4). */
 export function summarise(diagnostics: Diagnostic[]): Report {
   const errors = diagnostics.filter((d) => d.severity === "error").length;
   return {

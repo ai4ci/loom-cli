@@ -12,7 +12,7 @@ import { classRoot } from "./path-resolution.ts";
 import { canonicalise, formatUri, parseUri } from "./uri.ts";
 
 /**
- * Only the unambiguous repairs (plan §Phase 2): regenerate a link block that
+ * Only the unambiguous repairs (architecture §1.2): regenerate a link block that
  * disagrees with the yaml, and rewrite a uri that is not in its compact form.
  * Anything needing a judgement call is reported instead.
  */
@@ -35,7 +35,7 @@ export function applyFixes(graph: Graph): string[] {
 
 /**
  * Anchors whose declaration was renamed since HEAD, old uri to new
- * (source-linkage §6.2). Only unambiguous, high-confidence matches appear here;
+ * (source-linkage §6). Only unambiguous, high-confidence matches appear here;
  * anything else is reported rather than rewritten.
  */
 function inferredRenames(graph: Graph): Map<string, string> {

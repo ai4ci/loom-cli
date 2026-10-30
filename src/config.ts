@@ -3,7 +3,7 @@ import path from "node:path";
 import { parse } from "yaml";
 import { type AnchorPolicy, DEFAULT_ANCHOR_POLICY } from "./source.ts";
 
-/** Schemes that address locations rather than classes (plan §2.4). */
+/** Schemes that address locations rather than classes (architecture §2.5). */
 export const RESERVED_SCHEMES = new Set(["repo"]);
 
 const IGNORED_DIRS = new Set([".git", "node_modules", ".sandbox", ".svn"]);
