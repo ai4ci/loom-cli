@@ -197,7 +197,7 @@ function fromStructure(
 /**
  * R adapter. `process()` names every R function "function" — the keyword, not
  * the binding — so anchors are derived from the syntax tree instead
- * (source-linkage §2.6).
+ * (source-linkage §2.2).
  */
 function fromR(code: string, out: Anchor[]): void {
   const root = parse(code, "r");

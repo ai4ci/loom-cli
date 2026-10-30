@@ -1,7 +1,7 @@
 import { Document, Scalar, parse, visit } from "yaml";
 
 /**
- * YAML emission rules (plan §2.2).
+ * YAML emission rules (architecture §3).
  *
  * These files are read by other tooling, much of it still on YAML 1.1, where
  * `no` is a boolean, `0755` is octal and `12:30` is sexagesimal. The `yaml`

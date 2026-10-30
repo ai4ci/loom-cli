@@ -20,7 +20,7 @@ This meta-skill guides an agent through establishing a documentation architectur
 
 What is the nature of the project and how best does documentation and workflow support the project?
 
-For example a software development project may use a agile workflow, a project management project may use prince, a research project may have altogether different methodology. Loom can support any anrbitrary methodology. You will need to discuss what methodology fits best with the project given the objectives and research alternatives.
+For example a software development project may use a agile workflow, a project management project may use prince, a research project may have altogether different methodology. Loom can support any arbitrary methodology. You will need to discuss what methodology fits best with the project given the objectives and research alternatives.
 
 Determine the document classes and lifecycle needs:
 1. **Document Types**: What kinds of artefacts exist? (e.g. `adr`, `issue`, `rfc`, `spec`, `testplan`).
@@ -56,6 +56,9 @@ set as an env var.
 - **Source Code Integration**: Use or subclass the reserved `src` class.
   - Subclasses of `src` define custom root directories or schemes (e.g. `src <|-- test`).
   - Loom forbids structured YAML on the `src` family — anchors carry no frontmatter.
+ **Data or external resource integration**: Use or subclass the reserved `resource` class.
+  - Subclasses of `resource` define custom root directories or schemes (e.g. `resource <|-- test`), or external resources (e.g. `resource <|-- github-issue`).
+  - Loom classes can link to `resource` family items but cannot link from, and they have no metadata.
 - **Inline Views**: Define named SQL queries directly in the model with `%% @view <name>`, a multi-line body using continuation `%%` lines. Parameters use `$name` placeholders; list params are comma-separated (see Step 6).
 - **Relations**: Arrow `-->` with cardinality at both ends and relation label:
   ```mermaid

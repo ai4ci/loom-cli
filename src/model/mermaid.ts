@@ -197,7 +197,7 @@ export function parseModel(text: string): {
     return found;
   };
 
-  // Reserved families exist whether or not the model declares them (plan §1.9).
+  // Reserved families exist whether or not the model declares them (architecture §2.3).
   for (const name of RESERVED_FAMILIES) ensure(name, 0);
 
   const className = (n: Node): string | null => {

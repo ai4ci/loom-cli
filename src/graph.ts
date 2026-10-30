@@ -158,7 +158,7 @@ const byRelationThenTarget = (a: Edge, b: Edge): number =>
 
 /**
  * The protected link block: outbound links, then inbound ones labelled with
- * the forward relation name (plan §2.2). Deterministically ordered so
+ * the forward relation name (architecture §3). Deterministically ordered so
  * regeneration never churns the diff.
  */
 export function renderLinks(graph: Graph, node: InstanceNode): string {
@@ -183,7 +183,7 @@ export function renderLinks(graph: Graph, node: InstanceNode): string {
 }
 
 /**
- * Drift tier 1 (source-linkage §6.1): a dead anchor is much more useful with a
+ * Drift tier 1 (source-linkage §6): a dead anchor is much more useful with a
  * candidate attached than without one.
  */
 function suggestNearest(
@@ -348,7 +348,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     }
   }
 
-  // Scan source files for reverse-link comments (plan §Phase 5)
+  // Scan source files for reverse-link comments (architecture §7)
   for (const [name] of schema.classes) {
     if (!isSubclassOf(schema, name, "src")) continue;
     const root = classRoot(graph.roots, name);

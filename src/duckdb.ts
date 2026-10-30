@@ -70,7 +70,7 @@ export function ensureLoomDir(cfg: Config): string {
 
 /**
  * Attribute types map to native DuckDB types so comparisons and aggregates
- * need no casts (plan §Phase 4). Enumerations become native DuckDB ENUM types
+ * need no casts (architecture §6). Enumerations become native DuckDB ENUM types
  * so that ORDER BY, MIN/MAX and the comparison operators follow the order the
  * members are declared in the model rather than alphabetical order. Class-typed
  * attributes become DuckDB STRUCTs so subfields are queryable and misspellings
@@ -270,7 +270,7 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
   tables.push({ name: "edge", rows: edges.length });
 
   // Embeddings table: hash-based cache so unchanged bodies skip re-embedding
-  // (plan §Phase 7).
+  // (architecture §6).
   const dimensions = emb.dimensions;
   const vectorCols = Array.from({ length: dimensions }, (_, i) => `v${i} DOUBLE`).join(", ");
   await connection.run(

@@ -7,7 +7,7 @@ export interface ParsedUri {
   scheme: string;
   /** Path relative to the scheme's root, POSIX, no leading slash. */
   path: string;
-  /** Symbol anchor for `src`-family URIs (plan §Phase 5). */
+  /** Symbol anchor for `src`-family URIs (architecture §7). */
   anchor?: string;
   /**
    * Set when the input used the superseded `scheme:path` form. Carried so
@@ -149,7 +149,7 @@ export function fsExists(cfg: Config): ExistsCheck {
 }
 
 /**
- * The most compact URI for a repo-relative path (plan §2.4): the longest
+ * The most compact URI for a repo-relative path (architecture §2.5): the longest
  * matching class root wins, otherwise `repo:`.
  */
 export function canonicalise(repoRelativePath: string, roots: ClassRoots, anchor?: string): ParsedUri {
@@ -160,7 +160,7 @@ export function canonicalise(repoRelativePath: string, roots: ClassRoots, anchor
   return anchor === undefined ? { scheme, path: rest } : { scheme, path: rest, anchor };
 }
 
-/** True when two URIs address the same thing, regardless of scheme (plan §IA.13). */
+/** True when two URIs address the same thing, regardless of scheme (architecture §5). */
 export function equivalent(a: string | ParsedUri, b: string | ParsedUri, roots: ClassRoots): boolean {
   const left = typeof a === "string" ? parseUri(a) : a;
   const right = typeof b === "string" ? parseUri(b) : b;

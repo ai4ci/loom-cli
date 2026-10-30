@@ -1,6 +1,6 @@
 /**
  * Normalised longest-common-subsequence ratio in [0, 1]. Good enough to rank
- * rename candidates for drift tier 1 (source-linkage §6.1); not a general
+ * rename candidates for drift tier 1 (source-linkage §6); not a general
  * string distance.
  */
 export function similarity(a: string, b: string): number {
