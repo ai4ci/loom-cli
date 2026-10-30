@@ -276,7 +276,7 @@ Inline SQL needs no `%% @view` annotation; just write `SELECT` after the marker.
 | CI check | `--check` | `--check` |
 
 To migrate existing `view:`-based index files to `%% @view` annotations,
-see [Appendix C](#appendix-c--migration-guide-view-frontmatter--view-annotations).
+see [Appendix D](#appendix-d--migration-guide-view-frontmatter--view-annotations).
 
 ---
 
@@ -515,7 +515,29 @@ config:   -> $REPO_ROOT/input
 
 ---
 
-## Appendix B — Anchor policy (source linkage)
+## Appendix B — External prefixes (`%% @prefix`)
+
+A curie usually names a class bound by `%% @path`, but a model can also bind a
+scheme to something outside the repository:
+
+```
+%% @prefix gh: https://github.com/my-org/my-project/issues/
+```
+
+- The target **must end in `/` or `#`** — curie expansion is string
+  concatenation, not path join, so a bare `.../issues` would turn `gh:6`
+  into `.../issues6`. A declaration missing the delimiter is a hard error
+  (`model/prefix-delimiter`).
+- `gh:6` expands to `https://github.com/my-org/my-project/issues/6`.
+- An external scheme wins over a class of the same name.
+- Relational targets under an external scheme skip the filesystem
+  existence check (there is no local file to find).
+- Inline views render such cells as `[gh:6](expanded-url)`; body editing
+  translates between the curie and the url in both directions.
+
+---
+
+## Appendix C — Anchor policy (source linkage)
 
 `src`-family instances point to source-code anchors (symbols, not whole
 files). The anchor model is policy-driven; configuration lives in
@@ -558,7 +580,7 @@ treating it as a deletion.
 
 ---
 
-## Appendix C — Migration Guide: `view:` frontmatter → `%% @view` annotations
+## Appendix D — Migration Guide: `view:` frontmatter → `%% @view` annotations
 
 Before inline views, index files used a `view:` field in YAML frontmatter and
 `<!-- loom:links ... -->` markers that `loom index` filled with auto-generated

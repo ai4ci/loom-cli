@@ -52,28 +52,33 @@ function pathFor(roots: ClassRoots, className: string, id: string): string {
  * prose in the same uri form the agent read with `loom body get`.
  */
 function editProse(
-  roots: ClassRoots,
+  graph: Graph,
   node: InstanceNode,
   mode: BodyMode,
   text: string,
 ): string {
+  const { roots } = graph;
   const split = splitProse(node.file.markdown);
-  const current = toUris(split.prose, node.path, roots);
+  const current = toUris(split.prose, node.path, roots, graph.prefixes);
+
+  // Incoming prose is canonicalised the same way existing prose is read:
+  // relative links and prefixed urls become uris, then go back out as links.
+  const incoming = toUris(text, node.path, roots, graph.prefixes);
 
   let prose: string;
   switch (mode) {
     case "set":
-      prose = text;
+      prose = incoming;
       break;
     case "append":
-      prose = current === "" || current.endsWith("\n") ? `${current}${text}` : `${current}\n${text}`;
+      prose = current === "" || current.endsWith("\n") ? `${current}${incoming}` : `${current}\n${incoming}`;
       break;
     case "patch":
       prose = applyUnifiedDiff(current, text);
       break;
   }
 
-  return joinProse({ block: split.block, prose: toRelative(prose, node.path, roots) });
+  return joinProse({ block: split.block, prose: toRelative(prose, node.path, roots, graph.prefixes) });
 }
 
 /**
@@ -201,7 +206,7 @@ function applyOps(graph: Graph, ops: Op[]): Diagnostic[] {
         const node = need(op.uri, "body");
         if (!node) break;
         try {
-          node.file.markdown = editProse(graph.roots, node, op.mode, op.text);
+          node.file.markdown = editProse(graph, node, op.mode, op.text);
         } catch (cause) {
           if (!(cause instanceof LoomError)) throw cause;
           found.push({ ...cause.diagnostic, uri: node.uri });
@@ -239,8 +244,14 @@ function isSourceLink(op: Op, schema: SchemaIR): boolean {
   }
 }
 
-export function planChangeset(cfg: Config, schema: SchemaIR, roots: ClassRoots, ops: Op[]): MutationPlan {
-  const { graph, diagnostics } = loadGraph(cfg, schema, roots);
+export function planChangeset(
+  cfg: Config,
+  schema: SchemaIR,
+  roots: ClassRoots,
+  ops: Op[],
+  prefixes?: Map<string, string>,
+): MutationPlan {
+  const { graph, diagnostics } = loadGraph(cfg, schema, roots, prefixes);
 
   const before = new Map<string, string>();
   for (const node of graph.instances.values()) before.set(node.path, node.source);

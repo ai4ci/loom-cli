@@ -75,10 +75,23 @@ function knownScheme(roots: ClassRoots, scheme: string): boolean {
  * — urls, `mailto:`, in-page `#fragments`, site-absolute paths — are left
  * exactly as written.
  */
-export function toUris(prose: string, docPath: string, roots: ClassRoots): string {
+export function toUris(
+  prose: string,
+  docPath: string,
+  roots: ClassRoots,
+  prefixes?: Map<string, string>,
+): string {
   const dir = path.posix.dirname(docPath);
 
   return mapLinks(prose, (target) => {
+    // An absolute url matching a declared prefix canonicalises to a curie.
+    if (prefixes !== undefined) {
+      for (const [name, target0] of prefixes) {
+        if (target.startsWith(target0)) {
+          return `${name}:${target.slice(target0.length)}`;
+        }
+      }
+    }
     if (HAS_SCHEME.test(target) || target.startsWith("#") || target.startsWith("/")) return null;
 
     const { base, fragment } = splitFragment(target);
@@ -101,7 +114,12 @@ export function toUris(prose: string, docPath: string, roots: ClassRoots): strin
  * and GitHub's renderer — can actually follow. A uri whose scheme is not a
  * class in this model is left alone, so `https://` and friends survive.
  */
-export function toRelative(prose: string, docPath: string, roots: ClassRoots): string {
+export function toRelative(
+  prose: string,
+  docPath: string,
+  roots: ClassRoots,
+  prefixes?: Map<string, string>,
+): string {
   const dir = path.posix.dirname(docPath);
 
   return mapLinks(prose, (target) => {
@@ -110,6 +128,9 @@ export function toRelative(prose: string, docPath: string, roots: ClassRoots): s
     if (!match) return null;
 
     const scheme = match[1]!.toLowerCase();
+    // External prefixes expand to the absolute url, not a repo path.
+    const prefix = prefixes?.get(scheme);
+    if (prefix !== undefined) return `${prefix}${normalisePath(match[2]!)}${fragment}`;
     if (!knownScheme(roots, scheme)) return null;
 
     const root = scheme === "repo" ? "" : classRoot(roots, scheme);

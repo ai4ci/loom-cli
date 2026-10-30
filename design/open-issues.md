@@ -66,8 +66,15 @@ the superseded `scheme://path` still parses but is flagged `legacy` and
 The two-slash form was dropped because under RFC 3986 it means
 `authority = first segment` (`issue://design/notes.md` addresses host `design`),
 which was never what loom meant. The curie has no authority, so the whole path
-is the path. Remaining from this issue: `%% @prefix` external prefixes, and the
-`.ttl` export (see RDF export, below).
+is the path.
+
+**External prefixes implemented in 0.8.5.** `%% @prefix <name>: <target>` in the
+model declares an expansion; the target must end in `/` or `#` (hard error
+`model/prefix-delimiter`). `resolveUri` expands by concatenation and marks the
+result `external`, which means: relations pointing at it skip filesystem
+existence checks, inline-view uri cells render as links to the expanded url,
+and `body` edits translate between the curie and the absolute url in both
+directions. Remaining: the `.ttl` export (see RDF export, below).
 
 the current scheme where an issue is referenced as `issue:my-issue.md` and the
 path is declared in a comment in the mermaid like this:
@@ -185,7 +192,7 @@ only matter at export time.
 scoped by the subject's class, so the expansion is entirely an export-time
 choice. Candidates:
 
-* a dedicated relation prefix — `rel:issue` giving `rel:issue#resolves`
+DEFERRED-FOR-FUTURE a dedicated relation prefix — `rel:issue` giving `rel:issue#resolves`
 * the model file as the term namespace — `design/document-model.mmd#issue.resolves`
 * the instance namespace itself — `design/issues/#resolves`
 

@@ -18,9 +18,11 @@ export interface ParsedUri {
 }
 
 export interface ResolvedUri {
-  /** The repo-relative path the URI addresses. */
+  /** Repo-relative path, or the expanded absolute URL for an external prefix. */
   path: string;
   anchor?: string;
+  /** Set when the uri expands via an external `%% @prefix` (not a repo file). */
+  external?: true;
 }
 
 export type ExistsCheck = (repoRelativePath: string) => boolean;
@@ -116,7 +118,20 @@ export function formatUri(uri: ParsedUri): string {
  * resolved class roots, so each scheme has exactly one root — no ambiguity
  * to disambiguate.
  */
-export function resolveUri(uri: ParsedUri, roots: ClassRoots): ResolvedUri {
+export function resolveUri(
+  uri: ParsedUri,
+  roots: ClassRoots,
+  prefixes?: Map<string, string>,
+): ResolvedUri {
+  // A declared external prefix wins over a same-named class: the model says
+  // this scheme addresses resources outside the repository.
+  const prefix = prefixes?.get(uri.scheme);
+  if (prefix !== undefined) {
+    const expanded = `${prefix}${uri.path}`;
+    return uri.anchor === undefined
+      ? { path: expanded, external: true }
+      : { path: expanded, anchor: uri.anchor, external: true };
+  }
   let resolved: string;
   if (uri.scheme === "repo") {
     resolved = normalisePath(uri.path);

@@ -192,10 +192,12 @@ function renderCell(cell: unknown, link: LinkContext | undefined): string {
   } catch {
     return text;
   }
+  // External prefixes expand to absolute urls, which are the link target.
+  const resolved = resolveUri(parsed, link.graph.roots, link.graph.prefixes);
+  if (resolved.external === true) return `[${text}](${resolved.path})`;
   // Not a design uri we know how to address (e.g. a literal, or the edge
   // table's bare labels): leave the cell alone.
-  const targetPath = resolveUri(parsed, link.graph.roots).path;
-  if (!hasStat(absolute(link.graph.cfg, targetPath))) return text;
+  if (!hasStat(absolute(link.graph.cfg, resolved.path))) return text;
   const label = titleOf(link.graph, text);
   const target = relativeLink(link.graph, link.fromPath, text);
   return `[${label}](${target})`;

@@ -66,6 +66,44 @@ export function extractPathAnnotations(
   return result;
 }
 
+/**
+ * Extract `%% @prefix <name>: <target>` annotations. CURIE expansion is
+ * string concatenation, not path join, so the target must end in a
+ * delimiter (`/` or `#`) — otherwise `issue:6` would expand into
+ * `...issues6`. Violations are hard errors.
+ */
+export function extractPrefixAnnotations(
+  comments: { text: string; line: number }[],
+  diagnostics: Diagnostic[],
+): Map<string, string> {
+  const result = new Map<string, string>();
+  for (const { text, line } of comments) {
+    const match = /^%%\s+@prefix\s+([A-Za-z][A-Za-z0-9_-]*):\s+(\S+)\s*$/.exec(text);
+    if (match === null) continue;
+    const name = match[1]!.toLowerCase();
+    const target = match[2]!;
+    if (!target.endsWith("/") && !target.endsWith("#")) {
+      diagnostics.push(error(
+        "model/prefix-delimiter",
+        `prefix "${name}" target "${target}" must end in "/" or "#" — ` +
+          `curie expansion is concatenation, not path join`,
+        { line, fix: `write ${target}/ or ${target}#` },
+      ));
+      continue;
+    }
+    if (result.has(name)) {
+      diagnostics.push(error(
+        "model/duplicate-prefix",
+        `duplicate %% @prefix "${name}"`,
+        { line },
+      ));
+      continue;
+    }
+    result.set(name, target);
+  }
+  return result;
+}
+
 /** Collapse `.`, `..`, repeated slashes; throws if the path escapes its root. */
 export function normalisePath(raw: string): string {
   const segments: string[] = [];
