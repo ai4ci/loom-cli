@@ -377,5 +377,5 @@ export function parseModel(text: string): {
     }
   }
 
-  return { schema: { classes, relations }, diagnostics, comments };
+  return { schema: { classes, relations, prefixes: new Map() }, diagnostics, comments };
 }

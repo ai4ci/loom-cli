@@ -62,16 +62,18 @@ interface GlobalOptions {
 interface LoadedContext {
   cfg: Config;
   roots: ClassRoots;
+  prefixes: Map<string, string>;
 }
 
 function loadContext(startDir?: string): LoadedContext {
   const cfg = loadConfig(startDir ?? process.cwd());
-  return { cfg, roots: loadModel(cfg).roots };
+  const model = loadModel(cfg);
+  return { cfg, roots: model.roots, prefixes: model.prefixes };
 }
 
 function resolveTarget(raw: string, ctx: LoadedContext) {
   const uri = parseUri(raw);
-  const resolved = resolveUri(uri, ctx.roots);
+  const resolved = resolveUri(uri, ctx.roots, ctx.prefixes);
   return { uri, resolved, absolutePath: absolute(ctx.cfg, resolved.path) };
 }
 
@@ -236,7 +238,7 @@ function applyOps(ctx: LoadedContext, ops: Op[], options: { dryRun?: boolean }):
   // when the file is sitting right there under a different name.
   for (const op of ops) uriFields(op).forEach((raw) => void parseUri(raw));
 
-  const plan = planChangeset(cfg, schema, roots, ops);
+  const plan = planChangeset(cfg, schema, roots, ops, ctx.prefixes);
   const report = summarise(plan.diagnostics);
 
   if (!report.ok) return { value: report, code: 1 };
@@ -397,7 +399,7 @@ function bodyGetCommand(ctx: LoadedContext, raw: string): CommandOutput {
     value: {
       uri: formatUri(canonical),
       path,
-      body: toUris(splitProse(file.markdown).prose, path, ctx.roots),
+      body: toUris(splitProse(file.markdown).prose, path, ctx.roots, ctx.prefixes),
     },
   };
 }

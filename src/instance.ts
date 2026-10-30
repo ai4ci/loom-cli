@@ -172,6 +172,7 @@ function checkAttributes(
 export function validateInstance(
   schema: SchemaIR,
   input: InstanceInput,
+  prefixes?: Map<string, string>,
 ): Diagnostic[] {
   const { uri, className, data } = input;
   const found: Diagnostic[] = [];
@@ -261,6 +262,8 @@ export function validateInstance(
         ));
         continue;
       }
+      // An external prefix scheme addresses resources outside the model.
+      if (prefixes?.has(targetClass) === true) continue;
       if (!isSubclassOf(schema, targetClass, relation.to)) {
         found.push(error(
           "instance/wrong-target-class",

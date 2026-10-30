@@ -37,7 +37,11 @@ The repository root `$REPO_ROOT` is the git project root. Loom operates with zer
 configuration: `document-model.mmd` is discovered automatically in the repository
 (or specified via the `LOOM_DEFAULT_ROOT` environment variable). Class roots are
 derived from model inheritance and `%% @path` directives in the model. See
-[complex-path-examples.md](./complex-path-examples.md).
+[complex-path-examples.md](./complex-path-examples.md). A scheme may also be
+bound to an external resource with `%% @prefix <name>: <target>` — the target
+must end in `/` or `#`, and the curie expands by concatenation
+(`%% @prefix gh: https://github.com/org/repo/issues/` makes `gh:6` expand to
+`.../issues/6`).
 
 ### `<uri>` arguments are uris, never paths
 
