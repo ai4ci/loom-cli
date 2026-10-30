@@ -25,22 +25,16 @@ table) would need a note that URIs are rendered as links.
 
 ## Inline views: `render --check` CI mode (0.8.0)
 
-**File:** `src/render.ts` — function `renderCommand()`
-
-The `--check` flag is wired in `src/cli.ts` but the no-write path is not
-implemented. Currently `render --check` renders and writes, then returns
-`ok: true`. Expected behaviour: when `--check` is set, the function should
-render in memory and compare against the file on disk — if any marker would
-change, emit those paths as diagnostics and exit 1.
+**Implemented in 0.8.3.** `checkStale()` renders in memory and compares with
+`updateSection() === text`; stale file paths are returned and `render --check`
+exits 1 with them. Nothing is written. Fresh files exit 0 silently.
 
 ## Inline views: `render --debug` output (0.8.0)
 
-**File:** `src/render.ts`
-
-The `--debug` flag is wired in `src/cli.ts` but no debug output is emitted.
-Expected behaviour: when `--debug` is set, each rendered view's resolved SQL
-should be written to stderr (prefixed with the file path and view name), so
-users can inspect exactly what was executed.
+**Implemented in 0.8.3.** `renderAll` and `checkStale` take a `DebugSink`;
+each view emits `<file>: view <name>\n  <sql>` (SQL indented, newlines
+preserved). `buildProgram` now takes an optional `writeErr` callback so the
+CLI routes it to stderr, and tests capture it directly.
 
 ## Doc dir pollution branches and loom working directory (0.8.0) 
 

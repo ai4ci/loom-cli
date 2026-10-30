@@ -402,7 +402,11 @@ function bodyGetCommand(ctx: LoadedContext, raw: string): CommandOutput {
   };
 }
 
-export function buildProgram(emit: (text: string) => void, setCode: (code: number) => void): Command {
+export function buildProgram(
+  emit: (text: string) => void,
+  setCode: (code: number) => void,
+  writeErr?: (text: string) => void,
+): Command {
   const program = new Command();
 
   program
@@ -628,8 +632,10 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .option("--debug", "print resolved SQL for each view to stderr")
     .description("expand <!-- loom view: ... --> markers in markdown files")
     .action(async (options: { check?: boolean; debug?: boolean }) => {
-      const result = await renderCommand(ctx(), options);
-      finish({ value: result });
+      const result = await renderCommand(ctx(), options, {
+        debug: (line) => writeErr?.(`${line}\n`),
+      });
+      finish({ value: result, code: result.ok ? undefined : 1 });
     });
 
   return program;
@@ -682,6 +688,9 @@ export async function run(argv: string[]): Promise<CliRun> {
     },
     (next) => {
       code = next;
+    },
+    (text) => {
+      err += text;
     },
   );
   // Commander only passes these down to subcommands created after they are

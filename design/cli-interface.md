@@ -454,8 +454,13 @@ literal): `status=open,closed` becomes `IN ('open', 'closed')`.
 - Query error → `_Query failed: <message>_`
 - Unknown view → `_Unknown view "<name>"._`
 
-**`--check`** exits 1 if any marker would be updated (dry-run mode for CI).
-**`--debug`** prints the resolved SQL for each view to stderr.
+**`--check`** is a dry-run for CI: it renders in memory and writes nothing.
+It exits 0 when every file is already fresh, and exits 1 naming the stale
+files (repo-relative paths) when a render would change them.
+
+**`--debug`** prints one entry per rendered view to stderr:
+`<file>: view <name>` followed by the resolved SQL indented two spaces (for
+inline markers the name is `(inline)`). The file is still rendered normally.
 
 `render` automatically rebuilds the DuckDB database if it does not already exist.
 
