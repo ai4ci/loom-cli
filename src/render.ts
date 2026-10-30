@@ -2,7 +2,7 @@ import { type Diagnostic, error } from "./diagnostics.ts";
 import { type Config, absolute } from "./config.ts";
 import { type ViewAnnotation } from "./model/types.ts";
 import { loadModel } from "./model/load.ts";
-import { query, rebuild } from "./duckdb.ts";
+import { databasePath, query, rebuild } from "./duckdb.ts";
 import { loadGraph } from "./graph.ts";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -280,6 +280,11 @@ function updateSection(text: string, marker: ViewMarker, renderedMd: string): st
   return `${head}${section}<!-- loom view: end -->${tail}`;
 }
 
+/** True when a render would change the section in this file. */
+function sectionDiffers(text: string, marker: ViewMarker, renderedMd: string): boolean {
+  return updateSection(text, marker, renderedMd) !== text;
+}
+
 export interface RenderResult {
   file: string;
   view: string;
@@ -291,13 +296,14 @@ export interface RenderResult {
  */
 export async function renderAll(
   ctx: { cfg: Config; roots: ClassRoots },
-): Promise<{ rendered: RenderResult[] }> {
+  debug?: DebugSink,
+): Promise<{ rendered: RenderResult[]; debug: string[] }> {
   const { cfg, roots } = ctx;
   const model = loadModel(cfg);
   const { schema } = model;
 
   // Rebuild DB if it doesn't exist yet.
-  if (!hasStat(absolute(cfg, `${cfg.designRoot}/.loom.duckdb`))) {
+  if (!hasStat(absolute(cfg, databasePath(cfg)))) {
     const { graph } = loadGraph(cfg, schema, roots);
     await rebuild(graph);
   }
@@ -305,6 +311,11 @@ export async function renderAll(
   const namedViews = new Map(model.views.map((v) => [v.name, v]));
   const files = mdFiles(cfg.repoRoot);
   const rendered: RenderResult[] = [];
+  const debugLines: string[] = [];
+  const note = (line: string) => {
+    debugLines.push(line);
+    debug?.(line);
+  };
 
   for (const file of files) {
     const text = readFileSync(file, "utf8");
@@ -313,14 +324,15 @@ export async function renderAll(
 
     let updated = text;
     for (const marker of markers) {
-      const { markdown } = await renderView(cfg, marker.view, marker.params, namedViews);
+      const { markdown, debug } = await renderView(cfg, marker.view, marker.params, namedViews);
+      note(`${file}: view ${debug.name}\n  ${debug.sql.replaceAll("\n", "\n  ")}`);
       updated = updateSection(updated, marker, markdown);
       rendered.push({ file, view: marker.view });
     }
     writeFileSync(file, updated, "utf8");
   }
 
-  return { rendered };
+  return { rendered, debug: debugLines };
 }
 
 export interface RenderCommandOptions {
@@ -328,10 +340,65 @@ export interface RenderCommandOptions {
   debug?: boolean;
 }
 
+export interface RenderCommandResult {
+  ok: boolean;
+  results: RenderResult[];
+  /** Views whose output differs from what is on disk (only set with --check). */
+  stale: string[];
+}
+
+/** Where --debug output goes; injectable so tests can capture it. */
+export type DebugSink = (line: string) => void;
+
 export async function renderCommand(
   ctx: { cfg: Config; roots: ClassRoots },
   options: RenderCommandOptions = {},
-): Promise<{ ok: boolean; results: RenderResult[] }> {
-  const { rendered } = await renderAll(ctx);
-  return { ok: true, results: rendered };
+  write?: { debug: DebugSink },
+): Promise<RenderCommandResult> {
+  if (options.check) {
+    const stale = await checkStale(ctx, options.debug ? write?.debug : undefined);
+    return { ok: stale.length === 0, results: [], stale };
+  }
+
+  const { rendered, debug } = await renderAll(ctx, options.debug ? write?.debug : undefined);
+  return { ok: true, results: rendered, stale: [], ...(debug ? { debug } : {}) };
+}
+
+/**
+ * CI mode: render in memory, never write. Names every file a normal render
+ * would change, so the caller can fail with the paths that are stale.
+ */
+async function checkStale(
+  ctx: { cfg: Config; roots: ClassRoots },
+  writeDebug: DebugSink | undefined,
+): Promise<string[]> {
+  const { cfg, roots } = ctx;
+  const model = loadModel(cfg);
+  const { schema } = model;
+
+  if (!hasStat(absolute(cfg, databasePath(cfg)))) {
+    const { graph } = loadGraph(cfg, schema, roots);
+    await rebuild(graph);
+  }
+
+  const namedViews = new Map(model.views.map((v) => [v.name, v]));
+  const stale: string[] = [];
+
+  for (const file of mdFiles(cfg.repoRoot)) {
+    const text = readFileSync(file, "utf8");
+    const markers = scanViewMarkers(text);
+    if (markers.length === 0) continue;
+
+    let touched = false;
+    for (const marker of markers) {
+      const { markdown, debug: info } = await renderView(cfg, marker.view, marker.params, namedViews);
+      if (writeDebug !== undefined) {
+        writeDebug(`${file}: view ${info.name}\n  ${info.sql.replaceAll("\n", "\n  ")}`);
+      }
+      if (sectionDiffers(text, marker, markdown)) touched = true;
+    }
+    if (touched) stale.push(file);
+  }
+
+  return stale;
 }

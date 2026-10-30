@@ -66,7 +66,7 @@ to": if `ls` does not list it, it is not linkable.
 
 > An anchor must resolve to exactly one linkable node.
 
-That is the whole rule. `src://app.ts#MyClass.run` resolves when there is one
+That is the whole rule. `src:app.ts#MyClass.run` resolves when there is one
 `run`. When there are several it is an error — `source/ambiguous-anchor` — whose
 `fix` field lists the qualified candidates.
 
@@ -82,7 +82,7 @@ where a bare name falls back to the first match silently: with
 Overloaded methods are disambiguated by a normalised parameter type list:
 
 ```
-src://MyClass.java#MyClass.run(String,int)
+src:MyClass.java#MyClass.run(String,int)
 ```
 
 The qualified form is accepted whenever it is needed, and only when it is
@@ -224,16 +224,16 @@ The URI space is one hierarchy in which `#anchor` is simply a deeper level than
 the path, so `ls` is directory descent and needs no mode switch:
 
 ```
-loom ls issue://                  # instances of a class
-loom ls src://                    # directories and files
-loom ls src://pkg/app.ts          # linkable anchors in the file
-loom ls src://pkg/app.ts#Service  # anchors nested in that anchor
+loom ls issue:                  # instances of a class
+loom ls src:                    # directories and files
+loom ls src:pkg/app.ts          # linkable anchors in the file
+loom ls src:pkg/app.ts#Service  # anchors nested in that anchor
 ```
 
 ```yaml
-parent: src://pkg/app.ts
+parent: src:pkg/app.ts
 entries:
-  - uri: src://pkg/app.ts#Service
+  - uri: src:pkg/app.ts#Service
     kind: Class
     line: 6
     signature: class Service
@@ -250,17 +250,17 @@ table.
 ### `locate` — the address of a line
 
 ```
-loom locate src://app.ts --line 42
+loom locate src:app.ts --line 42
 ```
 
 ```yaml
 anchor:
-  uri: src://app.ts#Service.run     # innermost linkable ancestor
+  uri: src:app.ts#Service.run     # innermost linkable ancestor
   kind: Method
   span: { startLine: 40, endLine: 55 }
 ancestors:
-  - { uri: "src://app.ts#Service", kind: Class }
-  - { uri: "src://app.ts", kind: File }
+  - { uri: "src:app.ts#Service", kind: Class }
+  - { uri: "src:app.ts", kind: File }
 ```
 
 Granularity is decided by the anchor-kind policy: return the innermost ancestor
@@ -281,7 +281,7 @@ whose target depends on where a cursor happened to sit is not worth having.
 
 ```java
 public void run(String name) {
-    // implements: issue://auth-flow.md
+    // implements: issue:auth-flow.md
     ...
 }
 ```
@@ -333,7 +333,7 @@ become statements.
 
 ### 4.3 File-level links
 
-An anchor-less `src://app.ts` treats the file as the enclosing block and the
+An anchor-less `src:app.ts` treats the file as the enclosing block and the
 same algorithm applies — after the shebang and licence header, before the first
 declaration. This is not a special case; it is the one rule with the file as the
 enclosing element.
@@ -377,13 +377,13 @@ diff:
 
 ```yaml
 ops:
-  - { op: link,   from: "src://app.ts#Service.run",  rel: implements, to: "issue://auth.md" }
-  - { op: link,   from: "src://app.ts#Service.stop", rel: implements, to: "issue://auth.md" }
-  - { op: unlink, from: "src://old.ts#Legacy.run",   rel: implements, to: "issue://auth.md" }
+  - { op: link,   from: "src:app.ts#Service.run",  rel: implements, to: "issue:auth.md" }
+  - { op: link,   from: "src:app.ts#Service.stop", rel: implements, to: "issue:auth.md" }
+  - { op: unlink, from: "src:old.ts#Legacy.run",   rel: implements, to: "issue:auth.md" }
 ```
 
 `link` and `unlink` **dispatch on the subject's scheme**: a design instance
-writes YAML, a `src://` uri writes a comment. The shape is already
+writes YAML, a `src:` uri writes a comment. The shape is already
 subject–relation–object and the model already constrains which relations are
 legal in which direction, so no new verb is needed. N ops in one changeset is
 the batch interface.
@@ -424,9 +424,9 @@ The choice matters because the two differ in robustness:
 
 | Representation | Survives rename | Survives move | Visible from design side |
 |---|---|---|---|
-| `src://path#Symbol` | no | no | yes |
+| `src:path#Symbol` | no | no | yes |
 | Fingerprinted anchor (§6.3) | yes | yes | yes |
-| `// implements: issue://x.md` | **yes** | **yes** | only after a scan |
+| `// implements: issue:x.md` | **yes** | **yes** | only after a scan |
 
 A comment moves with the code it sits in, so it survives both rename and
 reordering, and inside an overloaded method it is unambiguous by construction —
@@ -525,7 +525,7 @@ New diagnostic codes introduced by this document:
 | Broken anchor detection (`graph/missing-symbol`) | **Built**, detection only |
 | `refs` reverse lookup | **Built** |
 | `ls`, `locate` | **Built** |
-| Annotation writing (`link` on a `src://` subject) | **Built** |
+| Annotation writing (`link` on a `src:` subject) | **Built** |
 | Drift tier §6.2 (git rename inference) | **Built** |
 | Body fingerprints §6.3 | Deferred |
 

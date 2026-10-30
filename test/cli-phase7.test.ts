@@ -59,21 +59,21 @@ test("similar finds semantically-related instances", async () => {
   assert.ok(out.results.length > 0);
   // Either a or b should rank first; c (about database) should not.
   const top = out.results[0].uri;
-  assert.ok(top === "issue://a.md" || top === "issue://b.md");
+  assert.ok(top === "issue:a.md" || top === "issue:b.md");
 });
 
 test("similar accepts a uri to embed an existing document", async () => {
   const root = repo();
   await run(["--cwd", root, "rebuild"]);
-  await run(["--cwd", root, "similar", "issue://a.md", "--limit", "2"]);
-  const r = await run(["--cwd", root, "similar", "issue://a.md", "--limit", "2"]);
+  await run(["--cwd", root, "similar", "issue:a.md", "--limit", "2"]);
+  const r = await run(["--cwd", root, "similar", "issue:a.md", "--limit", "2"]);
   assert.equal(r.code, 0);
 });
 
 test("rebuild keeps the same content_hash when a body is unchanged", async () => {
   const root = repo();
   await run(["--cwd", root, "rebuild"]);
-  const r1 = await run(["--cwd", root, "query", "SELECT content_hash FROM embedding WHERE uri = 'issue://a.md'"]);
+  const r1 = await run(["--cwd", root, "query", "SELECT content_hash FROM embedding WHERE uri = 'issue:a.md'"]);
   const hash1 = (parse(r1.out) as Record<string, any>).rows[0].content_hash;
 
   // Touching the title doesn't change the body, so the hash stays.
@@ -83,7 +83,7 @@ test("rebuild keeps the same content_hash when a body is unchanged", async () =>
     "\nUsers cannot log in after password reset.\n",
   ));
   await run(["--cwd", root, "rebuild"]);
-  const r2 = await run(["--cwd", root, "query", "SELECT content_hash FROM embedding WHERE uri = 'issue://a.md'"]);
+  const r2 = await run(["--cwd", root, "query", "SELECT content_hash FROM embedding WHERE uri = 'issue:a.md'"]);
   const hash2 = (parse(r2.out) as Record<string, any>).rows[0].content_hash;
   assert.equal(hash1, hash2);
 
@@ -93,7 +93,7 @@ test("rebuild keeps the same content_hash when a body is unchanged", async () =>
     "\nDifferent content about payments and invoices.\n",
   ));
   await run(["--cwd", root, "rebuild"]);
-  const r3 = await run(["--cwd", root, "query", "SELECT content_hash FROM embedding WHERE uri = 'issue://a.md'"]);
+  const r3 = await run(["--cwd", root, "query", "SELECT content_hash FROM embedding WHERE uri = 'issue:a.md'"]);
   const hash3 = (parse(r3.out) as Record<string, any>).rows[0].content_hash;
   assert.notEqual(hash1, hash3);
 });
@@ -101,10 +101,10 @@ test("rebuild keeps the same content_hash when a body is unchanged", async () =>
 test("similar ranks the queried document itself first when asked by uri", async () => {
   const root = repo();
   await run(["--cwd", root, "rebuild"]);
-  const r = await run(["--cwd", root, "similar", "issue://a.md", "--limit", "3"]);
+  const r = await run(["--cwd", root, "similar", "issue:a.md", "--limit", "3"]);
   assert.equal(r.code, 0);
   const out = parse(r.out) as Record<string, any>;
-  assert.equal(out.results[0].uri, "issue://a.md");
+  assert.equal(out.results[0].uri, "issue:a.md");
 });
 
 test("similar on text uses a content hash that does not collide with any document", async () => {

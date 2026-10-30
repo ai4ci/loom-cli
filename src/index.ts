@@ -4,7 +4,7 @@ import { absolute, type Config } from "./config.ts";
 import { getLinksBlock, setLinksBlock, stringifyInstance, parseInstance } from "./document.ts";
 import { loadModel } from "./model/load.ts";
 import type { SchemaIR } from "./model/types.ts";
-import { query } from "./duckdb.ts";
+import { databasePath, query } from "./duckdb.ts";
 import { classRoot, type ClassRoots } from "./path-resolution.ts";
 
 export interface FilterView {
@@ -197,7 +197,7 @@ export async function indexCommand(
       unchanged: stale,
     };
   }
-  if (!existsSync(absolute(cfg, `${cfg.designRoot}/.loom.duckdb`))) {
+  if (!existsSync(absolute(cfg, databasePath(cfg)))) {
     const { loadGraph } = await import("./graph.ts");
     const { rebuild } = await import("./duckdb.ts");
     const { graph } = loadGraph(cfg, schema, roots);

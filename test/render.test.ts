@@ -174,9 +174,9 @@ test("render: named view renders its content into the file", async () => {
   assert(content.includes("| title"));
   assert(content.includes("| status"));
   // Should contain the open issues (URI derived from filename)
-  assert(content.includes("issue://open.md"));
-  assert(content.includes("issue://open2.md"));
-  assert(!content.includes("issue://closed.md")); // closed is filtered by WHERE
+  assert(content.includes("issue:open.md"));
+  assert(content.includes("issue:open2.md"));
+  assert(!content.includes("issue:closed.md")); // closed is filtered by WHERE
 });
 
 test("render: inline SQL renders into the file", async () => {
@@ -188,7 +188,7 @@ test("render: inline SQL renders into the file", async () => {
         +string status
     }
 `,
-    "test/issues/a.md": instance("uri: issue://a\ntitle: Alpha\nstatus: open\n"),
+    "test/issues/a.md": instance("uri: issue:a\ntitle: Alpha\nstatus: open\n"),
     "README.md": `# Test\n\n<!-- loom view: SELECT count(*) AS cnt FROM issue -->\n<!-- loom view: end -->\n`,
   });
 
@@ -213,4 +213,70 @@ test("render: unknown view produces error message inline", async () => {
 
   const content = readFileSync(`${root}/README.md`, "utf8");
   assert(content.includes("Unknown view"));
+});
+
+test("render --check exits 1 when a marker would be updated, and writes nothing", async () => {
+  const root = makeRepo({
+    "design/document-model.mmd": GRAPH_MODEL,
+    "README.md": `# Test\n\n<!-- loom view: SELECT count(*) AS cnt FROM issue -->\n<!-- loom view: end -->\n`,
+  });
+
+  await run(["--cwd", root, "index"]);
+  const r = await run(["--cwd", root, "render", "--check"]);
+  assert.equal(r.code, 1, "--check on a stale file should exit 1");
+
+  // Nothing was written: the file still holds the bare marker.
+  const content = readFileSync(`${root}/README.md`, "utf8");
+  assert(content.includes("<!-- loom view: SELECT count(*)"), "--check must not write");
+
+  // The stale file is named so CI can point at it.
+  assert.match(r.out + r.err, /README\.md/);
+});
+
+test("render --check exits 0 and is silent when everything is fresh", async () => {
+  const root = makeRepo({
+    "design/document-model.mmd": GRAPH_MODEL,
+    "README.md": `# Test\n\n<!-- loom view: SELECT count(*) AS cnt FROM issue -->\n<!-- loom view: end -->\n`,
+  });
+
+  await run(["--cwd", root, "index"]);
+  await run(["--cwd", root, "render"]); // render first, so the file is fresh
+  const r = await run(["--cwd", root, "render", "--check"]);
+  assert.equal(r.code, 0);
+
+  const content = readFileSync(`${root}/README.md`, "utf8");
+  assert(content.includes("cnt"));
+});
+
+test("render --debug prints resolved SQL per view to stderr", async () => {
+  const root = makeRepo({
+    "design/document-model.mmd": GRAPH_MODEL,
+    "README.md": `# Test\n\n<!-- loom view: SELECT count(*) AS cnt FROM issue -->\n<!-- loom view: end -->\n`,
+  });
+
+  await run(["--cwd", root, "index"]);
+  const r = await run(["--cwd", root, "render", "--debug"]);
+  assert.equal(r.code, 0);
+  assert.match(r.err, /SELECT count\(\*\) AS cnt FROM issue/);
+  assert.match(r.err, /README\.md/);
+
+  // The file was still rendered normally.
+  const content = readFileSync(`${root}/README.md`, "utf8");
+  assert(content.includes("cnt"));
+});
+
+test("render --debug names the view when the marker uses one", async () => {
+  const root = makeRepo({
+    "design/document-model.mmd": `${GRAPH_MODEL}
+%% @view openIssues
+%% SELECT title FROM issue WHERE status = 'open'
+`,
+    "README.md": `# Test\n\n<!-- loom view: openIssues -->\n<!-- loom view: end -->\n`,
+  });
+
+  await run(["--cwd", root, "index"]);
+  const r = await run(["--cwd", root, "render", "--debug"]);
+  assert.equal(r.code, 0);
+  assert.match(r.err, /openIssues/);
+  assert.match(r.err, /SELECT title FROM issue/);
 });

@@ -35,29 +35,29 @@ test("loadGraph finds every instance across class roots", () => {
   });
   assert.deepEqual(
     [...graph.instances.keys()].sort(),
-    ["decision://d.md", "issue://a.md", "issue://nested/b.md"],
+    ["decision:d.md", "issue:a.md", "issue:nested/b.md"],
   );
 });
 
 test("loadGraph records edges as triples", () => {
   const { graph } = build({
-    "design/issue/a.md": OPEN("A", "blocks: [issue://b.md]"),
+    "design/issue/a.md": OPEN("A", "blocks: [issue:b.md]"),
     "design/issue/b.md": OPEN("B"),
   });
   assert.deepEqual(graph.edges, [
-    { from: "issue://a.md", relation: "blocks", to: "issue://b.md" },
+    { from: "issue:a.md", relation: "blocks", to: "issue:b.md" },
   ]);
 });
 
 test("a clean repository produces no diagnostics", () => {
   assert.deepEqual(codes({
-    "design/issue/a.md": OPEN("A", "blocks: [issue://b.md]"),
+    "design/issue/a.md": OPEN("A", "blocks: [issue:b.md]"),
     "design/issue/b.md": OPEN("B"),
   }), []);
 });
 
 test("a dangling relation target is reported", () => {
-  assert.ok(codes({ "design/issue/a.md": OPEN("A", "blocks: [issue://ghost.md]") })
+  assert.ok(codes({ "design/issue/a.md": OPEN("A", "blocks: [issue:ghost.md]") })
     .includes("graph/dangling-link"));
 });
 
@@ -71,8 +71,8 @@ test("a markdown file under a class root with no frontmatter is an orphan", () =
 
 test("inbound cardinality is enforced across files", () => {
   const found = codes({
-    "design/issue/a.md": OPEN("A", "decided-by: [decision://d.md]"),
-    "design/issue/b.md": OPEN("B", "decided-by: [decision://d.md]"),
+    "design/issue/a.md": OPEN("A", "decided-by: [decision:d.md]"),
+    "design/issue/b.md": OPEN("B", "decided-by: [decision:d.md]"),
     "design/decision/d.md": instance("class: decision\ntitle: D"),
   });
   assert.ok(found.includes("graph/inbound-cardinality"));
@@ -80,17 +80,17 @@ test("inbound cardinality is enforced across files", () => {
 
 test("inbound cardinality passes when the limit is respected", () => {
   assert.deepEqual(codes({
-    "design/issue/a.md": OPEN("A", "decided-by: [decision://d.md]"),
+    "design/issue/a.md": OPEN("A", "decided-by: [decision:d.md]"),
     "design/decision/d.md": instance("class: decision\ntitle: D"),
   }), []);
 });
 
 test("a resource target is checked for existence but needs no instance file", () => {
   assert.deepEqual(codes({
-    "design/issue/a.md": OPEN("A", "attachment: [resource://spec.pdf]"),
+    "design/issue/a.md": OPEN("A", "attachment: [resource:spec.pdf]"),
     "design/resource/spec.pdf": "%PDF",
   }), []);
-  assert.ok(codes({ "design/issue/a.md": OPEN("A", "attachment: [resource://gone.pdf]") })
+  assert.ok(codes({ "design/issue/a.md": OPEN("A", "attachment: [resource:gone.pdf]") })
     .includes("graph/missing-resource"));
 });
 
@@ -110,11 +110,11 @@ test("per-instance findings are included in the whole-graph pass", () => {
 
 test("renderLinks writes outbound links then backlinks, deterministically", () => {
   const { graph } = build({
-    "design/issue/a.md": OPEN("A", "blocks: [issue://b.md]\ndecided-by: [decision://d.md]"),
-    "design/issue/b.md": OPEN("Bee", "blocks: [issue://a.md]"),
+    "design/issue/a.md": OPEN("A", "blocks: [issue:b.md]\ndecided-by: [decision:d.md]"),
+    "design/issue/b.md": OPEN("Bee", "blocks: [issue:a.md]"),
     "design/decision/d.md": instance("class: decision\ntitle: Dee"),
   });
-  const rendered = renderLinks(graph, graph.instances.get("issue://a.md")!);
+  const rendered = renderLinks(graph, graph.instances.get("issue:a.md")!);
   assert.equal(rendered, [
     "- blocks: [Bee](b.md)",
     "- decided-by: [Dee](../decision/d.md)",
@@ -126,22 +126,22 @@ test("renderLinks writes outbound links then backlinks, deterministically", () =
 
 test("renderLinks falls back to the instance id when a target has no title", () => {
   const { graph } = build({
-    "design/issue/a.md": OPEN("A", "attachment: [resource://spec.pdf]"),
+    "design/issue/a.md": OPEN("A", "attachment: [resource:spec.pdf]"),
     "design/resource/spec.pdf": "%PDF",
   });
-  const rendered = renderLinks(graph, graph.instances.get("issue://a.md")!);
+  const rendered = renderLinks(graph, graph.instances.get("issue:a.md")!);
   assert.equal(rendered, "- attachment: [spec.pdf](../resource/spec.pdf)");
 });
 
 test("renderLinks returns an empty string for an unconnected instance", () => {
   const { graph } = build({ "design/issue/a.md": OPEN("A") });
-  assert.equal(renderLinks(graph, graph.instances.get("issue://a.md")!), "");
+  assert.equal(renderLinks(graph, graph.instances.get("issue:a.md")!), "");
 });
 
 test("a stale protected link block is reported", () => {
   const found = codes({
     "design/issue/a.md": instance(
-      "class: issue\ntitle: A\nstatus: open\nblocks: [issue://b.md]",
+      "class: issue\ntitle: A\nstatus: open\nblocks: [issue:b.md]",
       "\n<!-- loom:links start -->\n- blocks: [Wrong](zzz.md)\n<!-- loom:links end -->\n",
     ),
     "design/issue/b.md": OPEN("B"),
@@ -151,7 +151,7 @@ test("a stale protected link block is reported", () => {
 
 test("a non-canonical uri in the yaml is reported as fixable", () => {
   const built = build({
-    "design/issue/a.md": OPEN("A", "blocks: [repo://design/issue/b.md]"),
+    "design/issue/a.md": OPEN("A", "blocks: [repo:design/issue/b.md]"),
     "design/issue/b.md": OPEN("B"),
   });
   const d = validateGraph(built.graph).find((x) => x.code === "graph/non-canonical-uri");

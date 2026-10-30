@@ -49,8 +49,8 @@ loom prefetch typescript python r
 ### Global Options Placement
 Global options **must precede** the subcommand name:
 ```bash
-loom --json resolve issue://a.md     # Correct
-loom resolve issue://a.md --json     # Error: unrecognized option
+loom --json resolve issue:a.md     # Correct
+loom resolve issue:a.md --json     # Error: unrecognized option
 ```
 
 - `--json`: Output machine-readable JSON instead of human-friendly YAML.
@@ -64,7 +64,7 @@ disk. The path is just where the class root happens to point; the URI is the
 address.
 
 ```bash
-loom show issue://fix-login.md          # Correct
+loom show issue:fix-login.md          # Correct
 loom show design/issue/fix-login.md     # Error: uri/bare-path
 ```
 
@@ -72,11 +72,11 @@ If you pass a path, loom refuses it and tells you the URI to use:
 
 ```
 uri/bare-path: "design/issue/fix-login.md" is a filesystem path, not a design uri
-  fix: use issue://fix-login.md instead
+  fix: use issue:fix-login.md instead
 ```
 
 Copy the suggested URI and re-run. The same rule applies to URIs written into
-frontmatter relations (`blocks: [issue://b.md]`) and to `ops` in a changeset
+frontmatter relations (`blocks: [issue:b.md]`) and to `ops` in a changeset
 file. To go the other way — from a path you already have to its URI — the error
 itself is the quickest answer, and `loom ls <class>://` lists what exists.
 
@@ -106,30 +106,30 @@ loom model check
 ### Navigating & Inspecting Instances
 ```bash
 # Resolve URI to disk path or source line number
-loom resolve issue://fix-login.md
-loom resolve src://src/auth.ts#login
+loom resolve issue:fix-login.md
+loom resolve src:src/auth.ts#login
 
 # Inspect instance YAML frontmatter + markdown body (verbatim, as on disk)
-loom show issue://fix-login.md
+loom show issue:fix-login.md
 
 # Read just the editable prose, with relative links shown as design uris
-loom --json body get issue://fix-login.md
+loom --json body get issue:fix-login.md
 
 # Hierarchical directory and symbol exploration (ls)
-loom ls issue://                       # List all instances of class 'issue'
-loom ls src://src/                     # List files in source directory
-loom ls src://src/auth.ts              # List linkable symbols/anchors in file
-loom ls src://src/auth.ts --kind Method # Filter symbols by kind
+loom ls issue:                       # List all instances of class 'issue'
+loom ls src:src/                     # List files in source directory
+loom ls src:src/auth.ts              # List linkable symbols/anchors in file
+loom ls src:src/auth.ts --kind Method # Filter symbols by kind
 
 # Locate which symbol encloses a specific line in source
-loom locate src://src/auth.ts --line 42
+loom locate src:src/auth.ts --line 42
 
 # Find which design documents link to a given source symbol
-loom refs src://src/auth.ts#login
+loom refs src:src/auth.ts#login
 
 # Semantic similarity search across markdown bodies
 loom similar "authentication token expiration" --limit 5
-loom similar issue://fix-login.md
+loom similar issue:fix-login.md
 ```
 
 ### Creating & Mutating Documents
@@ -139,28 +139,28 @@ All mutations validate the whole graph in memory before writing anything to disk
 #### Single-Operation Sugar
 ```bash
 # Create an instance
-loom create issue://new-feature.md "title: Support Passkeys" "status: open"
+loom create issue:new-feature.md "title: Support Passkeys" "status: open"
 
 # Update scalar attributes or relations
-loom set issue://new-feature.md status in_progress
+loom set issue:new-feature.md status in_progress
 
 # Link two design documents
-loom link issue://new-feature.md blocks issue://old-feature.md
+loom link issue:new-feature.md blocks issue:old-feature.md
 
 # Link source code to a document (writes comment inside function body!)
-loom link src://src/auth.ts#login implements issue://new-feature.md
+loom link src:src/auth.ts#login implements issue:new-feature.md
 # Or link source code targeting an anchor from a line number:
-loom link src://src/auth.ts --line 42 implements issue://new-feature.md
+loom link src:src/auth.ts --line 42 implements issue:new-feature.md
 
 # Remove link
-loom unlink issue://new-feature.md blocks issue://old-feature.md
-loom unlink src://src/auth.ts#login implements issue://new-feature.md
+loom unlink issue:new-feature.md blocks issue:old-feature.md
+loom unlink src:src/auth.ts#login implements issue:new-feature.md
 
 # Rename an instance (updates all inbound URIs across the corpus)
-loom rename issue://old-name.md issue://new-name.md
+loom rename issue:old-name.md issue:new-name.md
 
 # Delete an instance (fails if inbound relations still exist)
-loom delete issue://old-name.md
+loom delete issue:old-name.md
 ```
 
 #### Editing the Markdown Body
@@ -171,35 +171,35 @@ there is no way to corrupt either.
 
 ```bash
 # Read the prose (frontmatter and link block excluded)
-loom --json body get issue://fix-login.md
+loom --json body get issue:fix-login.md
 
 # Replace it (inline or from a file to avoid shell-escaping headaches)
-loom body set issue://fix-login.md "## Cause
+loom body set issue:fix-login.md "## Cause
 
 Session cookie expires early.
 "
-loom body set issue://fix-login.md --file /tmp/new-body.md
+loom body set issue:fix-login.md --file /tmp/new-body.md
 
 # Add to the end of it
-loom body append issue://fix-login.md "
+loom body append issue:fix-login.md "
 ## Update
 
 Fixed in 1.2.1.
 "
-loom body append issue://fix-login.md --file /tmp/update.md
+loom body append issue:fix-login.md --file /tmp/update.md
 
 # Apply a unified diff to it
-loom body patch issue://fix-login.md "@@ -1,3 +1,3 @@
+loom body patch issue:fix-login.md "@@ -1,3 +1,3 @@
  ## Cause
 -Session cookie expires early.
 +Session cookie expired one hour early.
 "
-loom body patch issue://fix-login.md --file /tmp/fix.diff
+loom body patch issue:fix-login.md --file /tmp/fix.diff
 
 # Any of the three can be previewed
-loom body set issue://fix-login.md "New prose.
+loom body set issue:fix-login.md "New prose.
 " --dry-run
-loom body set issue://fix-login.md --file /tmp/new-body.md --dry-run
+loom body set issue:fix-login.md --file /tmp/new-body.md --dry-run
 ```
 
 **Links are translated in both directions.** Write design URIs; loom converts
@@ -207,10 +207,10 @@ them to relative markdown links on disk, so the file renders correctly on
 GitHub. Read them back and they are URIs again:
 
 ```bash
-loom body set issue://a.md "Caused by [the auth ADR](adr://auth.md).
+loom body set issue:a.md "Caused by [the auth ADR](adr:auth.md).
 "
 # on disk:  Caused by [the auth ADR](../adr/auth.md).
-# body get: Caused by [the auth ADR](adr://auth.md).
+# body get: Caused by [the auth ADR](adr:auth.md).
 ```
 
 URLs, `mailto:`, in-page `#fragments` and paths outside the repository are left
@@ -230,14 +230,14 @@ loom apply changes.yaml
 *Example `changes.yaml`:*
 ```yaml
 - op: create
-  uri: issue://passkeys.md
+  uri: issue:passkeys.md
   data:
     title: Support Passkeys
     status: open
 - op: link
-  from: issue://passkeys.md
+  from: issue:passkeys.md
   rel: relates-to
-  to: issue://auth.md
+  to: issue:auth.md
 ```
 
 ### Navigational Indexes
@@ -338,7 +338,8 @@ literal): `status=open,in_progress` expands to `status IN ('open', 'in_progress'
 ### Querying with SQL (DuckDB)
 The graph and relations project into DuckDB:
 ```bash
-# Rebuild the projection database (.loom.duckdb)
+# Rebuild the projection database
+# (design/.loom/db/<branch>/loom.duckdb — one per git branch)
 loom rebuild
 
 # Query concrete class tables or edge triples
@@ -387,20 +388,20 @@ The rebuild also populates an `embedding` table (one vector per
 instance). Search with `loom similar`:
 ```bash
 loom similar "authentication token expiration" --limit 5
-loom similar issue://fix-login.md
+loom similar issue:fix-login.md
 ```
 
 ## 4. Troubleshooting Common Diagnostics
 
 | Diagnostic Code | Meaning | Recovery / Fix |
 |---|---|---|
-| `uri/bare-path` | A filesystem path was given where a design URI belongs (e.g. `design/issue/a.md` instead of `issue://a.md`). | Use the URI named in the diagnostic's `fix`. Nothing was written. |
+| `uri/bare-path` | A filesystem path was given where a design URI belongs (e.g. `design/issue/a.md` instead of `issue:a.md`). | Use the URI named in the diagnostic's `fix`. Nothing was written. |
 | `uri/malformed` | The argument is not a URI at all, or the scheme has only one slash (`issue:/a.md`). | Write it as `<class>://<id>`. |
 | `graph/stale-links` | Protected link block in markdown is out of sync with frontmatter. | Run `loom validate --fix`. |
 | `graph/non-canonical-uri` | A URI has unnecessary path segments or wrong format. | Run `loom validate --fix`. |
 | `graph/renamed-symbol` | Source symbol anchor broken, but matches a renamed symbol since `HEAD`. | Run `loom validate --fix` to rewrite. |
-| `graph/missing-symbol` | Source anchor `#symbol` not found in file. | Use `loom ls src://path` or suggestion in diagnostic `fix` to correct name. |
-| `graph/missing-source-file` | Target file in `src://` URI does not exist. | Check file path or remove link. |
+| `graph/missing-symbol` | Source anchor `#symbol` not found in file. | Use `loom ls src:path` or suggestion in diagnostic `fix` to correct name. |
+| `graph/missing-source-file` | Target file in `src:` URI does not exist. | Check file path or remove link. |
 | `graph/dangling-link` | Referenced design URI does not exist. | Create missing document or remove edge. |
 | `graph/inbound-cardinality` | A required relation is missing or exceeds cardinality (e.g. `1`, `0..1`). | Adjust edges with `link` or `unlink`. |
 | `source/ambiguous-anchor` | Symbol name appears multiple times in file (e.g. nested scope or overload). | Use fully-qualified anchor path (e.g. `Class.method` or `func(int,string)`). |

@@ -25,7 +25,7 @@ import { similarity } from "./similarity.ts";
 import { canonicalise, formatUri, parseUri, resolveUri } from "./uri.ts";
 
 export interface InstanceNode {
-  /** Canonical uri, e.g. `issue://a.md`. */
+  /** Canonical uri, e.g. `issue:a.md`. */
   uri: string;
   className: string;
   /** Instance id: the path relative to the class root. */
@@ -356,14 +356,14 @@ export function validateGraph(graph: Graph): Diagnostic[] {
           found.push(error(
             "source/dangling-reverse-link",
             `comment points to non-existent ${rl.target}`,
-            { uri: `${name}://${rel}`, line: rl.line },
+            { uri: `${name}:${rel}`, line: rl.line },
           ));
         }
         if (!schema.relations.some((r) => r.name === rl.relation && isSubclassOf(schema, name, r.from))) {
           found.push(error(
             "source/invalid-reverse-relation",
             `relation "${rl.relation}" is not permitted from ${name}`,
-            { uri: `${name}://${rel}`, line: rl.line },
+            { uri: `${name}:${rel}`, line: rl.line },
           ));
         }
       }

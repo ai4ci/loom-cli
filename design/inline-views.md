@@ -129,8 +129,8 @@ The rendered output for a multi-column result:
 
 | uri | title | status |
 |---|---|---|
-| issue://fix-login.md | Fix login timeout | open |
-| issue://add-pagination.md | Add pagination | open |
+| issue:fix-login.md | Fix login timeout | open |
+| issue:add-pagination.md | Add pagination | open |
 
 <!-- loom view: end -->
 ```
@@ -140,8 +140,8 @@ For a single-column result (e.g. a backlinks list):
 ```markdown
 <!-- loom view: backlinks?id=fix-login.md -->
 
-- issue://auth.md (relates-to)
-- issue://navigation.md (blocks)
+- issue:auth.md (relates-to)
+- issue:navigation.md (blocks)
 
 <!-- loom view: end -->
 ```
@@ -247,7 +247,7 @@ need parameters, write a named view).
 - 1 column: rendered as a bullet list (the value itself, with no header row)
 - 2–4 columns: rendered as a full markdown table
 - 5+ columns: rendered as a compact list with bold column names
-  (`**uri:** issue://foo  **title:** Foo  **status:** open`)
+  (`**uri:** issue:foo  **title:** Foo  **status:** open`)
 
 #### Open question 6 (resolved — comma splitting)
 

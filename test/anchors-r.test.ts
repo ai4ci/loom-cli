@@ -67,7 +67,7 @@ test("an anchor is never named after a call", () => {
 
 test("R anchors resolve and attribute", () => {
   const r = `fit <- function(df) {
-  # implements: issue://x.md
+  # implements: issue:x.md
   df
 }`;
   const anchors = extractAnchors(r, "r");

@@ -7,7 +7,7 @@
 **File:** `src/render.ts` — function `renderView()`
 
 When a `%% @view` SQL query returns a column containing URIs (e.g.
-`issue://my-task.md`), the cell value is stringified as plain text.
+`issue:my-task.md`), the cell value is stringified as plain text.
 It should be rendered as a relative markdown link — `[title](relative/path.md)` —
 consistent with how `loom index` renders links in protected link blocks.
 
@@ -25,24 +25,25 @@ table) would need a note that URIs are rendered as links.
 
 ## Inline views: `render --check` CI mode (0.8.0)
 
-**File:** `src/render.ts` — function `renderCommand()`
-
-The `--check` flag is wired in `src/cli.ts` but the no-write path is not
-implemented. Currently `render --check` renders and writes, then returns
-`ok: true`. Expected behaviour: when `--check` is set, the function should
-render in memory and compare against the file on disk — if any marker would
-change, emit those paths as diagnostics and exit 1.
+**Implemented in 0.8.3.** `checkStale()` renders in memory and compares with
+`updateSection() === text`; stale file paths are returned and `render --check`
+exits 1 with them. Nothing is written. Fresh files exit 0 silently.
 
 ## Inline views: `render --debug` output (0.8.0)
 
-**File:** `src/render.ts`
+**Implemented in 0.8.3.** `renderAll` and `checkStale` take a `DebugSink`;
+each view emits `<file>: view <name>\n  <sql>` (SQL indented, newlines
+preserved). `buildProgram` now takes an optional `writeErr` callback so the
+CLI routes it to stderr, and tests capture it directly.
 
-The `--debug` flag is wired in `src/cli.ts` but no debug output is emitted.
-Expected behaviour: when `--debug` is set, each rendered view's resolved SQL
-should be written to stderr (prefixed with the file path and view name), so
-users can inspect exactly what was executed.
+## Doc dir pollution branches and loom working directory (0.8.0) 
 
-## Doc dir pollution branches and loom working directory (0.8.0)
+**Implemented in 0.8.1.** `loomDir`, `gitBranch`, `databasePath` and
+`ensureLoomDir` in `src/duckdb.ts`; tests in `test/duckdb-path.test.ts`.
+Two details settled during implementation: a detached HEAD becomes
+`detached/<sha12>` rather than a directory called `HEAD`, since every detached
+checkout would otherwise share one projection; and the branch is cached per
+repo root so the common path does not spawn `git` repeatedly.
 
 In the current implementation a per branch `.loom.duckdb` is recreated in the 
 design docs directory. If there are many branches this will pollute the design 
@@ -67,7 +68,17 @@ from commits.
 
 ## URI scheme not RDF compliant (0.8.0)
 
-the current scheme where an issue is referenced as `issue://my-issue.md` and the
+**Implemented in 0.8.2 (the uris).** The curie form `issue:my-issue.md` is now
+the only written form: `parseUri` accepts `scheme:path` with `#fragment`, and
+the superseded `scheme://path` still parses but is flagged `legacy` and
+`formatUri` never emits it, so anything that round-trips a uri migrates it.
+The two-slash form was dropped because under RFC 3986 it means
+`authority = first segment` (`issue://design/notes.md` addresses host `design`),
+which was never what loom meant. The curie has no authority, so the whole path
+is the path. Remaining from this issue: `%% @prefix` external prefixes, and the
+`.ttl` export (see RDF export, below).
+
+the current scheme where an issue is referenced as `issue:my-issue.md` and the
 path is declared in a comment in the mermaid like this:
 
 ```
@@ -91,7 +102,7 @@ of source code to the prefix of the enclosing loom UML class:
 
 ```
 function my_function() {
-    // resolves issue://my-issue.md 
+    // resolves issue:my-issue.md 
 }
 ```
 

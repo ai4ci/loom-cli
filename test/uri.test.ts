@@ -21,11 +21,11 @@ const roots: ClassRoots = new Map([
 ]);
 
 test("parseUri splits scheme, path and anchor", () => {
-  assert.deepEqual(parseUri("issue://my-first-issue.md"), {
+  assert.deepEqual(parseUri("issue:my-first-issue.md"), {
     scheme: "issue",
     path: "my-first-issue.md",
   });
-  assert.deepEqual(parseUri("src://my/pkg/MyClass.java#myFunction"), {
+  assert.deepEqual(parseUri("src:my/pkg/MyClass.java#myFunction"), {
     scheme: "src",
     path: "my/pkg/MyClass.java",
     anchor: "myFunction",
@@ -33,12 +33,12 @@ test("parseUri splits scheme, path and anchor", () => {
 });
 
 test("parseUri normalises redundant path segments", () => {
-  assert.equal(parseUri("issue://./a/../b.md").path, "b.md");
-  assert.equal(parseUri("issue:///a//b.md").path, "a/b.md");
+  assert.equal(parseUri("issue:./a/../b.md").path, "b.md");
+  assert.equal(parseUri("issue:/a//b.md").path, "a/b.md");
 });
 
 test("parseUri rejects malformed input", () => {
-  for (const bad of ["not-a-uri", "issue:/single-slash.md", "://no-scheme", ""]) {
+  for (const bad of ["not-a-uri", "://no-scheme", ""]) {
     assert.throws(() => parseUri(bad), /uri/i, `expected ${bad} to be rejected`);
   }
 });
@@ -64,12 +64,6 @@ test("the bare-path diagnostic carries the offending text and a repair hint", ()
   assert.ok(diagnostic?.fix, "expected a fix hint");
 });
 
-test("a scheme with one slash is malformed, and says so", () => {
-  const diagnostic = rejection("issue:/single-slash.md");
-  assert.equal(diagnostic?.code, "uri/malformed");
-  assert.match(`${diagnostic?.message} ${diagnostic?.fix}`, /two slashes|:\/\//);
-});
-
 test("input that is neither uri-shaped nor path-shaped stays malformed", () => {
   for (const bad of ["not-a-uri", "://no-scheme", ""]) {
     assert.equal(rejection(bad)?.code, "uri/malformed", `expected ${bad} to stay malformed`);
@@ -77,46 +71,46 @@ test("input that is neither uri-shaped nor path-shaped stays malformed", () => {
 });
 
 test("parseUri rejects paths escaping the root", () => {
-  assert.throws(() => parseUri("issue://../outside.md"), /escapes/i);
+  assert.throws(() => parseUri("issue:../outside.md"), /escapes/i);
 });
 
 test("formatUri is the inverse of parseUri", () => {
-  for (const raw of ["issue://a.md", "src://a/b.R#fn", "repo://README.md"]) {
+  for (const raw of ["issue:a.md", "src:a/b.R#fn", "repo:README.md"]) {
     assert.equal(formatUri(parseUri(raw)), raw);
   }
 });
 
 test("resolveUri maps schemes to repo-relative paths", () => {
-  assert.equal(resolveUri(parseUri("repo://README.md"), roots).path, "README.md");
-  assert.equal(resolveUri(parseUri("issue://a.md"), roots).path, "design/issue/a.md");
-  assert.equal(resolveUri(parseUri("src://a/b.R"), roots).path, "src/a/b.R");
-  assert.equal(resolveUri(parseUri("test://unit/a.R"), roots).path, "tests/unit/a.R");
+  assert.equal(resolveUri(parseUri("repo:README.md"), roots).path, "README.md");
+  assert.equal(resolveUri(parseUri("issue:a.md"), roots).path, "design/issue/a.md");
+  assert.equal(resolveUri(parseUri("src:a/b.R"), roots).path, "src/a/b.R");
+  assert.equal(resolveUri(parseUri("test:unit/a.R"), roots).path, "tests/unit/a.R");
 });
 
 test("resolveUri returns the path unchanged for an unknown class", () => {
-  assert.throws(() => resolveUri(parseUri("decision://d1.md"), roots), /unknown class/i);
+  assert.throws(() => resolveUri(parseUri("decision:d1.md"), roots), /unknown class/i);
 });
 
 test("canonicalise picks the most compact scheme", () => {
-  assert.equal(formatUri(canonicalise("design/issue/a.md", roots)), "issue://a.md");
-  assert.equal(formatUri(canonicalise("README.md", roots)), "repo://README.md");
-  assert.equal(formatUri(canonicalise("tests/unit/a.R", roots)), "test://unit/a.R");
+  assert.equal(formatUri(canonicalise("design/issue/a.md", roots)), "issue:a.md");
+  assert.equal(formatUri(canonicalise("README.md", roots)), "repo:README.md");
+  assert.equal(formatUri(canonicalise("tests/unit/a.R", roots)), "test:unit/a.R");
 });
 
 test("canonicalise falls back to repo when no class matches", () => {
-  assert.equal(formatUri(canonicalise("design/notes.md", roots)), "repo://design/notes.md");
+  assert.equal(formatUri(canonicalise("design/notes.md", roots)), "repo:design/notes.md");
 });
 
 test("canonicalise preserves an anchor", () => {
-  assert.equal(formatUri(canonicalise("src/a/b.R", roots, "fn")), "src://a/b.R#fn");
+  assert.equal(formatUri(canonicalise("src/a/b.R", roots, "fn")), "src:a/b.R#fn");
 });
 
 test("equivalent compares resolved paths across schemes", () => {
-  assert.equal(equivalent("repo://design/issue/a.md", "issue://a.md", roots), true);
-  assert.equal(equivalent("issue://a.md", "issue://b.md", roots), false);
+  assert.equal(equivalent("repo:design/issue/a.md", "issue:a.md", roots), true);
+  assert.equal(equivalent("issue:a.md", "issue:b.md", roots), false);
 });
 
 test("equivalent distinguishes anchors", () => {
-  assert.equal(equivalent("src://a.R#one", "src://a.R#two", roots), false);
-  assert.equal(equivalent("src://a.R#one", "src://a.R#one", roots), true);
+  assert.equal(equivalent("src:a.R#one", "src:a.R#two", roots), false);
+  assert.equal(equivalent("src:a.R#one", "src:a.R#one", roots), true);
 });

@@ -55,12 +55,12 @@ test("toUris rewrites relative markdown links as design uris", () => {
   const prose = "See [D1](../decision/d1.md) and [B](b.md).\n";
   assert.equal(
     toUris(prose, "design/issue/a.md", ROOTS),
-    "See [D1](decision://d1.md) and [B](issue://b.md).\n",
+    "See [D1](decision:d1.md) and [B](issue:b.md).\n",
   );
 });
 
 test("toRelative rewrites design uris as relative markdown links", () => {
-  const prose = "See [D1](decision://d1.md) and [B](issue://b.md).\n";
+  const prose = "See [D1](decision:d1.md) and [B](issue:b.md).\n";
   assert.equal(
     toRelative(prose, "design/issue/a.md", ROOTS),
     "See [D1](../decision/d1.md) and [B](b.md).\n",
@@ -76,7 +76,7 @@ test("link translation round-trips", () => {
 test("a fragment on a relative link survives translation", () => {
   const prose = "[D1](../decision/d1.md#rationale)\n";
   const uris = toUris(prose, "design/issue/a.md", ROOTS);
-  assert.equal(uris, "[D1](decision://d1.md#rationale)\n");
+  assert.equal(uris, "[D1](decision:d1.md#rationale)\n");
   assert.equal(toRelative(uris, "design/issue/a.md", ROOTS), prose);
 });
 
@@ -95,14 +95,14 @@ test("image links translate like ordinary links", () => {
   const prose = "![chart](../resource/chart.png)\n";
   assert.equal(
     toUris(prose, "design/issue/a.md", ROOTS),
-    "![chart](resource://chart.png)\n",
+    "![chart](resource:chart.png)\n",
   );
 });
 
 test("a path outside every class root becomes a repo uri", () => {
   const prose = "[r](../../README.md)\n";
   const uris = toUris(prose, "design/issue/a.md", ROOTS);
-  assert.equal(uris, "[r](repo://README.md)\n");
+  assert.equal(uris, "[r](repo:README.md)\n");
   assert.equal(toRelative(uris, "design/issue/a.md", ROOTS), prose);
 });
 

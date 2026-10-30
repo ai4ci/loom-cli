@@ -45,7 +45,7 @@ export interface ReverseLink {
 }
 
 const REVERSE_LINK_RE =
-  /^\s*(?:\/\/|#|--|\/\*)\s*([a-zA-Z0-9_-]+)\s*:\s*([a-zA-Z0-9+.-]+:\/\/\S+?)(?:\s*\*\/)?\s*$/;
+  /^\s*(?:\/\/|#|--|\/\*)\s*([a-zA-Z0-9_-]+)\s*:\s*([a-zA-Z0-9+.-]+:(?:\/\/)?\S+?)(?:\s*\*\/)?\s*$/;
 
 /** Minimal structural view of a tree-sitter node. */
 interface TsNode {
