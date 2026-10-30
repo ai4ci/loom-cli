@@ -448,7 +448,6 @@ Two primitive types carry locations:
 
 ```mermaid
 %% @path adr /architecture/design-records
-%% @path resource data
 %% @path fixture test-fixtures
 %% @path config /input
 
@@ -490,8 +489,8 @@ adr:      -> $REPO_ROOT/architecture/design-records
 src:      -> $REPO_ROOT/src
 main:     -> $REPO_ROOT/src/main
 test:     -> $REPO_ROOT/src/test
-resource: -> $REPO_ROOT/data
-fixture:  -> $REPO_ROOT/data/test-fixtures
+resource: -> $REPO_ROOT/resource
+fixture:  -> $REPO_ROOT/fixture
 config:   -> $REPO_ROOT/input
 ```
 
@@ -504,8 +503,8 @@ config:   -> $REPO_ROOT/input
   typos in class names or `@path` arguments surface consistently for
   both humans and agents.
 - **Canonicalisation**: a filesystem path resolves to the longest matching
-  class URI scheme (`src/foo` → `main:foo` if `main` is `src/main`).
-  No match → `repo:relative/path`.
+  class URI scheme (`src/auth.ts` → `main:auth.ts` if `main` is `src/main`).
+  No match → the `repo:` scheme (`repo:relative/path`).
 - **No config file**: `.loom.yaml` is optional. With no config, the
   defaults above apply.
 
@@ -541,8 +540,8 @@ files). The anchor model is policy-driven; configuration lives in
 
 ```yaml
 source:
-  anchorKinds: [function_declaration, method_definition, arrow_function, function_definition]
-  transparentKinds: [export_statement, statement_block]
+  anchorKinds: [Function, Method, Class, Struct, Interface, Enum, Trait]
+  transparentKinds: [Impl, Module, Namespace]
 ```
 
 - `anchorKinds`: tree-sitter structure kinds that qualify as anchors. An
