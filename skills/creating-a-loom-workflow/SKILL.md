@@ -177,7 +177,7 @@ Identify state machines and invariants that agents or contributors must respect 
 For example, for an Issue Tracker:
 1. **Creation**:
    - Must specify `title` and initial `status: open`.
-   - Filename slug matches title (e.g. `issue://fix-token-refresh.md`).
+   - Filename slug matches title (e.g. `issue:fix-token-refresh.md`).
 2. **Transition: `open` -> `in_progress`**:
    - Permitted if no unresolved blocking issues (`blocks`).
    - Agent links relevant source files or branches.
@@ -276,7 +276,7 @@ Inline SQL needs no `%% @view` annotation; just write `SELECT` after the marker.
 | CI check | `--check` | `--check` |
 
 To migrate existing `view:`-based index files to `%% @view` annotations,
-see [Appendix C](#appendix-c--migration-guide-view-frontmatter--view-annotations).
+see [Appendix D](#appendix-d--migration-guide-view-frontmatter--view-annotations).
 
 ---
 
@@ -308,20 +308,20 @@ This repository uses \`loom\` governed by \`$LOOM_DEFAULT_ROOT/document-model.mm
 Refer to \`using-loom-cli\` for general CLI operation syntax.
 
 ## 1. Document Classes & Locations
-- Issues: \`issue://<name>.md\` -> \`$LOOM_DEFAULT_ROOT/issues/<name>.md\`
-- ADRs: \`adr://<name>.md\` -> \`$LOOM_DEFAULT_ROOT/adrs/<name>.md\`
+- Issues: \`issue:<name>.md\` -> \`$LOOM_DEFAULT_ROOT/issues/<name>.md\`
+- ADRs: \`adr:<name>.md\` -> \`$LOOM_DEFAULT_ROOT/adrs/<name>.md\`
 
 ## 2. Common Operations
 
 ### Creating an Issue
 \`\`\`bash
-loom create issue://my-task.md "title: My Task" "status: open" "created: $(date +%Y-%m-%d)"
+loom create issue:my-task.md "title: My Task" "status: open" "created: $(date +%Y-%m-%d)"
 \`\`\`
 
 ### Linking Code to an Issue
 When implementing an issue in code:
 \`\`\`bash
-loom link src://src/feature.ts#handleTask implements issue://my-task.md
+loom link src:src/feature.ts#handleTask implements issue:my-task.md
 \`\`\`
 
 ### Writing the Issue's Prose
@@ -329,16 +329,16 @@ Edit the markdown body through loom, never with a file editor — this
 cannot touch the frontmatter or the generated link block. Use `--file`
 to avoid quoting/escaping multiline text in bash:
 \`\`\`bash
-loom --json body get issue://my-task.md
-loom body append issue://my-task.md "
+loom --json body get issue:my-task.md
+loom body append issue:my-task.md "
 ## Cause
 
 Session cookie expires early.
 "
 # or write to /tmp/prose.md and load directly:
-loom body set issue://my-task.md --file /tmp/prose.md
+loom body set issue:my-task.md --file /tmp/prose.md
 \`\`\`
-Write links as design URIs (\`[ADR](adr://auth.md)\`); loom stores them as
+Write links as design URIs (\`[ADR](adr:auth.md)\`); loom stores them as
 relative markdown links and returns them as URIs.
 
 ## 3. Lifecycle Transition Rules
@@ -346,17 +346,17 @@ relative markdown links and returns them as URIs.
 ### Moving an Issue to in_progress
 - Check if blocked:
   \`\`\`bash
-  loom query "SELECT object FROM edge WHERE subject = 'issue://my-task.md' AND relation = 'blocks'"
+  loom query "SELECT object FROM edge WHERE subject = 'issue:my-task.md' AND relation = 'blocks'"
   \`\`\`
 
 ### Resolving an Issue
 - Ensure code link exists:
   \`\`\`bash
-  loom refs src://path/to/code.ts#symbol
+  loom refs src:path/to/code.ts#symbol
   \`\`\`
 - Update status:
   \`\`\`bash
-  loom set issue://my-task.md status resolved
+  loom set issue:my-task.md status resolved
   \`\`\`
 
 ## 4. Pre-Commit Checklist
@@ -423,11 +423,11 @@ resource <|-- fixture
 ```
 
 Resolves to:
-- `src://`     → `$REPO_ROOT/src`
-- `main://`    → `$REPO_ROOT/src/main`           (default under parent)
-- `test://`    → `$REPO_ROOT/src/test`           (default under parent)
-- `resource://` → `$REPO_ROOT/data`
-- `fixture://`  → `$REPO_ROOT/data/test-fixtures` (default under parent)
+- `src:`     → `$REPO_ROOT/src`
+- `main:`    → `$REPO_ROOT/src/main`           (default under parent)
+- `test:`    → `$REPO_ROOT/src/test`           (default under parent)
+- `resource:` → `$REPO_ROOT/data`
+- `fixture:`  → `$REPO_ROOT/data/test-fixtures` (default under parent)
 
 ### A.3 Inheritance-driven default
 
@@ -444,7 +444,7 @@ Two primitive types carry locations:
 
 - `path`: a repo-relative filesystem path (e.g. `design/notes.md`).
   Validated for existence; used by `loom validate`.
-- `uri`: a design URI (`issue://a.md`). Validated against the model
+- `uri`: a design URI (`issue:a.md`). Validated against the model
   (scheme must exist; class must be valid for the relation); used for
   edges.
 
@@ -489,14 +489,14 @@ classDiagram
 With the model at `$REPO_ROOT/docs/document-model.mmd`:
 
 ```
-issue://    -> $REPO_ROOT/docs/issue
-adr://      -> $REPO_ROOT/architecture/design-records
-src://      -> $REPO_ROOT/src
-main://     -> $REPO_ROOT/src/main
-test://     -> $REPO_ROOT/src/test
-resource:// -> $REPO_ROOT/data
-fixture://  -> $REPO_ROOT/data/test-fixtures
-config://   -> $REPO_ROOT/input
+issue:    -> $REPO_ROOT/docs/issue
+adr:      -> $REPO_ROOT/architecture/design-records
+src:      -> $REPO_ROOT/src
+main:     -> $REPO_ROOT/src/main
+test:     -> $REPO_ROOT/src/test
+resource: -> $REPO_ROOT/data
+fixture:  -> $REPO_ROOT/data/test-fixtures
+config:   -> $REPO_ROOT/input
 ```
 
 ### A.6 Rules & edge cases
@@ -508,14 +508,36 @@ config://   -> $REPO_ROOT/input
   typos in class names or `@path` arguments surface consistently for
   both humans and agents.
 - **Canonicalisation**: a filesystem path resolves to the longest matching
-  class URI scheme (`src/foo` → `main://foo` if `main` is `src/main`).
-  No match → `repo://relative/path`.
+  class URI scheme (`src/foo` → `main:foo` if `main` is `src/main`).
+  No match → `repo:relative/path`.
 - **No config file**: `.loom.yaml` is optional. With no config, the
   defaults above apply.
 
 ---
 
-## Appendix B — Anchor policy (source linkage)
+## Appendix B — External prefixes (`%% @prefix`)
+
+A curie usually names a class bound by `%% @path`, but a model can also bind a
+scheme to something outside the repository:
+
+```
+%% @prefix gh: https://github.com/my-org/my-project/issues/
+```
+
+- The target **must end in `/` or `#`** — curie expansion is string
+  concatenation, not path join, so a bare `.../issues` would turn `gh:6`
+  into `.../issues6`. A declaration missing the delimiter is a hard error
+  (`model/prefix-delimiter`).
+- `gh:6` expands to `https://github.com/my-org/my-project/issues/6`.
+- An external scheme wins over a class of the same name.
+- Relational targets under an external scheme skip the filesystem
+  existence check (there is no local file to find).
+- Inline views render such cells as `[gh:6](expanded-url)`; body editing
+  translates between the curie and the url in both directions.
+
+---
+
+## Appendix C — Anchor policy (source linkage)
 
 `src`-family instances point to source-code anchors (symbols, not whole
 files). The anchor model is policy-driven; configuration lives in
@@ -558,7 +580,7 @@ treating it as a deletion.
 
 ---
 
-## Appendix C — Migration Guide: `view:` frontmatter → `%% @view` annotations
+## Appendix D — Migration Guide: `view:` frontmatter → `%% @view` annotations
 
 Before inline views, index files used a `view:` field in YAML frontmatter and
 `<!-- loom:links ... -->` markers that `loom index` filled with auto-generated

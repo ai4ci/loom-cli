@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { absolute, type Config, findModelFiles } from "../config.ts";
 import { LoomError, type Diagnostic, error } from "../diagnostics.ts";
-import { extractPathAnnotations, classRoot as pickClassRoot, resolveClassRoots, type ClassRoots } from "../path-resolution.ts";
+import { extractPathAnnotations, extractPrefixAnnotations, classRoot as pickClassRoot, resolveClassRoots, type ClassRoots } from "../path-resolution.ts";
 import { extractViewAnnotations } from "../render.ts";
 import { parseModel } from "./mermaid.ts";
 import { validateModel } from "./schema.ts";
@@ -18,6 +18,8 @@ export interface LoadedModel {
   schema: SchemaIR;
   roots: ClassRoots;
   views: ViewAnnotation[];
+  /** External prefixes from `%% @prefix` annotations. */
+  prefixes: Map<string, string>;
   /** Syntax, model-level and path-resolution findings combined. */
   diagnostics: Diagnostic[];
 }
@@ -63,6 +65,7 @@ export function loadModel(cfg: Config, override?: string): LoadedModel {
   const viewDiagnostics: Diagnostic[] = [];
   const views = extractViewAnnotations(comments, viewDiagnostics);
   const annotations = extractPathAnnotations(comments);
+  const prefixes = extractPrefixAnnotations(comments, viewDiagnostics);
   const { roots, diagnostics: pathDiagnostics } = resolveClassRoots(
     schema,
     annotations,
@@ -72,9 +75,10 @@ export function loadModel(cfg: Config, override?: string): LoadedModel {
   const modelDiagnostics = validateModel(schema);
   return {
     path: target,
-    schema,
+    schema: { ...schema, prefixes },
     roots,
     views,
+    prefixes,
     diagnostics: [...diagnostics, ...viewDiagnostics, ...pathDiagnostics, ...modelDiagnostics],
   };
 }

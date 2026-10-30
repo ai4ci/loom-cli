@@ -13,7 +13,7 @@ function schema(defs: [string, ClassDef][], relations: Relation[] = []): SchemaI
   for (const k of ["src", "resource"]) {
     if (!classes.has(k)) classes.set(k, { name: k, annotations: [], attributes: [], members: [], parents: [], line: 0, declarations: 1 });
   }
-  return { classes, relations };
+  return { classes, relations, prefixes: new Map() };
 }
 
 const REPO_ROOT = "/repo";

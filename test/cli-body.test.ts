@@ -17,7 +17,7 @@ function repo(files: Record<string, string> = {}): string {
     "design/document-model.mmd": GRAPH_MODEL,
     "design/decision/d1.md": instance("class: decision\ntitle: D1"),
     "design/issue/a.md": instance(
-      "class: issue\ntitle: A\nstatus: open\ndecided-by: decision://d1.md",
+      "class: issue\ntitle: A\nstatus: open\ndecided-by: decision:d1.md",
       `\n${LINKS}\n\nAlpha\nBravo\nCharlie\n`,
     ),
     ...files,
@@ -33,7 +33,7 @@ async function body(root: string, args: string[]): Promise<ReturnType<typeof run
 
 test("body get returns the prose without the protected link block", async () => {
   const root = repo();
-  const result = await body(root, ["get", "issue://a.md"]);
+  const result = await body(root, ["get", "issue:a.md"]);
   assert.equal(result.code, 0, result.err);
   const value = parse(result.out) as { body: string };
   assert.equal(value.body, "Alpha\nBravo\nCharlie\n");
@@ -46,19 +46,19 @@ test("body get translates relative links into design uris", async () => {
       "\nSee [D1](../decision/d1.md).\n\n",
     ),
   });
-  const result = await body(root, ["get", "issue://a.md"]);
+  const result = await body(root, ["get", "issue:a.md"]);
   assert.equal(result.code, 0, result.err);
   const value = parse(result.out) as { body: string };
-  assert.match(value.body, /\[D1\]\(decision:\/\/d1\.md\)/);
+  assert.match(value.body, /\[D1\]\(decision:d1\.md\)/);
 });
 
 test("body set replaces the prose and leaves frontmatter and links alone", async () => {
   const root = repo();
-  const result = await body(root, ["set", "issue://a.md", "Replaced.\n"]);
+  const result = await body(root, ["set", "issue:a.md", "Replaced.\n"]);
   assert.equal(result.code, 0, result.err);
 
   const text = read(root);
-  assert.match(text, /^---\nclass: issue\ntitle: A\nstatus: open\ndecided-by: decision:\/\/d1\.md\n---\n/);
+  assert.match(text, /^---\nclass: issue\ntitle: A\nstatus: open\ndecided-by: decision:d1\.md\n---\n/);
   assert.match(text, /<!-- loom:links start -->\n- decided-by: \[D1\]\(\.\.\/decision\/d1\.md\)\n<!-- loom:links end -->/);
   assert.match(text, /Replaced\./);
   assert.doesNotMatch(text, /Bravo/);
@@ -66,33 +66,33 @@ test("body set replaces the prose and leaves frontmatter and links alone", async
 
 test("body set writes design uris to disk as relative markdown links", async () => {
   const root = repo();
-  const result = await body(root, ["set", "issue://a.md", "See [D1](decision://d1.md).\n"]);
+  const result = await body(root, ["set", "issue:a.md", "See [D1](decision:d1.md).\n"]);
   assert.equal(result.code, 0, result.err);
   assert.match(read(root), /See \[D1\]\(\.\.\/decision\/d1\.md\)\./);
 });
 
 test("body set round-trips through body get", async () => {
   const root = repo();
-  const written = "See [D1](decision://d1.md).\n";
-  assert.equal((await body(root, ["set", "issue://a.md", written])).code, 0);
-  const value = parse((await body(root, ["get", "issue://a.md"])).out) as { body: string };
+  const written = "See [D1](decision:d1.md).\n";
+  assert.equal((await body(root, ["set", "issue:a.md", written])).code, 0);
+  const value = parse((await body(root, ["get", "issue:a.md"])).out) as { body: string };
   assert.equal(value.body, written);
 });
 
 test("body append adds to the end of the prose", async () => {
   const root = repo();
-  const result = await body(root, ["append", "issue://a.md", "Delta\n"]);
+  const result = await body(root, ["append", "issue:a.md", "Delta\n"]);
   assert.equal(result.code, 0, result.err);
-  const value = parse((await body(root, ["get", "issue://a.md"])).out) as { body: string };
+  const value = parse((await body(root, ["get", "issue:a.md"])).out) as { body: string };
   assert.equal(value.body, "Alpha\nBravo\nCharlie\nDelta\n");
 });
 
 test("body patch applies a unified diff to the prose", async () => {
   const root = repo();
   const diff = "@@ -1,3 +1,3 @@\n Alpha\n-Bravo\n+Bravissimo\n Charlie\n";
-  const result = await body(root, ["patch", "issue://a.md", diff]);
+  const result = await body(root, ["patch", "issue:a.md", diff]);
   assert.equal(result.code, 0, result.err);
-  const value = parse((await body(root, ["get", "issue://a.md"])).out) as { body: string };
+  const value = parse((await body(root, ["get", "issue:a.md"])).out) as { body: string };
   assert.equal(value.body, "Alpha\nBravissimo\nCharlie\n");
 });
 
@@ -100,27 +100,27 @@ test("body patch fails without writing when the context does not match", async (
   const root = repo();
   const before = read(root);
   const diff = "@@ -1,3 +1,3 @@\n Alpha\n-Nope\n+Yes\n Charlie\n";
-  const result = await body(root, ["patch", "issue://a.md", diff]);
+  const result = await body(root, ["patch", "issue:a.md", diff]);
   assert.notEqual(result.code, 0);
   assert.equal(read(root), before);
 });
 
 test("a body edit never disturbs the protected block's own links", async () => {
   const root = repo();
-  assert.equal((await body(root, ["set", "issue://a.md", "Nothing to see.\n"])).code, 0);
+  assert.equal((await body(root, ["set", "issue:a.md", "Nothing to see.\n"])).code, 0);
   assert.match(read(root), /- decided-by: \[D1\]\(\.\.\/decision\/d1\.md\)/);
 });
 
 test("body get rejects a uri with no instance file", async () => {
   const root = repo();
-  const result = await body(root, ["get", "issue://missing.md"]);
+  const result = await body(root, ["get", "issue:missing.md"]);
   assert.notEqual(result.code, 0);
 });
 
 test("body set --dry-run reports the diff without writing", async () => {
   const root = repo();
   const before = read(root);
-  const result = await body(root, ["set", "issue://a.md", "Replaced.\n", "--dry-run"]);
+  const result = await body(root, ["set", "issue:a.md", "Replaced.\n", "--dry-run"]);
   assert.equal(result.code, 0, result.err);
   assert.equal(read(root), before);
   assert.match(result.out, /Replaced\./);
@@ -130,9 +130,9 @@ test("body set --file reads text from an external file", async () => {
   const root = repo();
   const tmp = path.join(root, "new-content.md");
   writeFileSync(tmp, "Content from file.\n");
-  const result = await body(root, ["set", "issue://a.md", "--file", tmp]);
+  const result = await body(root, ["set", "issue:a.md", "--file", tmp]);
   assert.equal(result.code, 0, result.err);
-  const value = parse((await body(root, ["get", "issue://a.md"])).out) as { body: string };
+  const value = parse((await body(root, ["get", "issue:a.md"])).out) as { body: string };
   assert.equal(value.body, "Content from file.\n");
 });
 
@@ -141,9 +141,9 @@ test("body patch --file reads diff from an external file", async () => {
   const tmp = path.join(root, "patch.diff");
   const diff = "@@ -1,3 +1,3 @@\n Alpha\n-Bravo\n+Bravissimo\n Charlie\n";
   writeFileSync(tmp, diff);
-  const result = await body(root, ["patch", "issue://a.md", "--file", tmp]);
+  const result = await body(root, ["patch", "issue:a.md", "--file", tmp]);
   assert.equal(result.code, 0, result.err);
-  const value = parse((await body(root, ["get", "issue://a.md"])).out) as { body: string };
+  const value = parse((await body(root, ["get", "issue:a.md"])).out) as { body: string };
   assert.equal(value.body, "Alpha\nBravissimo\nCharlie\n");
 });
 
@@ -151,22 +151,22 @@ test("body append --file reads text from an external file", async () => {
   const root = repo();
   const tmp = path.join(root, "more.md");
   writeFileSync(tmp, "Delta\n");
-  const result = await body(root, ["append", "issue://a.md", "--file", tmp]);
+  const result = await body(root, ["append", "issue:a.md", "--file", tmp]);
   assert.equal(result.code, 0, result.err);
-  const value = parse((await body(root, ["get", "issue://a.md"])).out) as { body: string };
+  const value = parse((await body(root, ["get", "issue:a.md"])).out) as { body: string };
   assert.equal(value.body, "Alpha\nBravo\nCharlie\nDelta\n");
 });
 
 test("body set fails cleanly if neither inline text nor --file is provided", async () => {
   const root = repo();
-  const result = await body(root, ["set", "issue://a.md"]);
+  const result = await body(root, ["set", "issue:a.md"]);
   assert.notEqual(result.code, 0);
   assert.match(result.err, /cli\/missing-argument/);
 });
 
 test("body set fails cleanly if --file does not exist", async () => {
   const root = repo();
-  const result = await body(root, ["set", "issue://a.md", "--file", path.join(root, "nonexistent.md")]);
+  const result = await body(root, ["set", "issue:a.md", "--file", path.join(root, "nonexistent.md")]);
   assert.notEqual(result.code, 0);
   assert.match(result.err, /cli\/file-not-found/);
 });

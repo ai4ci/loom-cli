@@ -43,7 +43,8 @@ const LINK_RE = /(!?\[[^\]]*\]\()([^)\s]+)([^)]*\))/g;
 
 /** Anything of the form `scheme:` is a url or a uri, not a relative path. */
 const HAS_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
-const URI_RE = /^([A-Za-z][A-Za-z0-9+.-]*):\/\/(.+)$/;
+/** `scheme:path`, with the superseded `scheme://path` still accepted. */
+const URI_RE = /^([A-Za-z][A-Za-z0-9+.-]*):(?:\/\/)?(.+)$/;
 
 function mapLinks(prose: string, map: (target: string) => string | null): string {
   return prose.replace(LINK_RE, (whole, open: string, target: string, close: string) => {
@@ -74,10 +75,23 @@ function knownScheme(roots: ClassRoots, scheme: string): boolean {
  * — urls, `mailto:`, in-page `#fragments`, site-absolute paths — are left
  * exactly as written.
  */
-export function toUris(prose: string, docPath: string, roots: ClassRoots): string {
+export function toUris(
+  prose: string,
+  docPath: string,
+  roots: ClassRoots,
+  prefixes?: Map<string, string>,
+): string {
   const dir = path.posix.dirname(docPath);
 
   return mapLinks(prose, (target) => {
+    // An absolute url matching a declared prefix canonicalises to a curie.
+    if (prefixes !== undefined) {
+      for (const [name, target0] of prefixes) {
+        if (target.startsWith(target0)) {
+          return `${name}:${target.slice(target0.length)}`;
+        }
+      }
+    }
     if (HAS_SCHEME.test(target) || target.startsWith("#") || target.startsWith("/")) return null;
 
     const { base, fragment } = splitFragment(target);
@@ -91,7 +105,7 @@ export function toUris(prose: string, docPath: string, roots: ClassRoots): strin
     const scheme = schemeFor(roots, repoRelative);
     const root = scheme === "repo" ? "" : classRoot(roots, scheme);
     const rest = root === "" ? repoRelative : repoRelative.slice(root.length + 1);
-    return `${scheme}://${rest}${fragment}`;
+    return `${scheme}:${rest}${fragment}`;
   });
 }
 
@@ -100,7 +114,12 @@ export function toUris(prose: string, docPath: string, roots: ClassRoots): strin
  * and GitHub's renderer — can actually follow. A uri whose scheme is not a
  * class in this model is left alone, so `https://` and friends survive.
  */
-export function toRelative(prose: string, docPath: string, roots: ClassRoots): string {
+export function toRelative(
+  prose: string,
+  docPath: string,
+  roots: ClassRoots,
+  prefixes?: Map<string, string>,
+): string {
   const dir = path.posix.dirname(docPath);
 
   return mapLinks(prose, (target) => {
@@ -109,6 +128,9 @@ export function toRelative(prose: string, docPath: string, roots: ClassRoots): s
     if (!match) return null;
 
     const scheme = match[1]!.toLowerCase();
+    // External prefixes expand to the absolute url, not a repo path.
+    const prefix = prefixes?.get(scheme);
+    if (prefix !== undefined) return `${prefix}${normalisePath(match[2]!)}${fragment}`;
     if (!knownScheme(roots, scheme)) return null;
 
     const root = scheme === "repo" ? "" : classRoot(roots, scheme);

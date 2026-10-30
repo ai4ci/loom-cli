@@ -25,7 +25,7 @@ import { similarity } from "./similarity.ts";
 import { canonicalise, formatUri, parseUri, resolveUri } from "./uri.ts";
 
 export interface InstanceNode {
-  /** Canonical uri, e.g. `issue://a.md`. */
+  /** Canonical uri, e.g. `issue:a.md`. */
   uri: string;
   className: string;
   /** Instance id: the path relative to the class root. */
@@ -48,6 +48,8 @@ export interface Graph {
   cfg: Config;
   schema: SchemaIR;
   roots: ClassRoots;
+  /** External prefixes (subset of schema.prefixes, kept for convenience). */
+  prefixes: Map<string, string>;
   instances: Map<string, InstanceNode>;
   edges: Edge[];
 }
@@ -60,6 +62,7 @@ export function loadGraph(
   cfg: Config,
   schema: SchemaIR,
   roots: ClassRoots,
+  prefixes?: Map<string, string>,
 ): { graph: Graph; diagnostics: Diagnostic[] } {
   const diagnostics: Diagnostic[] = [];
   const instances = new Map<string, InstanceNode>();
@@ -97,7 +100,7 @@ export function loadGraph(
     }
   }
 
-  const graph: Graph = { cfg, schema, roots, instances, edges: [] };
+  const graph: Graph = { cfg, schema, roots, prefixes: prefixes ?? schema.prefixes, instances, edges: [] };
   rebuildEdges(graph);
   return { graph, diagnostics };
 }
@@ -111,13 +114,12 @@ export function rebuildEdges(graph: Graph): void {
         if (typeof raw !== "string") continue;
         try {
           const parsed = parseUri(raw);
-          // Store the canonical spelling so the triple store is consistent
-          // however the author wrote it.
-          edges.push({
-            from: node.uri,
-            relation: relation.name,
-            to: formatUri(canonicalise(resolveUri(parsed, graph.roots).path, graph.roots, parsed.anchor)),
-          });
+          const resolved = resolveUri(parsed, graph.roots, graph.prefixes);
+          // External targets have no repo path, so keep the author's spelling.
+          const to = resolved.external === true
+            ? formatUri(parsed)
+            : formatUri(canonicalise(resolved.path, graph.roots, parsed.anchor));
+          edges.push({ from: node.uri, relation: relation.name, to });
         } catch {
           // reported by validateInstance
         }
@@ -137,14 +139,14 @@ export function rootFor(graph: Graph, className: string): string {
   return classRoot(graph.roots, className);
 }
 
-function titleOf(graph: Graph, uri: string): string {
+export function titleOf(graph: Graph, uri: string): string {
   const node = graph.instances.get(uri);
   const title = node?.data["title"];
   if (typeof title === "string" && title !== "") return title;
   return parseUri(uri).path;
 }
 
-function relativeLink(graph: Graph, fromPath: string, targetUri: string): string {
+export function relativeLink(graph: Graph, fromPath: string, targetUri: string): string {
   const node = graph.instances.get(targetUri);
   const parsed = parseUri(targetUri);
   const targetPath = node?.path ?? resolveUri(parsed, graph.roots).path;
@@ -210,7 +212,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
       uri: node.uri,
       className: node.className,
       data: node.data,
-    }));
+    }, graph.prefixes));
 
     // `path` attributes must point at files that exist.
     for (const attribute of effectiveAttributes(schema, node.className)) {
@@ -266,6 +268,9 @@ export function validateGraph(graph: Graph): Diagnostic[] {
   for (const edge of graph.edges) {
     if (graph.instances.has(edge.to)) continue;
     const targetClass = parseUri(edge.to).scheme;
+
+    // External prefixes cannot be checked against the local filesystem.
+    if (resolveUri(parseUri(edge.to), graph.roots, graph.prefixes).external === true) continue;
 
     if (isSubclassOf(schema, targetClass, "resource")) {
       if (!existsSync(absolute(cfg, resolveUri(parseUri(edge.to), graph.roots).path))) {
@@ -356,14 +361,14 @@ export function validateGraph(graph: Graph): Diagnostic[] {
           found.push(error(
             "source/dangling-reverse-link",
             `comment points to non-existent ${rl.target}`,
-            { uri: `${name}://${rel}`, line: rl.line },
+            { uri: `${name}:${rel}`, line: rl.line },
           ));
         }
         if (!schema.relations.some((r) => r.name === rl.relation && isSubclassOf(schema, name, r.from))) {
           found.push(error(
             "source/invalid-reverse-relation",
             `relation "${rl.relation}" is not permitted from ${name}`,
-            { uri: `${name}://${rel}`, line: rl.line },
+            { uri: `${name}:${rel}`, line: rl.line },
           ));
         }
       }
@@ -407,7 +412,7 @@ function markdownFilesUnder(cfg: Config, root: string): string[] {
   return found.sort();
 }
 
-function toRepoRelative(cfg: Config, absolutePath: string): string {
+export function toRepoRelative(cfg: Config, absolutePath: string): string {
   return path.relative(cfg.repoRoot, absolutePath).split(path.sep).join("/");
 }
 

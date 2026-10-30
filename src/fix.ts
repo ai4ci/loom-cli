@@ -110,7 +110,7 @@ function rewriteRenamedAnchors(
 function compactForm(raw: string, graph: Graph): string | null {
   try {
     const parsed = parseUri(raw);
-    // Unknown classes (or `design://`, which isn't a real class) fall back to
+    // Unknown classes (or `design:`, which isn't a real class) fall back to
     // the repo-relative interpretation, which canonicalise() can then collapse
     // to the right class scheme if a class root happens to match.
     const repoRelative = parsed.scheme === "repo" || !graph.roots.has(parsed.scheme)

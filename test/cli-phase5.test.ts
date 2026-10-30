@@ -24,7 +24,7 @@ function repo(): string {
     ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance(
-      "class: issue\ntitle: One\nimplemented-by: [src://app.ts#runApp, R://model.R#fitModel]",
+      "class: issue\ntitle: One\nimplemented-by: [src:app.ts#runApp, R:model.R#fitModel]",
     ),
     "src/app.ts": `
 export function runApp() {
@@ -32,7 +32,7 @@ export function runApp() {
 }
 `,
     "R/model.R": `
-# implemented-by: issue://one.md
+# implemented-by: issue:one.md
 fitModel <- function(data) {
   data
 }
@@ -40,9 +40,9 @@ fitModel <- function(data) {
   });
 }
 
-test("resolve resolves src:// with anchor to line number", async () => {
+test("resolve resolves src: with anchor to line number", async () => {
   const root = repo();
-  const r = await run(["--cwd", root, "resolve", "src://app.ts#runApp"]);
+  const r = await run(["--cwd", root, "resolve", "src:app.ts#runApp"]);
   assert.equal(r.code, 0);
   const out = parse(r.out) as any;
   assert.equal(out.path, "src/app.ts");
@@ -50,9 +50,9 @@ test("resolve resolves src:// with anchor to line number", async () => {
   assert.equal(out.line, 2);
 });
 
-test("resolve resolves R subclass src:// with anchor to line number", async () => {
+test("resolve resolves R subclass src: with anchor to line number", async () => {
   const root = repo();
-  const r = await run(["--cwd", root, "resolve", "R://model.R#fitModel"]);
+  const r = await run(["--cwd", root, "resolve", "R:model.R#fitModel"]);
   assert.equal(r.code, 0);
   const out = parse(r.out) as any;
   assert.equal(out.path, "R/model.R");
@@ -64,7 +64,7 @@ test("validate catches missing symbol in source code", async () => {
   const root = makeRepo({
     ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
-    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#missing]"),
+    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src:app.ts#missing]"),
     "src/app.ts": "export function exists() {}",
   });
   const r = await run(["--cwd", root, "validate"]);
@@ -79,7 +79,7 @@ test("validate catches dangling reverse link comment in source file", async () =
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance("class: issue\ntitle: One"),
     "src/app.ts": `
-// implemented-by: issue://does-not-exist.md
+// implemented-by: issue:does-not-exist.md
 export function foo() {}
 `,
   });
@@ -91,10 +91,10 @@ export function foo() {}
 
 test("refs command identifies design documents referencing a source function", async () => {
   const root = repo();
-  const r = await run(["--cwd", root, "refs", "src://app.ts#runApp"]);
+  const r = await run(["--cwd", root, "refs", "src:app.ts#runApp"]);
   assert.equal(r.code, 0);
   const out = parse(r.out) as any;
-  assert.deepEqual(out.references, [{ from: "issue://one.md", relation: "implemented-by" }]);
+  assert.deepEqual(out.references, [{ from: "issue:one.md", relation: "implemented-by" }]);
 });
 
 test("prefetch command downloads/warms the grammars it is named", async () => {
@@ -109,7 +109,7 @@ test("an ambiguous anchor is an error, not a silent first match", async () => {
   const root = makeRepo({
     ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
-    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#run]"),
+    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src:app.ts#run]"),
     "src/app.ts": "export class Alpha { run() {} }\nexport class Beta { run() {} }\n",
   });
   const r = await run(["--cwd", root, "validate"]);
@@ -127,7 +127,7 @@ test("resolve refuses an ambiguous anchor", async () => {
     "design/document-model.mmd": MODEL_WITH_SRC,
     "src/app.ts": "export class Alpha { run() {} }\nexport class Beta { run() {} }\n",
   });
-  const r = await run(["--cwd", root, "resolve", "src://app.ts#run"]);
+  const r = await run(["--cwd", root, "resolve", "src:app.ts#run"]);
   assert.equal(r.code, 1);
   assert.match(r.err, /source\/ambiguous-anchor/);
 });
@@ -138,7 +138,7 @@ test("a dotted anchor disambiguates through the cli", async () => {
     "design/document-model.mmd": MODEL_WITH_SRC,
     "src/app.ts": "export class Alpha { run() {} }\nexport class Beta { run() {} }\n",
   });
-  const r = await run(["--cwd", root, "resolve", "src://app.ts#Beta.run"]);
+  const r = await run(["--cwd", root, "resolve", "src:app.ts#Beta.run"]);
   assert.equal(r.code, 0);
   assert.equal((parse(r.out) as any).line, 2);
 });
@@ -147,7 +147,7 @@ test("a renamed symbol suggests the nearest candidate", async () => {
   const root = makeRepo({
     ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": MODEL_WITH_SRC,
-    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#runApp]"),
+    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src:app.ts#runApp]"),
     "src/app.ts": "export function runApplication() {}\n",
   });
   const r = await run(["--cwd", root, "validate"]);
@@ -162,7 +162,7 @@ test("the anchor policy is configurable", async () => {
     "design/document-model.mmd": MODEL_WITH_SRC,
     "src/app.ts": "export class Alpha { run() {} }\n",
   });
-  assert.equal((await run(["--cwd", root, "resolve", "src://app.ts#Alpha"])).code, 0);
-  const r = await run(["--cwd", root, "resolve", "src://app.ts#run"]);
+  assert.equal((await run(["--cwd", root, "resolve", "src:app.ts#Alpha"])).code, 0);
+  const r = await run(["--cwd", root, "resolve", "src:app.ts#run"]);
   assert.equal((parse(r.out) as any).line, undefined, "run must not resolve under this policy");
 });

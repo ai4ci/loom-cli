@@ -50,7 +50,7 @@ test("model check can validate a proposed model without installing it", async ()
 });
 
 test("validate passes a well-formed instance", async () => {
-  const r = await run(["--cwd", repo(), "validate", "issue://first.md"]);
+  const r = await run(["--cwd", repo(), "validate", "issue:first.md"]);
   assert.equal(r.code, 0);
   assert.equal((parse(r.out) as Record<string, unknown>).ok, true);
 });
@@ -59,7 +59,7 @@ test("validate reports a bad instance and exits 1", async () => {
   const root = repo({
     "design/issue/bad.md": instance("class: issue\nid: bad.md\ntitle: x\ncreated: 2026-01-05\nstatus: pending\ntags: []"),
   });
-  const r = await run(["--cwd", root, "validate", "issue://bad.md"]);
+  const r = await run(["--cwd", root, "validate", "issue:bad.md"]);
   assert.equal(r.code, 1);
   const out = parse(r.out) as Record<string, any>;
   assert.ok(out.diagnostics.some((d: any) => d.code === "instance/invalid-enum-value"));

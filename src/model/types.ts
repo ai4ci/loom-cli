@@ -56,6 +56,8 @@ export interface ClassDef {
 export interface SchemaIR {
   classes: Map<string, ClassDef>;
   relations: Relation[];
+  /** External prefixes from `%% @prefix <name>: <target>` (name lowercased). */
+  prefixes: Map<string, string>;
 }
 
 export interface ViewAnnotation {

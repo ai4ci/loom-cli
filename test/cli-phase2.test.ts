@@ -19,7 +19,7 @@ const OPEN = (title: string, extra = "") =>
   instance(`class: issue\ntitle: ${title}\nstatus: open${extra ? `\n${extra}` : ""}`);
 
 test("validate with no uri checks the whole repository", async () => {
-  const root = repo({ "design/issue/a.md": OPEN("A", "blocks: [issue://b.md]"), "design/issue/b.md": OPEN("B") });
+  const root = repo({ "design/issue/a.md": OPEN("A", "blocks: [issue:b.md]"), "design/issue/b.md": OPEN("B") });
   const r = await run(["--cwd", root, "validate"]);
   assert.equal(r.code, 0);
   const out = parse(r.out) as Record<string, any>;
@@ -28,7 +28,7 @@ test("validate with no uri checks the whole repository", async () => {
 });
 
 test("validate writes a report to the design folder", async () => {
-  const root = repo({ "design/issue/a.md": OPEN("A", "blocks: [issue://ghost.md]") });
+  const root = repo({ "design/issue/a.md": OPEN("A", "blocks: [issue:ghost.md]") });
   await run(["--cwd", root, "validate"]);
   const report = readFileSync(path.join(root, "design/VALIDATION.md"), "utf8");
   assert.match(report, /graph\/dangling-link/);
@@ -36,7 +36,7 @@ test("validate writes a report to the design folder", async () => {
 });
 
 test("the report is rewritten clean when the problems go away", async () => {
-  const root = repo({ "design/issue/a.md": OPEN("A", "blocks: [issue://ghost.md]") });
+  const root = repo({ "design/issue/a.md": OPEN("A", "blocks: [issue:ghost.md]") });
   await run(["--cwd", root, "validate"]);
   writeFileSync(path.join(root, "design/issue/a.md"), OPEN("A"));
   const r = await run(["--cwd", root, "validate"]);
@@ -46,14 +46,14 @@ test("the report is rewritten clean when the problems go away", async () => {
 });
 
 test("validate exits 1 when the repository has errors", async () => {
-  const root = repo({ "design/issue/a.md": OPEN("A", "blocks: [issue://ghost.md]") });
+  const root = repo({ "design/issue/a.md": OPEN("A", "blocks: [issue:ghost.md]") });
   assert.equal((await run(["--cwd", root, "validate"])).code, 1);
 });
 
 test("--fix repairs a stale link block", async () => {
   const root = repo({
     "design/issue/a.md": instance(
-      "class: issue\ntitle: A\nstatus: open\nblocks: [issue://b.md]",
+      "class: issue\ntitle: A\nstatus: open\nblocks: [issue:b.md]",
       "\n<!-- loom:links start -->\n- blocks: [Wrong](zzz.md)\n<!-- loom:links end -->\n\nProse.\n",
     ),
     "design/issue/b.md": OPEN("Bee"),
@@ -72,7 +72,7 @@ test("--fix repairs a stale link block", async () => {
 test("--fix normalises a non-canonical uri without disturbing comments", async () => {
   const root = repo({
     "design/issue/a.md": instance(
-      "class: issue\n# keep this comment\ntitle: A\nstatus: open\nblocks: [design://issue/b.md]",
+      "class: issue\n# keep this comment\ntitle: A\nstatus: open\nblocks: [design:issue/b.md]",
     ),
     "design/issue/b.md": OPEN("B"),
   });
@@ -80,13 +80,13 @@ test("--fix normalises a non-canonical uri without disturbing comments", async (
   const fixed = await run(["--cwd", root, "validate", "--fix"]);
   assert.equal(fixed.code, 0);
   const text = readFileSync(path.join(root, "design/issue/a.md"), "utf8");
-  assert.match(text, /issue:\/\/b\.md/);
-  assert.doesNotMatch(text, /design:\/\/issue\/b\.md/);
+  assert.match(text, /issue:b\.md/);
+  assert.doesNotMatch(text, /design:issue\/b\.md/);
   assert.match(text, /# keep this comment/);
 });
 
 test("--fix leaves judgement calls alone", async () => {
-  const root = repo({ "design/issue/a.md": OPEN("A", "blocks: [issue://ghost.md]") });
+  const root = repo({ "design/issue/a.md": OPEN("A", "blocks: [issue:ghost.md]") });
   const r = await run(["--cwd", root, "validate", "--fix"]);
   assert.equal(r.code, 1);
   assert.ok((parse(r.out) as Record<string, any>).diagnostics
@@ -95,7 +95,7 @@ test("--fix leaves judgement calls alone", async () => {
 
 test("--fix reports what it changed", async () => {
   const root = repo({
-    "design/issue/a.md": OPEN("A", "blocks: [design://issue/b.md]"),
+    "design/issue/a.md": OPEN("A", "blocks: [design:issue/b.md]"),
     "design/issue/b.md": OPEN("B"),
   });
   const r = await run(["--cwd", root, "validate", "--fix"]);

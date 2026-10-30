@@ -4,45 +4,37 @@
 
 ## Inline views: URI values rendered as plain text  (0.8.0)
 
-**File:** `src/render.ts` — function `renderView()`
-
-When a `%% @view` SQL query returns a column containing URIs (e.g.
-`issue://my-task.md`), the cell value is stringified as plain text.
-It should be rendered as a relative markdown link — `[title](relative/path.md)` —
-consistent with how `loom index` renders links in protected link blocks.
-
-The building blocks exist:
-- `relativeLink()` in `src/graph.ts` — converts a URI to a repo-relative path
-- `parseUri()` in `src/uri.ts` — detects URI-lookalike strings and extracts scheme/path
-- `titleOf()` in `src/graph.ts` — resolves a URI to its document title
-
-The `renderView()` function's output in `src/render.ts` needs a post-processing
-step (or per-cell check) that runs values through `parseUri()` and, when a match
-is found, replaces the plain text with a markdown link.
-
-**Related:** the output rules in `skills/using-loom-cli/SKILL.md` (under "Output rules"
-table) would need a note that URIs are rendered as links.
+**Implemented in 0.8.4.** `renderView` takes a `LinkContext` (the loaded graph
+plus the repo-relative path of the file being rendered). Any cell value that
+parses as a design uri and resolves to an existing file is rendered as
+`[<title>](<relative path>)` - document title when the uri names an indexed
+instance, the uri text otherwise. Unresolvable uris and non-uri values stay
+plain text, so a dead uri is visible rather than a silently broken link.
+`titleOf`/`relativeLink` in `src/graph.ts` are now shared with `loom index`,
+whose own `relativeLink` had silently stopped matching when uris became
+curies - also fixed in 0.8.4.
 
 ## Inline views: `render --check` CI mode (0.8.0)
 
-**File:** `src/render.ts` — function `renderCommand()`
-
-The `--check` flag is wired in `src/cli.ts` but the no-write path is not
-implemented. Currently `render --check` renders and writes, then returns
-`ok: true`. Expected behaviour: when `--check` is set, the function should
-render in memory and compare against the file on disk — if any marker would
-change, emit those paths as diagnostics and exit 1.
+**Implemented in 0.8.3.** `checkStale()` renders in memory and compares with
+`updateSection() === text`; stale file paths are returned and `render --check`
+exits 1 with them. Nothing is written. Fresh files exit 0 silently.
 
 ## Inline views: `render --debug` output (0.8.0)
 
-**File:** `src/render.ts`
+**Implemented in 0.8.3.** `renderAll` and `checkStale` take a `DebugSink`;
+each view emits `<file>: view <name>\n  <sql>` (SQL indented, newlines
+preserved). `buildProgram` now takes an optional `writeErr` callback so the
+CLI routes it to stderr, and tests capture it directly.
 
-The `--debug` flag is wired in `src/cli.ts` but no debug output is emitted.
-Expected behaviour: when `--debug` is set, each rendered view's resolved SQL
-should be written to stderr (prefixed with the file path and view name), so
-users can inspect exactly what was executed.
+## Doc dir pollution branches and loom working directory (0.8.0) 
 
-## Doc dir pollution branches and loom working directory (0.8.0)
+**Implemented in 0.8.1.** `loomDir`, `gitBranch`, `databasePath` and
+`ensureLoomDir` in `src/duckdb.ts`; tests in `test/duckdb-path.test.ts`.
+Two details settled during implementation: a detached HEAD becomes
+`detached/<sha12>` rather than a directory called `HEAD`, since every detached
+checkout would otherwise share one projection; and the branch is cached per
+repo root so the common path does not spawn `git` repeatedly.
 
 In the current implementation a per branch `.loom.duckdb` is recreated in the 
 design docs directory. If there are many branches this will pollute the design 
@@ -67,7 +59,24 @@ from commits.
 
 ## URI scheme not RDF compliant (0.8.0)
 
-the current scheme where an issue is referenced as `issue://my-issue.md` and the
+**Implemented in 0.8.2 (the uris).** The curie form `issue:my-issue.md` is now
+the only written form: `parseUri` accepts `scheme:path` with `#fragment`, and
+the superseded `scheme://path` still parses but is flagged `legacy` and
+`formatUri` never emits it, so anything that round-trips a uri migrates it.
+The two-slash form was dropped because under RFC 3986 it means
+`authority = first segment` (`issue://design/notes.md` addresses host `design`),
+which was never what loom meant. The curie has no authority, so the whole path
+is the path.
+
+**External prefixes implemented in 0.8.5.** `%% @prefix <name>: <target>` in the
+model declares an expansion; the target must end in `/` or `#` (hard error
+`model/prefix-delimiter`). `resolveUri` expands by concatenation and marks the
+result `external`, which means: relations pointing at it skip filesystem
+existence checks, inline-view uri cells render as links to the expanded url,
+and `body` edits translate between the curie and the absolute url in both
+directions. Remaining: the `.ttl` export (see RDF export, below).
+
+the current scheme where an issue is referenced as `issue:my-issue.md` and the
 path is declared in a comment in the mermaid like this:
 
 ```
@@ -91,7 +100,7 @@ of source code to the prefix of the enclosing loom UML class:
 
 ```
 function my_function() {
-    // resolves issue://my-issue.md 
+    // resolves issue:my-issue.md 
 }
 ```
 
@@ -183,7 +192,7 @@ only matter at export time.
 scoped by the subject's class, so the expansion is entirely an export-time
 choice. Candidates:
 
-* a dedicated relation prefix — `rel:issue` giving `rel:issue#resolves`
+DEFERRED-FOR-FUTURE a dedicated relation prefix — `rel:issue` giving `rel:issue#resolves`
 * the model file as the term namespace — `design/document-model.mmd#issue.resolves`
 * the instance namespace itself — `design/issues/#resolves`
 

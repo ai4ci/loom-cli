@@ -100,8 +100,8 @@ conventions rather than external config files:
 ### 1.6 Relations are per-relation keys in the YAML
 
 ```yaml
-blocks: [issue://other-thing.md]
-implemented-by: [src://r/model.R#fit_model]
+blocks: [issue:other-thing.md]
+implemented-by: [src:r/model.R#fit_model]
 ```
 
 rather than a generic `links:` list. It reads better, projects directly into the
@@ -145,7 +145,7 @@ An `<<enumeration>>` class is a **type, not a document class**: like
 no DuckDB table. An enum is referenced only by naming it as an attribute's type;
 never by an arrow, which always means an edge. Convention: instantiable classes
 are lower-case, since the name becomes a directory and a URI scheme
-(`issue` → `design/issue/`, `issue://`), while enumerations and abstract types
+(`issue` → `design/issue/`, `issue:`), while enumerations and abstract types
 are PascalCase. That is cosmetic, not enforced.
 
 `path` and `uri` differ only in how they validate: a `path` must resolve to an
@@ -204,7 +204,7 @@ case: a `test` class extending `src`, with its own root and its own permitted
 relations, so that "this test exercises that requirement" is a distinct,
 separately-validated edge from "this function implements that issue".
 
-Each `src` subclass therefore gets its own URI scheme (`test://a/b.R`) and its
+Each `src` subclass therefore gets its own URI scheme (`test:a/b.R`) and its
 own root list, and inherits the family constraints: no structured YAML, deep
 links to symbols rather than whole files, and reverse linkage only through
 source comments.
@@ -294,7 +294,7 @@ class: issue
 id: my-first-issue.md
 title: The thing is broken
 status: open
-blocks: [issue://other-thing.md]
+blocks: [issue:other-thing.md]
 ---
 
 <!-- loom:links start -->
@@ -341,12 +341,12 @@ YAML 1.1 and a YAML 1.2 reader.
 
 ```yaml
 ops:
-  - { op: create, uri: "issue://new.md", attrs: { title: "…", status: open } }
-  - { op: set,    uri: "issue://new.md", attrs: { status: closed } }
-  - { op: link,   from: "issue://a.md", rel: blocks, to: "issue://b.md" }
-  - { op: unlink, from: "issue://a.md", rel: blocks, to: "issue://b.md" }
-  - { op: rename, from: "issue://a.md", to: "issue://archive/a.md" }
-  - { op: delete, uri: "issue://a.md" }
+  - { op: create, uri: "issue:new.md", attrs: { title: "…", status: open } }
+  - { op: set,    uri: "issue:new.md", attrs: { status: closed } }
+  - { op: link,   from: "issue:a.md", rel: blocks, to: "issue:b.md" }
+  - { op: unlink, from: "issue:a.md", rel: blocks, to: "issue:b.md" }
+  - { op: rename, from: "issue:a.md", to: "issue:archive/a.md" }
+  - { op: delete, uri: "issue:a.md" }
 ```
 
 ### 2.4 URI canonicalisation
@@ -354,11 +354,11 @@ ops:
 Canonical internal form is the repo-relative POSIX path. Stored/display form is
 the most compact scheme: if the path lies under exactly one class root, the
 class scheme; if under several (nested roots), the **longest matching** root;
-else `design://`; else `repo://`. This rule is total and deterministic, which is
+else `design:`; else `repo:`. This rule is total and deterministic, which is
 what makes equivalence testing (scope §IA.13) cheap.
 
 `src`-family roots participate in exactly the same rule, so a file under the
-`test` root canonicalises to `test://` rather than `src://` without any special
+`test` root canonicalises to `test:` rather than `src:` without any special
 casing. The one addition is §1.9's ambiguity warning, which fires when a path
 matches roots of two *different* classes in the family.
 
@@ -536,15 +536,15 @@ identical databases.
 > qualification, and replaces the attribution heuristic below with body-span
 > containment. That last point is a behaviour change, not a refinement.
 
-**Scope.** Resolve `src://path/File.ext#symbol` — and the equivalent URI of any
-`src` subclass such as `test://` (§1.9) — to a line number using `process()`
+**Scope.** Resolve `src:path/File.ext#symbol` — and the equivalent URI of any
+`src` subclass such as `test:` (§1.9) — to a line number using `process()`
 with `structure: true`, searching the nested `StructureItem` tree so
 `#Class.method` works. Resolution walks that class's configured roots in order,
 first match winning, and emits the ambiguity warning when a later root also
-matches. Scan source files for reverse-link comments (`// rel: issue://x.md`),
+matches. Scan source files for reverse-link comments (`// rel: issue:x.md`),
 and attribute each to its enclosing definition by testing the comment's span
 against `StructureItem` spans. Fold both directions into Phase 2's validation: a
-`src://` URI naming a symbol that no longer exists is a diagnostic, as is a
+`src:` URI naming a symbol that no longer exists is a diagnostic, as is a
 reverse-link comment pointing at a missing document, using a relation the model
 does not define, or using a relation not permitted for that particular `src`
 subclass.
@@ -651,6 +651,33 @@ pay for the rigidity.
 A thin wrapper exposing `validate`, `query`, `refs`, `similar` and `apply` as
 MCP tools. Deliberately out of scope until the CLI's JSON contract has been
 exercised by real use; building it earlier would freeze that contract too soon.
+
+### Phase 12 — Branch-aware state and inline views (Complete)
+
+- **Per-branch projection database** (`.loom` dir proposal, open-issues §0.8.0):
+  the DuckDB database lives at `$LOOM_DEFAULT_ROOT/.loom/db/<branch>/loom.duckdb`.
+  The branch is used as a directory path (`feat/x` nests), so a switch of
+  branches never reads a projection built from a different model. `.loom/db/`
+  is git-ignored by `.loom/.gitignore`; everything else under `.loom/` is
+  checked in so branch-specific generated state travels with the branch.
+  Detached HEAD becomes `detached/<sha12>`, never a directory named `HEAD`.
+- **Curie uris**: design uris are `scheme:path#anchor` (`issue:a.md`), not
+  `scheme://path`. The two-slash form is superseded — under RFC 3986 it makes
+  the first path segment an authority — but still parses (flagged `legacy`)
+  and `formatUri` never emits it, so round-tripping migrates the corpus.
+  Matches RDF turtle prefixed-name syntax for the later export (§RDF export,
+  open-issues).
+- **Inline views** (`loom render`): `%% @view` SQL annotations in the model,
+  `<!-- loom view: ... -->` markers in markdown, query-string parameters,
+  output rules per row/column shape. Detailed in
+  [inline-views.md](./inline-views.md).
+
+### Later — `loom find`
+
+Recursive tree traversal from a uri with `--depth`, `--kind`, `--linked`,
+`--unlinked` filters and leaf-symbol stopping. Its tests were drafted on the
+`feat/find` branch; the command is to be written once against the curie uri
+syntax.
 
 ## 4. Cross-cutting concerns
 

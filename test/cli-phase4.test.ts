@@ -14,7 +14,7 @@ function repo(): string {
   return makeRepo({
     ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": GRAPH_MODEL,
-    "design/issue/a.md": OPEN("Aye", "blocks: [issue://b.md]\nspec: notes/s.md"),
+    "design/issue/a.md": OPEN("Aye", "blocks: [issue:b.md]\nspec: notes/s.md"),
     "design/issue/b.md": OPEN("Bee"),
     "design/decision/d.md": instance("class: decision\ntitle: Dee"),
     "notes/s.md": "x",
@@ -74,7 +74,7 @@ test("a date attribute compares without a cast", async () => {
 
   const r = await run(["--cwd", root, "query", "SELECT uri, weight + 1 AS w FROM issue WHERE created > DATE '2026-01-01'"]);
   assert.equal(r.code, 0);
-  assert.deepEqual((parse(r.out) as Record<string, any>).rows, [{ uri: "issue://a.md", w: 8 }]);
+  assert.deepEqual((parse(r.out) as Record<string, any>).rows, [{ uri: "issue:a.md", w: 8 }]);
 });
 
 test("the edge table holds subject, relation, object triples", async () => {
@@ -82,7 +82,7 @@ test("the edge table holds subject, relation, object triples", async () => {
   await run(["--cwd", root, "rebuild"]);
   const r = await run(["--cwd", root, "query", "SELECT * FROM edge"]);
   assert.deepEqual((parse(r.out) as Record<string, any>).rows, [
-    { subject: "issue://a.md", relation: "blocks", object: "issue://b.md" },
+    { subject: "issue:a.md", relation: "blocks", object: "issue:b.md" },
   ]);
 });
 
@@ -98,11 +98,11 @@ test("rebuilding twice gives the same database", async () => {
 test("rebuild picks up a change to an instance", async () => {
   const root = repo();
   await run(["--cwd", root, "rebuild"]);
-  await run(["--cwd", root, "set", "issue://b.md", "status=closed"]);
+  await run(["--cwd", root, "set", "issue:b.md", "status=closed"]);
   await run(["--cwd", root, "rebuild"]);
 
   const r = await run(["--cwd", root, "query", "SELECT uri FROM issue WHERE status = 'closed'"]);
-  assert.deepEqual((parse(r.out) as Record<string, any>).rows, [{ uri: "issue://b.md" }]);
+  assert.deepEqual((parse(r.out) as Record<string, any>).rows, [{ uri: "issue:b.md" }]);
 });
 
 test("a list attribute becomes a duckdb list", async () => {

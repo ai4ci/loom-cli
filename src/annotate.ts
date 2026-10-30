@@ -135,7 +135,7 @@ function insertionPoint(
 }
 
 export interface AnnotationRequest {
-  /** `src://` uri, optionally anchored. */
+  /** `src:` uri, optionally anchored. */
   from: string;
   relation: string;
   to: string;
