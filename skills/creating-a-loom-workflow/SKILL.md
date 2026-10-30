@@ -406,17 +406,12 @@ Class roots are declared in the model itself, not in a config file. Each
 
 ### A.2 The three terminal anchors
 
-Loom defines three terminal roots from which every other path derives:
-
-| Anchor | Env var (fallback) | Default path | Override |
-|---|---|---|---|
-| `$LOOM_DEFAULT_ROOT` | (git discovery) | parent of `document-model.mmd` | `LOOM_DEFAULT_ROOT` env var |
-| `$LOOM_DEFAULT_SRC_ROOT` | `LOOM_DEFAULT_SRC_ROOT` | `$REPO_ROOT/src` | `%% @path src <path>` |
-| `$LOOM_DEFAULT_RESOURCE_ROOT` | `LOOM_DEFAULT_RESOURCE_ROOT` | `$REPO_ROOT/resource` | `%% @path resource <path>` |
-
-`src` and `resource` are reserved families — no structured YAML, no
-attributes. Subclasses inherit the family constraints but get their own
-URI scheme and their own root:
+The design root (parent of `document-model.mmd`, overridable by
+`LOOM_DEFAULT_ROOT` or a `.loom.yaml` `designRoot:` key) is the default parent
+of every class path. `src` and `resource` are reserved terminal families —
+no structured YAML, no attributes; each gets its root from `%% @path`
+(defaults `src/` and `resource/` under the repo root). Subclasses inherit the
+family constraints but get their own URI scheme and their own root:
 
 ```mermaid
 %% @path resource data

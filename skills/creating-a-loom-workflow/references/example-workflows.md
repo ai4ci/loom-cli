@@ -24,6 +24,7 @@ classDiagram
     %% @path adr design/decisions
     %% @path src /src
     %% @path test /test
+    %% @prefix ticket: https://github.com/my-org/my-repo/issues/
     class WorkStatus {
         <<enumeration>>
         backlog
@@ -71,6 +72,7 @@ classDiagram
     bug "0..*" --> "0..1" story : regression-in
     story "0..*" --> "0..*" src : implemented-by
     story "0..*" --> "0..*" test : verified-by
+    story "0..*" --> "0..1" ticket : tracked-by
     adr "0..*" --> "0..*" adr : supersedes
 ```
 
@@ -79,6 +81,8 @@ classDiagram
 - `src` is Loom's built-in terminal anchor family for source code. Subclassing `src <|-- test` creates a specialized terminal anchor scheme `test:` pointing at `/test`.
 - Code and tests are referenced down to symbol level via anchors: `src:auth.ts#login`, `test:auth.test.ts#testLogin`.
 - `story` points to `adr` via `constrained-by`, giving architectural context to feature implementation.
+- `ticket:` is an external prefix (a GitHub issue tracker), so a story can link
+  to an upstream issue without creating a file.
 
 ## Companion Skill (`skills/feature-workflow/SKILL.md`)
 
@@ -103,7 +107,7 @@ loom query "SELECT uri, title, points FROM story WHERE status = 'backlog' ORDER 
 To take on a story, update its status:
 
 ```bash
-loom mutate story:my-feature.md set status in_progress
+loom set story:my-feature.md status=in_progress
 ```
 
 ## 2. Record Architecture Decisions
@@ -113,7 +117,15 @@ When a story requires significant design or pattern changes, record an ADR:
 ```bash
 loom create adr:use-redis-cache.md title="Use Redis Cache" status=accepted decided=$(date +%Y-%m-%d)
 loom body set adr:use-redis-cache.md "## Context\n\nHigh load on DB.\n\n## Decision\n\nCache user sessions in Redis."
-loom mutate story:my-feature.md add constrained-by adr:use-redis-cache.md
+loom link story:my-feature.md constrained-by adr:use-redis-cache.md
+```
+
+If the story also tracks an upstream GitHub issue, link to it with the
+external prefix — no file is created, `validate` just skips the filesystem
+check:
+
+```bash
+loom link story:my-feature.md tracked-by ticket:417
 ```
 
 ## 3. Implement and Link Code & Tests
@@ -121,8 +133,8 @@ loom mutate story:my-feature.md add constrained-by adr:use-redis-cache.md
 When implementing, link the story to the relevant source symbols and test cases:
 
 ```bash
-loom mutate story:my-feature.md add implemented-by src:cache/redis.ts#SessionCache
-loom mutate story:my-feature.md add verified-by test:cache/redis.test.ts#testSessionExpiry
+loom link story:my-feature.md implemented-by src:cache/redis.ts#SessionCache
+loom link story:my-feature.md verified-by test:cache/redis.test.ts#testSessionExpiry
 ```
 
 Loom automatically checks that `#SessionCache` and `#testSessionExpiry` exist in the AST of those files.
@@ -144,7 +156,7 @@ loom validate
 Update status to done and regenerate the index board:
 
 ```bash
-loom mutate story:my-feature.md set status done
+loom set story:my-feature.md status=done
 loom index
 ```
 ```
@@ -232,6 +244,8 @@ classDiagram
         +date performed
     }
 
+    %% @prefix bookmark: https://example.com/bookmarks/
+
     project "0..*" --> "0..1" area : supports
     action "0..*" --> "0..1" project : advances
     action "0..*" --> "0..*" action : blocks
@@ -245,6 +259,9 @@ classDiagram
 - `action` is classified by `ActionStatus` (`next`, `waiting`, `scheduled`, `someday`, `done`) and physical `Context` (`home`, `office`, `computer`, `phone`, `errands`, `anywhere`).
 - `project` has an explicit desired `outcome` and belongs to an `area` of responsibility.
 - `action "0..*" --> "0..1" project : advances` allows standalone actions (actions that do not belong to a multi-step project).
+- `%% @prefix bookmark: https://example.com/bookmarks/` lets notes link to web
+  bookmarks by curie (`bookmark:looming`) — no local file needed, and
+  `validate` skips the filesystem check for external targets.
 - DuckDB queries easily find stalled projects (active projects with no pending `next` action).
 
 ## Dynamic Views (`gtd/NEXT.md`, `gtd/PROJECTS.md`)
@@ -302,11 +319,18 @@ ops:
 loom apply clarify-boiler.yaml
 ```
 
+To attach a web reference to a note, use the external prefix directly:
+
+```bash
+loom link note:boiler-notice.md attachment bookmark:boiler-manual
+```
+
 If it represents a multi-step outcome, create a `project` and link the initial next action to it:
 
 ```bash
-loom create project:fix-boiler.md title="Service and certify boiler" outcome="Boiler serviced and signed off" status=active supports=area:home.md
-loom mutate action:call-boiler-service.md set advances project:fix-boiler.md
+loom create project:fix-boiler.md title="Service and certify boiler" outcome="Boiler serviced and signed off" status=active
+loom link project:fix-boiler.md supports area:home.md
+loom link action:call-boiler-service.md advances project:fix-boiler.md
 ```
 
 ## 3. Working by Context
@@ -324,7 +348,7 @@ loom query "SELECT waiting_on, title FROM action WHERE status = 'waiting' ORDER 
 Mark an action done:
 
 ```bash
-loom mutate action:call-boiler-service.md set status done
+loom set action:call-boiler-service.md status=done
 ```
 
 ## 4. Weekly Review Routine
