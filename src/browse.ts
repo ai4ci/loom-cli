@@ -165,6 +165,155 @@ function applyLinkFilters(entries: ListEntry[], options: ListOptions): ListEntry
   return entries;
 }
 
+/**
+ * Recursive discovery (unlike `ls`, which lists one level). Walks the
+ * filesystem below a source directory, extracting anchors for every code file;
+ * steps into a limited number of anchor levels so `Class -> Method` shows a
+ * class's methods but a method (nothing below it) stops the walk.
+ */
+export function findUri(cfg: Config, graph: Graph, raw: string, options: ListOptions): {
+  parent: string;
+  entries: ListEntry[];
+} {
+  const bare = /^([A-Za-z][A-Za-z0-9+.-]*):(\/\/)?$/.exec(raw.trim());
+  const scheme = bare ? bare[1]!.toLowerCase() : parseUri(raw).scheme;
+  const isSource = !isInstantiable(graph.schema, scheme);
+
+  // A class (or its instance space) has no children to recurse into.
+  if (bare && !isSource) {
+    return { parent: raw, entries: applyLinkFilters(listInstances(cfg, graph, scheme), options) };
+  }
+
+  // A bare `scheme:` cannot go through parseUri (it rejects the empty path),
+  // so build the parsed shape directly.
+  const uri = bare ? ({ scheme, path: "" } as ParsedUri) : parseUri(raw);
+  const root = classRoot(graph.roots, uri.scheme);
+  const relative = root === "" ? uri.path : uri.path === "" ? root : `${root}/${uri.path}`;
+  const full = absolute(cfg, relative);
+
+  if (!isSource) {
+    throw new LoomError(error("ls/not-a-directory", `${raw} is an instance; use ` + "`show`" + ` to read it`));
+  }
+  if (!existsSync(full)) {
+    throw new LoomError(error("ls/not-found", `nothing at ${raw}`));
+  }
+
+  const maxDepth = options.depth ?? Infinity;
+
+  if (statSync(full).isFile()) {
+    return { parent: raw, entries: findUriAnchors(cfg, graph, uri, relative, options) };
+  }
+
+  const entries: ListEntry[] = [];
+  findDirectory(cfg, graph, uri.scheme, relative, root, 0, maxDepth, options, entries);
+  entries.sort((a, b) => a.uri.localeCompare(b.uri));
+  return { parent: raw, entries: applyLinkFilters(entries, options) };
+}
+
+/** Anchor walk within one file: `depth` counts anchor levels below the uri. */
+function findUriAnchors(
+  cfg: Config,
+  graph: Graph,
+  uri: ParsedUri,
+  filePath: string,
+  options: ListOptions,
+): ListEntry[] {
+  const anchors = extractAnchors(readFileSync(absolute(cfg, filePath), "utf8"),
+    detectLang(filePath) ?? ((): never => { throw new LoomError(error("source/unsupported-language", `no structure available for ${filePath}`)); })(),
+    cfg.anchorPolicy);
+  const prefix = uri.anchor ?? "";
+  const linkedTargets = targetsOf(graph);
+  const childrenOf = (fullName: string) => anchors.filter((a) =>
+    a.fullName.startsWith(`${fullName}.`));
+  const anchorUri = (a: Anchor) => `${uri.scheme}:${uri.path}#${a.fullName}`;
+
+  const maxSteps = options.depth ?? Infinity;
+  const result: ListEntry[] = [];
+  // Breadth-first: top-level anchors before their children, so the top of the
+  // tree is always visible regardless of depth.
+  const level = (a: Anchor) =>
+    prefix === "" ? a.fullName.split(".").length : a.fullName.slice(prefix.length + 1).split(".").length;
+  const deepest = Math.max(0, ...anchors.map((a) => level(a)));
+  for (let step = 1; step <= Math.min(maxSteps, deepest); step++) {
+    for (const a of anchors) {
+      if (level(a) !== step) continue;
+      if (prefix !== "" && !a.fullName.startsWith(`${prefix}.`)) continue;
+      if (options.kinds !== undefined && !options.kinds.includes(a.kind)) continue;
+      result.push({
+        uri: `${uri.scheme}:${uri.path}#${a.fullName}`,
+        kind: a.kind,
+        line: a.line,
+        children: childrenOf(a.fullName).length,
+        linked: linkedTargets.has(anchorUri(a)),
+      });
+    }
+  }
+  return result;
+}
+
+/** Directory walk: every code file contributes its anchor tree, other files nothing. */
+function findDirectory(
+  cfg: Config,
+  graph: Graph,
+  scheme: string,
+  repoRelative: string,
+  base: string,
+  level: number,
+  maxDepth: number,
+  options: ListOptions,
+  out: ListEntry[],
+): void {
+  const dir = absolute(cfg, repoRelative);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith(".")) continue;
+    const childRelative = `${repoRelative}/${entry.name}`;
+    // Uri paths are relative to the class root, not to the walk start.
+    const childUriPath = childRelative.slice(base === "" ? 0 : base.length + 1);
+
+    const keep = options.kinds === undefined
+      ? true
+      : entry.isDirectory() ? options.kinds.includes("Directory") : options.kinds.includes("File");
+    const childEntry: ListEntry = {
+      uri: `${scheme}:${childUriPath}`,
+      kind: entry.isDirectory() ? "Directory" : "File",
+    };
+
+    if (entry.isDirectory()) {
+      if (keep) out.push(childEntry);
+      if (level + 1 < maxDepth) {
+        findDirectory(cfg, graph, scheme, childRelative, base, level + 1, maxDepth, options, out);
+      }
+      continue;
+    }
+
+    if (keep) out.push(childEntry);
+    if (detectLang(entry.name) === null) continue;
+    // Anchor steps left for a file `level` directories below the walk start:
+    // the file itself is one level, so the boundary file gets none.
+    const steps = maxDepth === Infinity ? Infinity : maxDepth - (level + 1);
+    if (steps < 1) continue;
+    const fileUri = `${scheme}:${childUriPath}`;
+    const anchors = extractAnchors(
+      readFileSync(absolute(cfg, childRelative), "utf8"),
+      detectLang(entry.name)!,
+      cfg.anchorPolicy,
+    );
+    const linkedTargets = targetsOf(graph);
+    for (const a of anchors) {
+      if (a.fullName.split(".").length > steps) continue;
+      if (options.kinds !== undefined && !options.kinds.includes(a.kind)) continue;
+      const anchorUri = `${fileUri}#${a.fullName}`;
+      out.push({
+        uri: anchorUri,
+        kind: a.kind,
+        line: a.line,
+        children: anchors.filter((other) => other.fullName.startsWith(`${a.fullName}.`)).length,
+        linked: linkedTargets.has(anchorUri),
+      });
+    }
+  }
+}
+
 // --- locate ----------------------------------------------------------------
 
 export interface Located {

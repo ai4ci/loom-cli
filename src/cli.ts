@@ -8,7 +8,7 @@ import { LoomError, type Diagnostic, error, summarise } from "./diagnostics.ts";
 import { parse as parseYaml } from "yaml";
 import { readFileSync as readTextFile } from "node:fs";
 import { type Op, parseChangeset } from "./changeset.ts";
-import { listUri, locateLine } from "./browse.ts";
+import { findUri, listUri, locateLine } from "./browse.ts";
 import { unifiedDiff } from "./diff.ts";
 import { databasePath, query, rebuild } from "./duckdb.ts";
 import { cosineSimilarity, embedder } from "./embeddings.ts";
@@ -359,6 +359,24 @@ function lsCommand(
   };
 }
 
+function findCommand(
+  ctx: LoadedContext,
+  raw: string,
+  options: { depth?: string; kind?: string; linked?: boolean; unlinked?: boolean },
+): CommandOutput {
+  const { cfg, roots } = ctx;
+  const { schema } = loadModel(cfg);
+  const { graph } = loadGraph(cfg, schema, roots);
+  return {
+    value: findUri(cfg, graph, raw, {
+      ...(options.depth === undefined ? {} : { depth: Number(options.depth) }),
+      ...(options.kind === undefined ? {} : { kinds: options.kind.split(",").map((k) => k.trim()) }),
+      ...(options.linked ? { linked: true } : {}),
+      ...(options.unlinked ? { unlinked: true } : {}),
+    }),
+  };
+}
+
 function locateCommand(ctx: LoadedContext, raw: string, options: { line?: string }): CommandOutput {
   if (options.line === undefined) {
     throw new LoomError(error("cli/missing-option", "locate needs --line <n>"));
@@ -546,6 +564,18 @@ export function buildProgram(
     .description("list what can be linked to")
     .action((uri: string, options: { depth?: string; kind?: string; linked?: boolean; unlinked?: boolean }) => {
       finish(lsCommand(ctx(), uri, options));
+    });
+
+  program
+    .command("find")
+    .argument("<uri>", "class, directory, file or anchor to walk below")
+    .option("--depth <n>", "how many levels below the uri to show")
+    .option("--kind <kinds>", "comma-separated structure kinds to keep")
+    .option("--linked", "only entries a design document already points at")
+    .option("--unlinked", "only entries nothing points at")
+    .description("recursively list everything linkable below a uri")
+    .action((uri: string, options: { depth?: string; kind?: string; linked?: boolean; unlinked?: boolean }) => {
+      finish(findCommand(ctx(), uri, options));
     });
 
   program

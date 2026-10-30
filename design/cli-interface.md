@@ -250,6 +250,27 @@ What counts as a linkable anchor is a configured policy over the language
 pack's normalised structure kinds — see source-linkage §2.1. If `ls` does not
 list it, it is not linkable.
 
+### `find <uri>`
+
+The recursive counterpart of `ls`: walks everything below a uri instead of
+listing one level. Depth is unlimited by default; `--depth` counts structural
+levels below the uri (directories and anchor dots each add one). Files reached
+within the depth budget have their anchors listed; a file at the boundary is
+named but not opened. Sorting is by uri, breadth-first within a file so the
+top of the symbol tree stays visible.
+
+```
+loom find src:                        # the whole tree: dirs, files, anchors
+loom find src: --depth 1              # same as ls: dirs and files only
+loom find src:app.ts --depth 2        # top-level anchors and their children
+loom find src: --kind Method          # only methods, across the whole walk
+loom find src: --unlinked             # everything nothing links to yet
+```
+
+Options match `ls` (`--depth`, `--kind`, `--linked`/`--unlinked`) except that
+`--depth` is unset rather than `1`, and `--kind` also filters out `Directory`
+and `File` entries.
+
 ### `locate <uri> --line <n>`
 
 The address of a line: the reverse of `resolve`.

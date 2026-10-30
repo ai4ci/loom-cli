@@ -672,12 +672,20 @@ exercised by real use; building it earlier would freeze that contract too soon.
   output rules per row/column shape. Detailed in
   [inline-views.md](./inline-views.md).
 
-### Later — `loom find`
+### Phase 13 — External prefixes and recursive discovery (Complete)
 
-Recursive tree traversal from a uri with `--depth`, `--kind`, `--linked`,
-`--unlinked` filters and leaf-symbol stopping. Its tests were drafted on the
-`feat/find` branch; the command is to be written once against the curie uri
-syntax.
+- **External prefixes** (`%% @prefix <name>: <target>`): curie schemes bound
+  to resources outside the repo; delimiter hard error, expansion by
+  concatenation, render/body translation both ways.
+- **`loom find`**: recursive tree traversal from a uri with `--depth`,
+  `--kind`, `--linked`/`--unlinked`. Unlimited depth by default; `--depth`
+  counts structural levels (directories and anchor dots alike); `--kind`
+  filters out `Directory`/`File` entries too.
+
+### Later — RDF export
+
+The `.ttl` export of the uri space (design/open-issues.md) is parked until a
+consumer exists.
 
 ## 4. Cross-cutting concerns
 
