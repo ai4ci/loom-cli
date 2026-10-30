@@ -338,7 +338,8 @@ literal): `status=open,in_progress` expands to `status IN ('open', 'in_progress'
 ### Querying with SQL (DuckDB)
 The graph and relations project into DuckDB:
 ```bash
-# Rebuild the projection database (.loom.duckdb)
+# Rebuild the projection database
+# (design/.loom/db/<branch>/loom.duckdb — one per git branch)
 loom rebuild
 
 # Query concrete class tables or edge triples

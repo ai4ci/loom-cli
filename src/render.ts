@@ -2,7 +2,7 @@ import { type Diagnostic, error } from "./diagnostics.ts";
 import { type Config, absolute } from "./config.ts";
 import { type ViewAnnotation } from "./model/types.ts";
 import { loadModel } from "./model/load.ts";
-import { query, rebuild } from "./duckdb.ts";
+import { databasePath, query, rebuild } from "./duckdb.ts";
 import { loadGraph } from "./graph.ts";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -297,7 +297,7 @@ export async function renderAll(
   const { schema } = model;
 
   // Rebuild DB if it doesn't exist yet.
-  if (!hasStat(absolute(cfg, `${cfg.designRoot}/.loom.duckdb`))) {
+  if (!hasStat(absolute(cfg, databasePath(cfg)))) {
     const { graph } = loadGraph(cfg, schema, roots);
     await rebuild(graph);
   }

@@ -499,8 +499,12 @@ Throw the derived database away and write it again from the files. Full rebuild
 only — the files are the source of truth, so this is the cheapest correct
 projection and it needs no migrations.
 
+The database is per branch, under `$LOOM_DEFAULT_ROOT/.loom/db/<branch>/`, so
+switching branches cannot leave a projection built from a different model.
+`.loom/.gitignore` excludes `db/`; the rest of `.loom/` is checked in.
+
 ```yaml
-database: design/.loom.duckdb
+database: design/.loom/db/main/loom.duckdb
 tables:
   - { name: issue, rows: 2 }
   - { name: edge, rows: 1 }

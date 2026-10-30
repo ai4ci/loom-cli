@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
@@ -8,10 +9,63 @@ import { effectiveAttributes, isInstantiable } from "./model/schema.ts";
 import { isEnumeration, type Attribute, type SchemaIR } from "./model/types.ts";
 import { embedder, hashBody, type Embedder } from "./embeddings.ts";
 
-export const DATABASE_FILENAME = ".loom.duckdb";
+export const DATABASE_FILENAME = "loom.duckdb";
+
+/** Loom's own directory, holding both checked-in state and derived caches. */
+export const LOOM_DIR = ".loom";
+
+export function loomDir(cfg: Config): string {
+  return `${cfg.designRoot}/${LOOM_DIR}`;
+}
+
+const branchCache = new Map<string, string>();
+
+/**
+ * The branch the working tree is on, used as a directory path so that
+ * `feat/x` nests naturally rather than needing a sanitised flat name. Git
+ * forbids a ref named `feat` alongside `feat/x` for the same reason, so the
+ * filesystem layout cannot collide where git would not.
+ *
+ * Outside a repository there is no branch and `main` is the sensible default;
+ * on a detached HEAD the commit stands in for a name, because every detached
+ * checkout sharing a directory called `HEAD` would mix unrelated projections.
+ */
+export function gitBranch(repoRoot: string): string {
+  const cached = branchCache.get(repoRoot);
+  if (cached !== undefined) return cached;
+
+  const git = (...args: string[]): string =>
+    execFileSync("git", args, { cwd: repoRoot, stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+
+  let branch: string;
+  try {
+    const name = git("rev-parse", "--abbrev-ref", "HEAD");
+    branch = name === "HEAD" ? `detached/${git("rev-parse", "HEAD").slice(0, 12)}` : name;
+  } catch {
+    branch = "main";
+  }
+
+  branchCache.set(repoRoot, branch);
+  return branch;
+}
 
 export function databasePath(cfg: Config): string {
-  return `${cfg.designRoot}/${DATABASE_FILENAME}`;
+  return `${loomDir(cfg)}/db/${gitBranch(cfg.repoRoot)}/${DATABASE_FILENAME}`;
+}
+
+/**
+ * Create the loom directory and the gitignore that excludes the derived
+ * databases. Only `db/` is ignored: the rest of `.loom/` is checked in so
+ * generated state that must agree with the model travels with the branch.
+ */
+export function ensureLoomDir(cfg: Config): string {
+  const dir = absolute(cfg, loomDir(cfg));
+  mkdirSync(dir, { recursive: true });
+  const ignoreFile = path.join(dir, ".gitignore");
+  if (!existsSync(ignoreFile)) writeFileSync(ignoreFile, "db/\n");
+  return dir;
 }
 
 /**
@@ -139,13 +193,8 @@ export interface TableSummary {
 
 async function connect(cfg: Config): Promise<DuckDBConnection> {
   const target = absolute(cfg, databasePath(cfg));
-  const dir = path.dirname(target);
-  mkdirSync(dir, { recursive: true });
-  // Ensure the derived database and its WAL are git-ignored in the design root.
-  const ignoreFile = path.join(dir, ".gitignore");
-  if (!existsSync(ignoreFile)) {
-    writeFileSync(ignoreFile, `${DATABASE_FILENAME}*\n`);
-  }
+  ensureLoomDir(cfg);
+  mkdirSync(path.dirname(target), { recursive: true });
   return (await DuckDBInstance.create(target)).connect();
 }
 

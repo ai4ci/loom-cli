@@ -42,7 +42,14 @@ Expected behaviour: when `--debug` is set, each rendered view's resolved SQL
 should be written to stderr (prefixed with the file path and view name), so
 users can inspect exactly what was executed.
 
-## Doc dir pollution branches and loom working directory (0.8.0)
+## Doc dir pollution branches and loom working directory (0.8.0) 
+
+**Implemented in 0.8.1.** `loomDir`, `gitBranch`, `databasePath` and
+`ensureLoomDir` in `src/duckdb.ts`; tests in `test/duckdb-path.test.ts`.
+Two details settled during implementation: a detached HEAD becomes
+`detached/<sha12>` rather than a directory called `HEAD`, since every detached
+checkout would otherwise share one projection; and the branch is cached per
+repo root so the common path does not spawn `git` repeatedly.
 
 In the current implementation a per branch `.loom.duckdb` is recreated in the 
 design docs directory. If there are many branches this will pollute the design 
