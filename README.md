@@ -141,7 +141,9 @@ loom --json <command> ...
 - `loom apply <changeset.yaml> [--dry-run]`: Execute an atomic multi-operation batch.
 
 ### SQL Queries & Indexes
-- `loom rebuild`: Rebuild the embedded `.loom.duckdb` projection.
+- `loom render [--check] [--debug]`: Refresh inline views (`<!-- loom view: ... -->` markers and model-defined `%% @view`s) in place. `--check` is a no-write dry run for CI: exit 1 naming stale files. `--debug` prints the resolved SQL per view.
+- `loom find <uri> [--depth n] [--kind kind] [--linked]/[--unlinked]`: Recursive counterpart of `ls` — walk directories, files and linkable anchors below a uri, unlimited depth by default.
+- `loom rebuild`: Rebuild the embedded DuckDB projection at `design/.loom/db/<branch>/loom.duckdb` — one database file per git branch, so model changes on a branch never collide with `main`.
 - `loom query "<sql>"`: Run arbitrary SQL over document tables or the edge triple store.
   ```bash
   loom query "SELECT uri, title FROM issue WHERE status = 'open'"
