@@ -202,8 +202,6 @@ into any `.md` file via `<!-- loom view: ... -->` markers.
 
 ```mermaid
 classDiagram
-    %% @path issue docs/issues
-
     class issue {
         +string title
         +string status
@@ -311,8 +309,8 @@ This repository uses \`loom\` governed by \`$LOOM_DEFAULT_ROOT/document-model.mm
 Refer to \`using-loom-cli\` for general CLI operation syntax.
 
 ## 1. Document Classes & Locations
-- Issues: \`issue:<name>.md\` -> \`$LOOM_DEFAULT_ROOT/issues/<name>.md\`
-- ADRs: \`adr:<name>.md\` -> \`$LOOM_DEFAULT_ROOT/adrs/<name>.md\`
+- Issues: \`issue:<name>.md\` -> \`$LOOM_DEFAULT_ROOT/issue/<name>.md\` (class default: no %% @path needed)
+- ADRs: \`adr:<name>.md\` -> \`$LOOM_DEFAULT_ROOT/adr/<name>.md\` (class default)
 
 ## 2. Common Operations
 

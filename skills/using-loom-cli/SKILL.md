@@ -280,8 +280,6 @@ In `document-model.mmd`, declare SQL queries with `%% @view <name>`:
 
 ```mermaid
 classDiagram
-    %% @path issue docs/issues
-
     class issue {
         +string title
         +string status
