@@ -35,8 +35,8 @@ test("index regenerates a query-based index", async () => {
   assert.equal(r.code, 0);
 
   const written = readFileSync(path.join(root, "design/INDEX.md"), "utf8");
-  assert.match(written, /- \[Open A\]\(issue:open-a\.md\)/);
-  assert.match(written, /- \[Open B\]\(issue:open-b\.md\)/);
+  assert.match(written, /- \[Open A\]\(issue\/open-a\.md\)/);
+  assert.match(written, /- \[Open B\]\(issue\/open-b\.md\)/);
   assert.doesNotMatch(written, /Closed C/);
 });
 
@@ -57,7 +57,7 @@ view:
   await run(["--cwd", root, "index"]);
 
   const written = readFileSync(path.join(root, "design/INDEX.md"), "utf8");
-  assert.match(written, /- \[B\]\(issue:b\.md\)/);
+  assert.match(written, /- \[B\]\(issue\/b\.md\)/);
   assert.doesNotMatch(written, /A/);
 });
 

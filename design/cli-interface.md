@@ -454,6 +454,13 @@ literal): `status=open,closed` becomes `IN ('open', 'closed')`.
 - Query error → `_Query failed: <message>_`
 - Unknown view → `_Unknown view "<name>"._`
 
+**URI cells become links.** A cell whose value is a design uri that resolves
+to an existing file is rendered as a relative markdown link —
+`[<title>](<relative path>)`, using the document title when the uri names an
+indexed instance and the uri itself as link text otherwise (e.g. edge table
+endpoints). A uri whose target does not exist, or any non-uri value, stays
+plain text. This matches how `loom index` renders links in protected blocks.
+
 **`--check`** is a dry-run for CI: it renders in memory and writes nothing.
 It exits 0 when every file is already fresh, and exits 1 naming the stale
 files (repo-relative paths) when a render would change them.

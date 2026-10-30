@@ -137,14 +137,14 @@ export function rootFor(graph: Graph, className: string): string {
   return classRoot(graph.roots, className);
 }
 
-function titleOf(graph: Graph, uri: string): string {
+export function titleOf(graph: Graph, uri: string): string {
   const node = graph.instances.get(uri);
   const title = node?.data["title"];
   if (typeof title === "string" && title !== "") return title;
   return parseUri(uri).path;
 }
 
-function relativeLink(graph: Graph, fromPath: string, targetUri: string): string {
+export function relativeLink(graph: Graph, fromPath: string, targetUri: string): string {
   const node = graph.instances.get(targetUri);
   const parsed = parseUri(targetUri);
   const targetPath = node?.path ?? resolveUri(parsed, graph.roots).path;
@@ -407,7 +407,7 @@ function markdownFilesUnder(cfg: Config, root: string): string[] {
   return found.sort();
 }
 
-function toRepoRelative(cfg: Config, absolutePath: string): string {
+export function toRepoRelative(cfg: Config, absolutePath: string): string {
   return path.relative(cfg.repoRoot, absolutePath).split(path.sep).join("/");
 }
 

@@ -3,7 +3,8 @@ import { type Config, absolute } from "./config.ts";
 import { type ViewAnnotation } from "./model/types.ts";
 import { loadModel } from "./model/load.ts";
 import { databasePath, query, rebuild } from "./duckdb.ts";
-import { loadGraph } from "./graph.ts";
+import { type Graph, loadGraph, relativeLink, titleOf, toRepoRelative } from "./graph.ts";
+import { parseUri, resolveUri } from "./uri.ts";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { ClassRoots } from "./path-resolution.ts";
@@ -174,6 +175,32 @@ export interface DebugView {
   sql: string;
 }
 
+/** When given, uri-shaped cells are rendered as relative markdown links. */
+export interface LinkContext {
+  graph: Graph;
+  /** Repo-relative path of the file being rendered (link base). */
+  fromPath: string;
+}
+
+/** One cell value: uri cells become `[title](relative/path)` links. */
+function renderCell(cell: unknown, link: LinkContext | undefined): string {
+  const text = String(cell ?? "");
+  if (link === undefined || text === "") return text;
+  let parsed;
+  try {
+    parsed = parseUri(text);
+  } catch {
+    return text;
+  }
+  // Not a design uri we know how to address (e.g. a literal, or the edge
+  // table's bare labels): leave the cell alone.
+  const targetPath = resolveUri(parsed, link.graph.roots).path;
+  if (!hasStat(absolute(link.graph.cfg, targetPath))) return text;
+  const label = titleOf(link.graph, text);
+  const target = relativeLink(link.graph, link.fromPath, text);
+  return `[${label}](${target})`;
+}
+
 /**
  * Render a single view: run SQL, produce markdown (table or list).
  * Returns `{ markdown, debug }` where debug includes the resolved SQL.
@@ -183,6 +210,7 @@ export async function renderView(
   view: string,
   params: Record<string, string>,
   namedViews: Map<string, ViewAnnotation>,
+  link?: LinkContext,
 ): Promise<{ markdown: string; debug: DebugView }> {
   // Check for inline SQL (starts with SELECT).
   const isInline = /^SELECT\b/i.test(view);
@@ -222,7 +250,7 @@ export async function renderView(
 
   if (columns.length === 1) {
     const col = columns[0]!;
-    const items = rows.map((r) => String(r[col] ?? "")).filter(Boolean);
+    const items = rows.map((r) => renderCell(r[col], link)).filter(Boolean);
     return { markdown: items.map((i) => `- ${i}`).join("\n"), debug };
   }
 
@@ -230,13 +258,13 @@ export async function renderView(
     // Full markdown table.
     const header = `| ${columns.join(" | ")} |`;
     const sep = `| ${columns.map(() => "---").join(" | ")} |`;
-    const body = rows.map((r) => `| ${columns.map((c) => String(r[c] ?? "")).join(" | ")} |`).join("\n");
+    const body = rows.map((r) => `| ${columns.map((c) => renderCell(r[c], link)).join(" | ")} |`).join("\n");
     return { markdown: `${header}\n${sep}\n${body}`, debug };
   }
 
   // 5+ columns: compact list with bold keys.
   const items = rows.map(
-    (r) => columns.map((c) => `**${c}:** ${String(r[c] ?? "")}`).join("  "),
+    (r) => columns.map((c) => `**${c}:** ${renderCell(r[c], link)}`).join("  "),
   );
   return { markdown: items.map((i) => `- ${i}`).join("\n"), debug };
 }
@@ -317,14 +345,18 @@ export async function renderAll(
     debug?.(line);
   };
 
+  // Loaded once so uri cells can link with real titles.
+  const { graph } = loadGraph(cfg, schema, roots);
+
   for (const file of files) {
     const text = readFileSync(file, "utf8");
     const markers = scanViewMarkers(text);
     if (markers.length === 0) continue;
 
+    const link = { graph, fromPath: toRepoRelative(cfg, file) };
     let updated = text;
     for (const marker of markers) {
-      const { markdown, debug } = await renderView(cfg, marker.view, marker.params, namedViews);
+      const { markdown, debug } = await renderView(cfg, marker.view, marker.params, namedViews, link);
       note(`${file}: view ${debug.name}\n  ${debug.sql.replaceAll("\n", "\n  ")}`);
       updated = updateSection(updated, marker, markdown);
       rendered.push({ file, view: marker.view });
@@ -384,14 +416,17 @@ async function checkStale(
   const namedViews = new Map(model.views.map((v) => [v.name, v]));
   const stale: string[] = [];
 
+  const { graph } = loadGraph(cfg, schema, roots);
+
   for (const file of mdFiles(cfg.repoRoot)) {
     const text = readFileSync(file, "utf8");
     const markers = scanViewMarkers(text);
     if (markers.length === 0) continue;
 
+    const link = { graph, fromPath: toRepoRelative(cfg, file) };
     let touched = false;
     for (const marker of markers) {
-      const { markdown, debug: info } = await renderView(cfg, marker.view, marker.params, namedViews);
+      const { markdown, debug: info } = await renderView(cfg, marker.view, marker.params, namedViews, link);
       if (writeDebug !== undefined) {
         writeDebug(`${file}: view ${info.name}\n  ${info.sql.replaceAll("\n", "\n  ")}`);
       }

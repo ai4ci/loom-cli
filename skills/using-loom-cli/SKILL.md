@@ -333,6 +333,11 @@ literal): `status=open,in_progress` expands to `status IN ('open', 'in_progress'
 | error | any | `_Query failed: <message>_` |
 | — | — | `_Unknown view "<name>"._` if the name is not defined in the model |
 
+**URI cells become links.** A cell holding a design uri that resolves to an
+existing file renders as `[<title>](<relative path>)` — the document title
+when the uri names an indexed instance, the uri text otherwise. Values that
+do not resolve (missing files, non-uris) stay plain text.
+
 `render` automatically rebuilds the DuckDB database if it does not exist.
 
 ### Querying with SQL (DuckDB)
