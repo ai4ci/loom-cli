@@ -652,6 +652,33 @@ A thin wrapper exposing `validate`, `query`, `refs`, `similar` and `apply` as
 MCP tools. Deliberately out of scope until the CLI's JSON contract has been
 exercised by real use; building it earlier would freeze that contract too soon.
 
+### Phase 12 — Branch-aware state and inline views (Complete)
+
+- **Per-branch projection database** (`.loom` dir proposal, open-issues §0.8.0):
+  the DuckDB database lives at `$LOOM_DEFAULT_ROOT/.loom/db/<branch>/loom.duckdb`.
+  The branch is used as a directory path (`feat/x` nests), so a switch of
+  branches never reads a projection built from a different model. `.loom/db/`
+  is git-ignored by `.loom/.gitignore`; everything else under `.loom/` is
+  checked in so branch-specific generated state travels with the branch.
+  Detached HEAD becomes `detached/<sha12>`, never a directory named `HEAD`.
+- **Curie uris**: design uris are `scheme:path#anchor` (`issue:a.md`), not
+  `scheme://path`. The two-slash form is superseded — under RFC 3986 it makes
+  the first path segment an authority — but still parses (flagged `legacy`)
+  and `formatUri` never emits it, so round-tripping migrates the corpus.
+  Matches RDF turtle prefixed-name syntax for the later export (§RDF export,
+  open-issues).
+- **Inline views** (`loom render`): `%% @view` SQL annotations in the model,
+  `<!-- loom view: ... -->` markers in markdown, query-string parameters,
+  output rules per row/column shape. Detailed in
+  [inline-views.md](./inline-views.md).
+
+### Later — `loom find`
+
+Recursive tree traversal from a uri with `--depth`, `--kind`, `--linked`,
+`--unlinked` filters and leaf-symbol stopping. Its tests were drafted on the
+`feat/find` branch; the command is to be written once against the curie uri
+syntax.
+
 ## 4. Cross-cutting concerns
 
 **Testing.** Each phase ships fixture repositories under `test/fixtures/` and
