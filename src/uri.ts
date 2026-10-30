@@ -32,10 +32,10 @@ export type ExistsCheck = (repoRelativePath: string) => boolean;
  * superseded form. The scheme must come before any slash, so a filesystem
  * path containing a colon (`design/a:b.md`) cannot be mistaken for one.
  *
- * The two-slash form is kept only for migration. Under RFC 3986 it means
- * `authority = first segment`, so `issue:design/notes.md` addresses host
- * `design` with path `/notes.md` — never what loom meant. The curie form has
- * no authority and says what it looks like.
+ * The slashed forms are kept only for migration. Under RFC 3986 two slashes
+ * mean `authority = first segment`, so `issue://design/notes.md` addresses
+ * host `design` with path `/notes.md` — never what loom meant. One slash is
+ * just noise. The curie form has no authority and says what it looks like.
  */
 const URI_RE = /^([A-Za-z][A-Za-z0-9+.-]*):(\/\/)?([^]*)$/;
 
@@ -84,6 +84,7 @@ export function parseUri(raw: string): ParsedUri {
   const scheme = match[1]!.toLowerCase();
   const legacy = match[2] !== undefined;
   let rest = match[3]!;
+  const oneSlash = rest.startsWith("/");
   let anchor: string | undefined;
 
   const hash = rest.indexOf("#");
@@ -103,7 +104,7 @@ export function parseUri(raw: string): ParsedUri {
     scheme,
     path: normalised,
     ...(anchor === undefined ? {} : { anchor }),
-    ...(legacy ? { legacy: true as const } : {}),
+    ...(legacy || oneSlash ? { legacy: true as const } : {}),
   };
 }
 

@@ -49,6 +49,14 @@ test("the legacy form keeps the whole path, as loom always meant it to", () => {
   assert.equal(parsed.path, "design/notes.md");
 });
 
+test("the one-slash form is legacy too, not a distinct spelling", () => {
+  const parsed = parseUri("issue:/my-issue.md");
+  assert.equal(parsed.scheme, "issue");
+  assert.equal(parsed.path, "my-issue.md");
+  assert.equal(parsed.legacy, true);
+  assert.equal(formatUri(parsed), "issue:my-issue.md");
+});
+
 test("a curie is not flagged as legacy", () => {
   assert.equal(parseUri("issue:my-issue.md").legacy, undefined);
 });

@@ -61,9 +61,10 @@ from commits.
 
 **Implemented in 0.8.2 (the uris).** The curie form `issue:my-issue.md` is now
 the only written form: `parseUri` accepts `scheme:path` with `#fragment`, and
-the superseded `scheme://path` still parses but is flagged `legacy` and
-`formatUri` never emits it, so anything that round-trips a uri migrates it.
-The two-slash form was dropped because under RFC 3986 it means
+the superseded `scheme://path` and one-slash `scheme:/path` still parse but are
+flagged `legacy` and `formatUri` never emits them, so anything that
+round-trips a uri migrates it. The two-slash form was dropped because under
+RFC 3986 it means
 `authority = first segment` (`issue://design/notes.md` addresses host `design`),
 which was never what loom meant. The curie has no authority, so the whole path
 is the path.

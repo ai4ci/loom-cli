@@ -78,7 +78,7 @@ uri/bare-path: "design/issue/fix-login.md" is a filesystem path, not a design ur
 Copy the suggested URI and re-run. The same rule applies to URIs written into
 frontmatter relations (`blocks: [issue:b.md]`) and to `ops` in a changeset
 file. To go the other way — from a path you already have to its URI — the error
-itself is the quickest answer, and `loom ls <class>://` lists what exists.
+itself is the quickest answer, and `loom ls <class>:` lists what exists.
 
 ### Output Contracts
 Every command produces one of three shapes:
@@ -408,7 +408,7 @@ loom similar issue:fix-login.md
 | Diagnostic Code | Meaning | Recovery / Fix |
 |---|---|---|
 | `uri/bare-path` | A filesystem path was given where a design URI belongs (e.g. `design/issue/a.md` instead of `issue:a.md`). | Use the URI named in the diagnostic's `fix`. Nothing was written. |
-| `uri/malformed` | The argument is not a URI at all, or the scheme has only one slash (`issue:/a.md`). | Write it as `<class>://<id>`. |
+| `uri/malformed` | The argument is not a URI at all (e.g. `://no-scheme`). | Write it as `<class>:<id>`, e.g. `issue:a.md`. |
 | `graph/stale-links` | Protected link block in markdown is out of sync with frontmatter. | Run `loom validate --fix`. |
 | `graph/non-canonical-uri` | A URI has unnecessary path segments or wrong format. | Run `loom validate --fix`. |
 | `graph/renamed-symbol` | Source symbol anchor broken, but matches a renamed symbol since `HEAD`. | Run `loom validate --fix` to rewrite. |
