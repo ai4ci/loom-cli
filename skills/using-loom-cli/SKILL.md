@@ -121,6 +121,13 @@ loom ls src:src/                     # List files in source directory
 loom ls src:src/auth.ts              # List linkable symbols/anchors in file
 loom ls src:src/auth.ts --kind Method # Filter symbols by kind
 
+# Recursive discovery over the whole tree (find) — unlimited depth by default
+loom find src:                        # Dirs, files and every anchor, sorted
+loom find src: --depth 1              # One level down, like ls
+loom find src:app.ts --depth 2        # Top-level anchors and their children
+loom find src: --kind Method          # Methods only (dirs/files filtered out)
+loom find src: --unlinked             # Everything no design doc links to yet
+
 # Locate which symbol encloses a specific line in source
 loom locate src:src/auth.ts --line 42
 
