@@ -280,6 +280,9 @@ async function queryCommand(ctx: LoadedContext, sql: string): Promise<CommandOut
   return { value: await query(cfg, sql) };
 }
 
+/** A query arg that looks like a design uri (any scheme), not free text. */
+const HAS_URI = /^[a-zA-Z][A-Za-z0-9+.-]*:/;
+
 async function similarCommand(
   ctx: LoadedContext,
   query_: string,
@@ -293,7 +296,7 @@ async function similarCommand(
   const emb = embedder();
   let queryVec: Float32Array;
   let queryLabel = "text";
-  if (/^[a-zA-Z+.-]+:\/\//.test(query_)) {
+  if (HAS_URI.test(query_)) {
     const parsed = parseUri(query_);
     const target = formatUri({ scheme: parsed.scheme, path: parsed.path });
     const node = graph.instances.get(target);
