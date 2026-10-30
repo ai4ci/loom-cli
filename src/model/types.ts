@@ -58,6 +58,14 @@ export interface SchemaIR {
   relations: Relation[];
 }
 
+export interface ViewAnnotation {
+  /** Name used in `<!-- loom view: <name> -->` markers. */
+  name: string;
+  /** SQL body with optional `$param` placeholders. */
+  sql: string;
+  line: number;
+}
+
 /** Classes that address code or static files and carry no structured YAML. */
 export const RESERVED_FAMILIES = ["src", "resource"] as const;
 

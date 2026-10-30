@@ -2,15 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { absolute, type Config, findModelFiles } from "../config.ts";
 import { LoomError, type Diagnostic, error } from "../diagnostics.ts";
-import {
-  classRoot as pickClassRoot,
-  extractPathAnnotations,
-  resolveClassRoots,
-  type ClassRoots,
-} from "../path-resolution.ts";
+import { extractPathAnnotations, classRoot as pickClassRoot, resolveClassRoots, type ClassRoots } from "../path-resolution.ts";
+import { extractViewAnnotations } from "../render.ts";
 import { parseModel } from "./mermaid.ts";
 import { validateModel } from "./schema.ts";
 import type { SchemaIR } from "./types.ts";
+
+import { type ViewAnnotation } from "./types.ts";
 
 export const MODEL_FILENAME = "document-model.mmd";
 
@@ -19,6 +17,7 @@ export interface LoadedModel {
   path: string;
   schema: SchemaIR;
   roots: ClassRoots;
+  views: ViewAnnotation[];
   /** Syntax, model-level and path-resolution findings combined. */
   diagnostics: Diagnostic[];
 }
@@ -61,6 +60,8 @@ export function loadModel(cfg: Config, override?: string): LoadedModel {
   }
 
   const { schema, diagnostics, comments } = parseModel(readFileSync(target, "utf8"));
+  const viewDiagnostics: Diagnostic[] = [];
+  const views = extractViewAnnotations(comments, viewDiagnostics);
   const annotations = extractPathAnnotations(comments);
   const { roots, diagnostics: pathDiagnostics } = resolveClassRoots(
     schema,
@@ -73,7 +74,8 @@ export function loadModel(cfg: Config, override?: string): LoadedModel {
     path: target,
     schema,
     roots,
-    diagnostics: [...diagnostics, ...pathDiagnostics, ...modelDiagnostics],
+    views,
+    diagnostics: [...diagnostics, ...viewDiagnostics, ...pathDiagnostics, ...modelDiagnostics],
   };
 }
 

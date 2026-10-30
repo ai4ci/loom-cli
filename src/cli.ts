@@ -18,6 +18,7 @@ import { splitProse, toUris } from "./body.ts";
 import { applyFixes } from "./fix.ts";
 import { commit, planChangeset } from "./mutate.ts";
 import { loadGraph, resolvePath, validateGraph } from "./graph.ts";
+import { renderCommand } from "./render.ts";
 import { validateInstance } from "./instance.ts";
 import { loadModel } from "./model/load.ts";
 import { writeReport } from "./report.ts";
@@ -618,6 +619,17 @@ export function buildProgram(emit: (text: string) => void, setCode: (code: numbe
     .action(async (queryArg: string, options: { limit?: string }) => {
       const limit = options.limit !== undefined ? Number(options.limit) : undefined;
       finish(await similarCommand(ctx(), queryArg, { limit }));
+    });
+
+  // render — expand <!-- loom view: ... --> markers
+  program
+    .command("render")
+    .option("--check", "exit 1 if any marker would be updated (dry-run for CI)")
+    .option("--debug", "print resolved SQL for each view to stderr")
+    .description("expand <!-- loom view: ... --> markers in markdown files")
+    .action(async (options: { check?: boolean; debug?: boolean }) => {
+      const result = await renderCommand(ctx(), options);
+      finish({ value: result });
     });
 
   return program;

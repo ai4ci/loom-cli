@@ -410,6 +410,55 @@ Hunk headers are treated as a hint only; a hunk is placed by matching its
 context exactly, with no fuzz. A hunk that matches nothing is
 `body/patch-failed` and nothing is written.
 
+### Render (inline views)
+
+    loom render [--check] [--debug]
+
+`render` scans every markdown file under the repo root, finds
+`<!-- loom view: ... -->` markers, runs the named view (or inline SQL) against
+the DuckDB graph, and replaces the content between the opening marker and the
+closing `<!-- loom view: end -->` marker with the rendered result.
+
+Named views are defined in `document-model.mmd` with `%% @view <name>`
+annotations. Multi-line SQL bodies use continuation `%%` lines:
+
+```mermaid
+    %% @view blocking_issues
+    %% SELECT uri, title, status
+    %% FROM issue
+    %% WHERE status = 'open'
+```
+
+Inline SQL markers need no model definition:
+
+```markdown
+<!-- loom view: SELECT count(*) AS cnt FROM issue -->
+<!-- loom view: end -->
+```
+
+**Parameters** can be passed via query string in the marker:
+
+```markdown
+<!-- loom view: recent_issues?status=open&limit=5 -->
+```
+
+The view definition references `$status` and `$limit` as placeholders.
+List parameters use comma-separated values (backslash-escaped commas are
+literal): `status=open,closed` becomes `IN ('open', 'closed')`.
+
+**Output rules:**
+- 0 rows → `_(no results)_`
+- 1 column → bullet list (`- value`)
+- 2–4 columns → markdown table with header
+- 5+ columns → compact list (`**col:** val  **col2:** val2`)
+- Query error → `_Query failed: <message>_`
+- Unknown view → `_Unknown view "<name>"._`
+
+**`--check`** exits 1 if any marker would be updated (dry-run mode for CI).
+**`--debug`** prints the resolved SQL for each view to stderr.
+
+`render` automatically rebuilds the DuckDB database if it does not already exist.
+
 `link` and `unlink` **dispatch on the subject's scheme**. A design instance
 writes the relation into its yaml; a `src://` subject writes a comment into the
 source file. The shape is subject–relation–object either way, and the model
