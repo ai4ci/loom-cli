@@ -207,3 +207,61 @@ label to two different target classes, emitting `rdfs:range` twice means "a
 member of both", which is a contradiction rather than the intended union. The
 exporter must emit a union class or omit the range.
 
+
+## 0.9.x — unify `@path` under `@base`/`@prefix`? (open discussion)
+
+The observation: today `%% @path issue design/issues` and
+`%% @prefix gh: https://github.com/org/repo/issues/` are two mechanisms whose
+shapes are nearly identical, differing only in the base the target resolves
+against — repo root for `@path`, nothing (already-absolute URL) for `@prefix`.
+An RDF-turtle reading would express both as one mechanism:
+
+```
+%% @base <file://…/repo-root> .        % implicit, always in force
+%% @prefix issue: <design/issues/> .   % local: expands against @base
+%% @prefix gh: <https://github.com/org/repo/issues/> .  % external: absolute
+```
+
+`issue:my-issue.md` would resolve to `file://…/repo-root/design/issues/my-issue.md`
+with no `@path` at all; the `file://` absolute vs relative distinction *is* the
+`@prefix`-vs-`@path` distinction.
+
+**Current implementation (why it is not that today).** `resolveUri` treats the
+two as separate maps consulted in order: an external prefix wins over a
+same-named class (deliberate, tested), and class roots additionally carry
+behaviour prefixes cannot:
+
+- inheritance — a subclass with no annotation nests under its parent's root;
+- relative-path resolution against a UML ancestor's root (the
+  `firstResolvedAncestor` rule);
+- canonicalisation and existence checks operate on the local, root-joined path;
+- `path/collision` detection (two classes resolving to one directory).
+
+A turtle-style `@prefix issue: <design/issues/>` + implicit `@base` could be
+made to reproduce all of these (expansion = base + target + relative path), so
+the change is representable. The open questions are:
+
+1. **Is `@path` deprecated or retained as sugar?** Turtle-familiar users
+   benefit from one mechanism; but `@path`'s relative-against-UML-parent rule
+   does not map cleanly onto string-concatenation semantics (a child of
+   `adr` with target `decisions/` should arguably expand against `adr`'s
+   resolved prefix, which means expansion order, not simple concatenation).
+2. **Terminator semantics.** Today `@path` targets need no trailing `/` and
+   are joined as directories; `@prefix` targets *must* end in `/` or `#`.
+   A unified rule must pick one convention for local prefixes — trailing
+   `/` required would break every existing model file.
+3. **The `file://` base is fiction for most classes.** `src`/`resource`
+   families and path-typed attributes already live repo-relative and are
+   checked with `stat`; introducing an absolute-file scheme as the
+   intermediate representation buys nothing for the filesystem case and
+   complicates the `repo:` scheme (repo-root-relative, base-independent).
+4. **Migration cost is still low** (in-source links unadopted, models are
+   small) but nonzero: every existing model file, both skills, all worked
+   examples, and the legacy docs.
+
+Interim position (before any decision): the two-mechanism design is not
+accidental — `@path` is "a directory the class owns", `@prefix` is "a URL
+namespace someone else owns". Unification is attractive if loom ever wants
+SPARQL/turtle round-tripping as a first-class feature (the parked RDF export);
+until then the extra concept in users' heads is one annotation keyword, not
+two address systems.
