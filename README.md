@@ -116,8 +116,8 @@ loom --json <command> ...
 - `loom ls <uri>`: Hierarchical listing of classes, files, or linkable symbols in code.
   ```bash
   loom ls issue:                       # List all issue documents
-  loom ls src:src/                     # List source files
-  loom ls src:src/auth.ts              # List functions, methods, classes in auth.ts
+  loom ls src:                         # List source files (src: IS the src/ root)
+  loom ls src:auth.ts                  # List functions, methods, classes in auth.ts
   ```
 - `loom resolve <uri>`: Resolve any document URI to disk path, or source anchor to line number.
 - `loom show <uri>`: Display frontmatter and markdown body of an instance.
@@ -132,9 +132,9 @@ loom --json <command> ...
   ```bash
   loom link issue:a.md blocks issue:b.md
   # Inserts a comment directly inside the body of the function:
-  loom link src:src/auth.ts#login implements issue:a.md
+  loom link src:auth.ts#login implements issue:a.md
   # Target from line number:
-  loom link src:src/auth.ts --line 42 implements issue:a.md
+  loom link src:auth.ts --line 42 implements issue:a.md
   ```
 - `loom unlink <from> <rel> <to>`: Remove links (and cleanly removes source comments).
 - `loom rename <from> <to>`: Rename an instance and automatically rewrite all inbound links across the entire corpus.

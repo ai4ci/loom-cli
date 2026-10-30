@@ -57,11 +57,11 @@ A language the pack does not know produces `source/unsupported-language`.
 
 ## 3. Discovery
 
-- `loom ls src:src/` — directories and files under a root.
-- `loom ls src:src/auth.ts` — linkable anchors in the file, with qualified
+- `loom ls src:` — directories and files under a root.
+- `loom ls src:auth.ts` — linkable anchors in the file, with qualified
   names for overloads.
 - `loom find src: --depth 2` — recursive walk; see `cli-interface.md` §3.
-- `loom locate src:src/auth.ts --line 42` — the innermost anchor enclosing a
+- `loom locate src:auth.ts --line 42` — the innermost anchor enclosing a
   line; what to link when you only know a line number.
 
 ## 4. Reverse links
@@ -82,7 +82,7 @@ body.
 
 ### 4.2 Writing
 
-`loom link src:src/auth.ts#login implements issue:a.md` inserts the comment as
+`loom link src:auth.ts#login implements issue:a.md` inserts the comment as
 the **first statement** inside the declaration's block (a file with no
 annotatable declaration gets the link at file level, after the header). The
 write is a changeset edit: ordering is stable, re-linking is idempotent, and

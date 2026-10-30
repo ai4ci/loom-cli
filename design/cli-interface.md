@@ -143,8 +143,8 @@ Read and edit the prose of an instance without touching frontmatter or links.
 
 `ls` lists what can be linked to at one level: instances of a class
 (`loom ls issue:`), directories and files under a source root
-(`loom ls src:src/`), or linkable symbols in a file (`loom ls
-src:src/auth.ts`). `--linked` / `--unlinked` filter by whether the entry
+(`loom ls src:`), or linkable symbols in a file (`loom ls
+src:auth.ts`). `--linked` / `--unlinked` filter by whether the entry
 already has an inbound design link; `--kind` filters anchors by structure kind.
 
 `find` is the recursive counterpart: it walks directories, files and anchors
@@ -224,7 +224,7 @@ Each sugar command is one changeset op; all accept `--dry-run`.
 | `body set/append/patch` | `body` |
 
 Link dispatch is on the **subject's** scheme: `loom link issue:a.md blocks
-issue:b.md` writes frontmatter; `loom link src:src/auth.ts#login implements
+issue:b.md` writes frontmatter; `loom link src:auth.ts#login implements
 issue:a.md` writes a comment into the code. `--line <n>` converts a line to
 its innermost anchor at input time (never stored).
 

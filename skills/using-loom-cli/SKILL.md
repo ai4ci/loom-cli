@@ -107,7 +107,7 @@ loom model check
 ```bash
 # Resolve URI to disk path or source line number
 loom resolve issue:fix-login.md
-loom resolve src:src/auth.ts#login
+loom resolve src:auth.ts#login
 
 # Inspect instance YAML frontmatter + markdown body (verbatim, as on disk)
 loom show issue:fix-login.md
@@ -117,9 +117,9 @@ loom --json body get issue:fix-login.md
 
 # Hierarchical directory and symbol exploration (ls)
 loom ls issue:                       # List all instances of class 'issue'
-loom ls src:src/                     # List files in source directory
-loom ls src:src/auth.ts              # List linkable symbols/anchors in file
-loom ls src:src/auth.ts --kind Method # Filter symbols by kind
+loom ls src:                         # List files in source directory (src: IS the src/ root)
+loom ls src:auth.ts                  # List linkable symbols/anchors in file
+loom ls src:auth.ts --kind Method   # Filter symbols by kind
 
 # Recursive discovery over the whole tree (find) — unlimited depth by default
 loom find src:                        # Dirs, files and every anchor, sorted
@@ -129,10 +129,10 @@ loom find src: --kind Method          # Methods only (dirs/files filtered out)
 loom find src: --unlinked             # Everything no design doc links to yet
 
 # Locate which symbol encloses a specific line in source
-loom locate src:src/auth.ts --line 42
+loom locate src:auth.ts --line 42
 
 # Find which design documents link to a given source symbol
-loom refs src:src/auth.ts#login
+loom refs src:auth.ts#login
 
 # Semantic similarity search across markdown bodies
 loom similar "authentication token expiration" --limit 5
@@ -155,13 +155,13 @@ loom set issue:new-feature.md status in_progress
 loom link issue:new-feature.md blocks issue:old-feature.md
 
 # Link source code to a document (writes comment inside function body!)
-loom link src:src/auth.ts#login implements issue:new-feature.md
+loom link src:auth.ts#login implements issue:new-feature.md
 # Or link source code targeting an anchor from a line number:
-loom link src:src/auth.ts --line 42 implements issue:new-feature.md
+loom link src:auth.ts --line 42 implements issue:new-feature.md
 
 # Remove link
 loom unlink issue:new-feature.md blocks issue:old-feature.md
-loom unlink src:src/auth.ts#login implements issue:new-feature.md
+loom unlink src:auth.ts#login implements issue:new-feature.md
 
 # Rename an instance (updates all inbound URIs across the corpus)
 loom rename issue:old-name.md issue:new-name.md

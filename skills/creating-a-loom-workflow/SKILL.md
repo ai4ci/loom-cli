@@ -324,7 +324,7 @@ loom create issue:my-task.md "title: My Task" "status: open" "created: $(date +%
 ### Linking Code to an Issue
 When implementing an issue in code:
 \`\`\`bash
-loom link src:src/feature.ts#handleTask implements issue:my-task.md
+loom link src:feature.ts#handleTask implements issue:my-task.md
 \`\`\`
 
 ### Writing the Issue's Prose
