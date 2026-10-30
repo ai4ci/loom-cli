@@ -5,7 +5,8 @@ import { getLinksBlock, setLinksBlock, stringifyInstance, parseInstance } from "
 import { loadModel } from "./model/load.ts";
 import type { SchemaIR } from "./model/types.ts";
 import { databasePath, query } from "./duckdb.ts";
-import { classRoot, type ClassRoots } from "./path-resolution.ts";
+import { type ClassRoots } from "./path-resolution.ts";
+import { parseUri, resolveUri } from "./uri.ts";
 
 export interface FilterView {
   class: string;
@@ -102,14 +103,13 @@ function relativeLink(
 ): string {
   // Resolve the target uri to a repo-relative path using the class roots,
   // so an index links to wherever the class actually lives.
-  const match = /^([a-zA-Z+.-]+):\/\/(.+)$/.exec(target.uri);
-  if (!match) return target.uri;
-  const scheme = match[1]!;
-  const innerPath = match[2]!;
-  const root = classRoot(roots, scheme);
-  const filePath = root === "" ? innerPath : `${root}/${innerPath}`;
-  const indexDir = path.posix.dirname(indexPath);
-  return path.posix.relative(indexDir, filePath);
+  try {
+    const filePath = resolveUri(parseUri(target.uri), roots).path;
+    const indexDir = path.posix.dirname(indexPath);
+    return path.posix.relative(indexDir, filePath);
+  } catch {
+    return target.uri;
+  }
 }
 
 async function renderIndexBlock(

@@ -4,24 +4,15 @@
 
 ## Inline views: URI values rendered as plain text  (0.8.0)
 
-**File:** `src/render.ts` — function `renderView()`
-
-When a `%% @view` SQL query returns a column containing URIs (e.g.
-`issue:my-task.md`), the cell value is stringified as plain text.
-It should be rendered as a relative markdown link — `[title](relative/path.md)` —
-consistent with how `loom index` renders links in protected link blocks.
-
-The building blocks exist:
-- `relativeLink()` in `src/graph.ts` — converts a URI to a repo-relative path
-- `parseUri()` in `src/uri.ts` — detects URI-lookalike strings and extracts scheme/path
-- `titleOf()` in `src/graph.ts` — resolves a URI to its document title
-
-The `renderView()` function's output in `src/render.ts` needs a post-processing
-step (or per-cell check) that runs values through `parseUri()` and, when a match
-is found, replaces the plain text with a markdown link.
-
-**Related:** the output rules in `skills/using-loom-cli/SKILL.md` (under "Output rules"
-table) would need a note that URIs are rendered as links.
+**Implemented in 0.8.4.** `renderView` takes a `LinkContext` (the loaded graph
+plus the repo-relative path of the file being rendered). Any cell value that
+parses as a design uri and resolves to an existing file is rendered as
+`[<title>](<relative path>)` - document title when the uri names an indexed
+instance, the uri text otherwise. Unresolvable uris and non-uri values stay
+plain text, so a dead uri is visible rather than a silently broken link.
+`titleOf`/`relativeLink` in `src/graph.ts` are now shared with `loom index`,
+whose own `relativeLink` had silently stopped matching when uris became
+curies - also fixed in 0.8.4.
 
 ## Inline views: `render --check` CI mode (0.8.0)
 
