@@ -38,21 +38,21 @@ test("--version needs no model, config or git repository", async () => {
 });
 
 test("resolve maps a class uri to its repo-relative path", async () => {
-  const r = await run(["--cwd", repo(), "resolve", "issue://first.md"]);
+  const r = await run(["--cwd", repo(), "resolve", "issue:first.md"]);
   assert.equal(r.code, 0);
   const out = parse(r.out) as Record<string, unknown>;
   assert.equal(out.path, "design/issue/first.md");
-  assert.equal(out.uri, "issue://first.md");
+  assert.equal(out.uri, "issue:first.md");
   assert.equal(out.exists, true);
 });
 
 test("resolve round-trips a repo uri back to the compact scheme", async () => {
-  const r = await run(["--cwd", repo(), "resolve", "repo://design/issue/first.md"]);
-  assert.equal((parse(r.out) as Record<string, unknown>).uri, "issue://first.md");
+  const r = await run(["--cwd", repo(), "resolve", "repo:design/issue/first.md"]);
+  assert.equal((parse(r.out) as Record<string, unknown>).uri, "issue:first.md");
 });
 
 test("resolve reports a missing file without failing", async () => {
-  const r = await run(["--cwd", repo(), "resolve", "issue://absent.md"]);
+  const r = await run(["--cwd", repo(), "resolve", "issue:absent.md"]);
   assert.equal(r.code, 0);
   assert.equal((parse(r.out) as Record<string, unknown>).exists, false);
 });
@@ -64,7 +64,7 @@ test("resolve rejects a malformed uri with exit code 1", async () => {
 });
 
 test("show returns frontmatter, links and markdown", async () => {
-  const r = await run(["--cwd", repo(), "show", "issue://first.md"]);
+  const r = await run(["--cwd", repo(), "show", "issue:first.md"]);
   assert.equal(r.code, 0);
   const out = parse(r.out) as Record<string, any>;
   assert.equal(out.frontmatter.status, "open");
@@ -74,14 +74,14 @@ test("show returns frontmatter, links and markdown", async () => {
 });
 
 test("show fails with exit code 1 for a missing instance", async () => {
-  const r = await run(["--cwd", repo(), "show", "issue://absent.md"]);
+  const r = await run(["--cwd", repo(), "show", "issue:absent.md"]);
   assert.equal(r.code, 1);
   assert.match(r.err, /instance\/not-found/);
 });
 
 test("--json emits JSON for the same data", async () => {
   const root = repo();
-  const asYaml = parse((await run(["--cwd", root, "resolve", "issue://first.md"])).out);
-  const asJson = JSON.parse((await run(["--cwd", root, "--json", "resolve", "issue://first.md"])).out);
+  const asYaml = parse((await run(["--cwd", root, "resolve", "issue:first.md"])).out);
+  const asJson = JSON.parse((await run(["--cwd", root, "--json", "resolve", "issue:first.md"])).out);
   assert.deepEqual(asJson, asYaml);
 });

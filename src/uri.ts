@@ -9,6 +9,12 @@ export interface ParsedUri {
   path: string;
   /** Symbol anchor for `src`-family URIs (plan §Phase 5). */
   anchor?: string;
+  /**
+   * Set when the input used the superseded `scheme:path` form. Carried so
+   * callers can report it; `formatUri` never emits it, so anything that
+   * round-trips a uri migrates it.
+   */
+  legacy?: true;
 }
 
 export interface ResolvedUri {
@@ -19,10 +25,17 @@ export interface ResolvedUri {
 
 export type ExistsCheck = (repoRelativePath: string) => boolean;
 
-const URI_RE = /^([A-Za-z][A-Za-z0-9+.-]*):\/\/([^]*)$/;
-
-/** `scheme:` written with fewer than the two slashes a design uri needs. */
-const SCHEME_SHORT_SLASH = /^[A-Za-z][A-Za-z0-9+.-]*:(?!\/\/)/;
+/**
+ * A compact uri reference: `scheme:path`, optionally `scheme:path` for the
+ * superseded form. The scheme must come before any slash, so a filesystem
+ * path containing a colon (`design/a:b.md`) cannot be mistaken for one.
+ *
+ * The two-slash form is kept only for migration. Under RFC 3986 it means
+ * `authority = first segment`, so `issue:design/notes.md` addresses host
+ * `design` with path `/notes.md` — never what loom meant. The curie form has
+ * no authority and says what it looks like.
+ */
+const URI_RE = /^([A-Za-z][A-Za-z0-9+.-]*):(\/\/)?([^]*)$/;
 
 /** A trailing `.ext`, which makes a slash-free string read as a filename. */
 const FILE_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
@@ -47,22 +60,14 @@ function looksLikePath(raw: string): boolean {
 function reject(raw: string): never {
   // `://` present means the caller was aiming at a uri and missed, so the
   // problem is the scheme, not the shape.
-  if (!raw.includes("://") && SCHEME_SHORT_SLASH.test(raw)) {
-    throw new LoomError(error(
-      "uri/malformed",
-      `a design uri needs two slashes after the scheme: ${JSON.stringify(raw)}`,
-      { uri: raw, fix: `write it as <class>://<id>, e.g. ${raw.replace(/:\/?/, "://")}` },
-    ));
-  }
-
   if (!raw.includes("://") && looksLikePath(raw)) {
     throw new LoomError(error(
       "uri/bare-path",
       `${JSON.stringify(raw)} is a filesystem path, not a design uri`,
       {
         uri: raw,
-        fix: "address the document by class and id, as <class>://<id> "
-          + "(`loom ls <class>://` lists what exists)",
+        fix: "address the document by class and id, as <class>:<id> "
+          + "(`loom ls <class>:` lists what exists)",
       },
     ));
   }
@@ -75,7 +80,8 @@ export function parseUri(raw: string): ParsedUri {
   if (!match) reject(raw.trim());
 
   const scheme = match[1]!.toLowerCase();
-  let rest = match[2]!;
+  const legacy = match[2] !== undefined;
+  let rest = match[3]!;
   let anchor: string | undefined;
 
   const hash = rest.indexOf("#");
@@ -91,14 +97,18 @@ export function parseUri(raw: string): ParsedUri {
     );
   }
 
-  return anchor === undefined
-    ? { scheme, path: normalised }
-    : { scheme, path: normalised, anchor };
+  return {
+    scheme,
+    path: normalised,
+    ...(anchor === undefined ? {} : { anchor }),
+    ...(legacy ? { legacy: true as const } : {}),
+  };
 }
 
+/** Always the curie form, so round-tripping a legacy uri migrates it. */
 export function formatUri(uri: ParsedUri): string {
   const anchor = uri.anchor === undefined ? "" : `#${uri.anchor}`;
-  return `${uri.scheme}://${uri.path}${anchor}`;
+  return `${uri.scheme}:${uri.path}${anchor}`;
 }
 
 /**
@@ -124,7 +134,7 @@ export function fsExists(cfg: Config): ExistsCheck {
 
 /**
  * The most compact URI for a repo-relative path (plan §2.4): the longest
- * matching class root wins, otherwise `repo://`.
+ * matching class root wins, otherwise `repo:`.
  */
 export function canonicalise(repoRelativePath: string, roots: ClassRoots, anchor?: string): ParsedUri {
   const p = normalisePath(repoRelativePath);

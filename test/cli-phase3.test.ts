@@ -38,21 +38,21 @@ function snapshot(root: string, dir = "design/issue"): Record<string, string> {
 
 test("parseChangeset reads the documented op shapes", async () => {
   const { ops, diagnostics } = parseChangeset(`ops:
-  - { op: create, uri: "issue://new.md", attrs: { title: "N", status: open } }
-  - { op: set, uri: "issue://new.md", attrs: { status: closed } }
-  - { op: link, from: "issue://a.md", rel: blocks, to: "issue://b.md" }
-  - { op: unlink, from: "issue://a.md", rel: blocks, to: "issue://b.md" }
-  - { op: rename, from: "issue://a.md", to: "issue://archive/a.md" }
-  - { op: delete, uri: "issue://a.md" }
+  - { op: create, uri: "issue:new.md", attrs: { title: "N", status: open } }
+  - { op: set, uri: "issue:new.md", attrs: { status: closed } }
+  - { op: link, from: "issue:a.md", rel: blocks, to: "issue:b.md" }
+  - { op: unlink, from: "issue:a.md", rel: blocks, to: "issue:b.md" }
+  - { op: rename, from: "issue:a.md", to: "issue:archive/a.md" }
+  - { op: delete, uri: "issue:a.md" }
 `);
   assert.deepEqual(diagnostics, []);
   assert.deepEqual(ops.map((o) => o.op), ["create", "set", "link", "unlink", "rename", "delete"]);
 });
 
 test("parseChangeset rejects an unknown op and missing fields", async () => {
-  assert.ok(parseChangeset("ops:\n  - { op: explode, uri: 'issue://a.md' }\n")
+  assert.ok(parseChangeset("ops:\n  - { op: explode, uri: 'issue:a.md' }\n")
     .diagnostics.some((d) => d.code === "changeset/unknown-op"));
-  assert.ok(parseChangeset("ops:\n  - { op: link, from: 'issue://a.md' }\n")
+  assert.ok(parseChangeset("ops:\n  - { op: link, from: 'issue:a.md' }\n")
     .diagnostics.some((d) => d.code === "changeset/missing-field"));
 });
 
@@ -60,8 +60,8 @@ test("create writes a new instance with a generated link block", async () => {
   const root = repo({ "design/issue/b.md": OPEN("Bee") });
   const file = changeset(root, `ops:
   - op: create
-    uri: "issue://a.md"
-    attrs: { title: "A", status: open, blocks: ["issue://b.md"] }
+    uri: "issue:a.md"
+    attrs: { title: "A", status: open, blocks: ["issue:b.md"] }
 `);
   const r = await run(["--cwd", root, "apply", file]);
   assert.equal(r.code, 0);
@@ -76,7 +76,7 @@ test("set changes a value and leaves comments alone", async () => {
     "design/issue/a.md": instance("class: issue\n# keep me\ntitle: A\nstatus: open"),
   });
   const file = changeset(root, `ops:
-  - { op: set, uri: "issue://a.md", attrs: { status: closed } }
+  - { op: set, uri: "issue:a.md", attrs: { status: closed } }
 `);
   assert.equal((await run(["--cwd", root, "apply", file])).code, 0);
 
@@ -91,7 +91,7 @@ test("link adds an edge and updates the block at both ends", async () => {
     "design/issue/b.md": withLinks("class: issue\ntitle: Bee\nstatus: open", "- nothing yet"),
   });
   const file = changeset(root, `ops:
-  - { op: link, from: "issue://a.md", rel: blocks, to: "issue://b.md" }
+  - { op: link, from: "issue:a.md", rel: blocks, to: "issue:b.md" }
 `);
   assert.equal((await run(["--cwd", root, "apply", file])).code, 0);
 
@@ -107,8 +107,8 @@ test("applying the same link changeset twice is a no-op", async () => {
     "design/issue/b.md": OPEN("B"),
   });
   const file = changeset(root, `ops:
-  - { op: set, uri: "issue://a.md", attrs: { status: closed } }
-  - { op: link, from: "issue://a.md", rel: blocks, to: "issue://b.md" }
+  - { op: set, uri: "issue:a.md", attrs: { status: closed } }
+  - { op: link, from: "issue:a.md", rel: blocks, to: "issue:b.md" }
 `);
   await run(["--cwd", root, "apply", file]);
   const once = snapshot(root);
@@ -118,19 +118,19 @@ test("applying the same link changeset twice is a no-op", async () => {
 
 test("unlink removes the edge", async () => {
   const root = repo({
-    "design/issue/a.md": OPEN("A", "blocks: [issue://b.md]"),
+    "design/issue/a.md": OPEN("A", "blocks: [issue:b.md]"),
     "design/issue/b.md": OPEN("B"),
   });
   const file = changeset(root, `ops:
-  - { op: unlink, from: "issue://a.md", rel: blocks, to: "issue://b.md" }
+  - { op: unlink, from: "issue:a.md", rel: blocks, to: "issue:b.md" }
 `);
   assert.equal((await run(["--cwd", root, "apply", file])).code, 0);
-  assert.doesNotMatch(readFileSync(path.join(root, "design/issue/a.md"), "utf8"), /issue:\/\/b\.md/);
+  assert.doesNotMatch(readFileSync(path.join(root, "design/issue/a.md"), "utf8"), /issue:b\.md/);
 });
 
 test("delete removes the file", async () => {
   const root = repo({ "design/issue/a.md": OPEN("A") });
-  const file = changeset(root, `ops:\n  - { op: delete, uri: "issue://a.md" }\n`);
+  const file = changeset(root, `ops:\n  - { op: delete, uri: "issue:a.md" }\n`);
   assert.equal((await run(["--cwd", root, "apply", file])).code, 0);
   assert.equal(existsSync(path.join(root, "design/issue/a.md")), false);
 });
@@ -142,8 +142,8 @@ test("a changeset that fails validation writes nothing at all", async () => {
   });
   const before = snapshot(root);
   const file = changeset(root, `ops:
-  - { op: set, uri: "issue://b.md", attrs: { status: closed } }
-  - { op: set, uri: "issue://a.md", attrs: { status: nonsense } }
+  - { op: set, uri: "issue:b.md", attrs: { status: closed } }
+  - { op: set, uri: "issue:a.md", attrs: { status: nonsense } }
 `);
   const r = await run(["--cwd", root, "apply", file]);
   assert.equal(r.code, 1);
@@ -154,7 +154,7 @@ test("--dry-run writes nothing and shows the diff", async () => {
   const root = repo({ "design/issue/a.md": OPEN("A") });
   const before = snapshot(root);
   const file = changeset(root, `ops:
-  - { op: set, uri: "issue://a.md", attrs: { status: closed } }
+  - { op: set, uri: "issue:a.md", attrs: { status: closed } }
 `);
   const r = await run(["--cwd", root, "apply", file, "--dry-run"]);
   assert.equal(r.code, 0);
@@ -169,17 +169,17 @@ test("--dry-run writes nothing and shows the diff", async () => {
 test("rename moves the file and rewrites every inbound uri", async () => {
   const root = repo({
     "design/issue/a.md": OPEN("A"),
-    "design/issue/b.md": OPEN("B", "blocks: [issue://a.md]"),
-    "design/issue/c.md": OPEN("C", "blocks: [issue://a.md]"),
+    "design/issue/b.md": OPEN("B", "blocks: [issue:a.md]"),
+    "design/issue/c.md": OPEN("C", "blocks: [issue:a.md]"),
     "design/issue/d.md": OPEN("D"),
   });
-  const r = await run(["--cwd", root, "rename", "issue://a.md", "issue://archive/a.md"]);
+  const r = await run(["--cwd", root, "rename", "issue:a.md", "issue:archive/a.md"]);
   assert.equal(r.code, 0);
 
   assert.equal(existsSync(path.join(root, "design/issue/a.md")), false);
   assert.ok(existsSync(path.join(root, "design/issue/archive/a.md")));
   for (const name of ["b", "c"]) {
-    assert.match(readFileSync(path.join(root, `design/issue/${name}.md`), "utf8"), /issue:\/\/archive\/a\.md/);
+    assert.match(readFileSync(path.join(root, `design/issue/${name}.md`), "utf8"), /issue:archive\/a\.md/);
   }
   const out = parse(r.out) as Record<string, any>;
   assert.deepEqual(out.written.sort(), [
@@ -191,23 +191,23 @@ test("rename moves the file and rewrites every inbound uri", async () => {
 
 test("rename updates the moved instance's own id", async () => {
   const root = repo({ "design/issue/a.md": instance("class: issue\nid: a.md\ntitle: A\nstatus: open") });
-  await run(["--cwd", root, "rename", "issue://a.md", "issue://b.md"]);
+  await run(["--cwd", root, "rename", "issue:a.md", "issue:b.md"]);
   assert.match(readFileSync(path.join(root, "design/issue/b.md"), "utf8"), /id: b\.md/);
 });
 
 test("the single-op sugar commands build the same changeset", async () => {
   const root = repo({ "design/issue/a.md": OPEN("A"), "design/issue/b.md": OPEN("B") });
-  assert.equal((await run(["--cwd", root, "link", "issue://a.md", "blocks", "issue://b.md"])).code, 0);
-  assert.match(readFileSync(path.join(root, "design/issue/a.md"), "utf8"), /issue:\/\/b\.md/);
+  assert.equal((await run(["--cwd", root, "link", "issue:a.md", "blocks", "issue:b.md"])).code, 0);
+  assert.match(readFileSync(path.join(root, "design/issue/a.md"), "utf8"), /issue:b\.md/);
 
-  assert.equal((await run(["--cwd", root, "set", "issue://a.md", "status=closed"])).code, 0);
+  assert.equal((await run(["--cwd", root, "set", "issue:a.md", "status=closed"])).code, 0);
   assert.match(readFileSync(path.join(root, "design/issue/a.md"), "utf8"), /status: closed/);
 });
 
 test("create refuses to overwrite an existing instance", async () => {
   const root = repo({ "design/issue/a.md": OPEN("A") });
   const file = changeset(root, `ops:
-  - { op: create, uri: "issue://a.md", attrs: { title: "X", status: open } }
+  - { op: create, uri: "issue:a.md", attrs: { title: "X", status: open } }
 `);
   const r = await run(["--cwd", root, "apply", file]);
   assert.equal(r.code, 1);

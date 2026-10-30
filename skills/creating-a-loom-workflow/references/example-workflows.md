@@ -76,8 +76,8 @@ classDiagram
 
 ### Key Model Decisions
 - `work` is an abstract parent defining shared fields (`title`, `status`, `created`). Subclasses inherit them automatically.
-- `src` is Loom's built-in terminal anchor family for source code. Subclassing `src <|-- test` creates a specialized terminal anchor scheme `test://` pointing at `/test`.
-- Code and tests are referenced down to symbol level via anchors: `src://auth.ts#login`, `test://auth.test.ts#testLogin`.
+- `src` is Loom's built-in terminal anchor family for source code. Subclassing `src <|-- test` creates a specialized terminal anchor scheme `test:` pointing at `/test`.
+- Code and tests are referenced down to symbol level via anchors: `src:auth.ts#login`, `test:auth.test.ts#testLogin`.
 - `story` points to `adr` via `constrained-by`, giving architectural context to feature implementation.
 
 ## Companion Skill (`skills/feature-workflow/SKILL.md`)
@@ -103,7 +103,7 @@ loom query "SELECT uri, title, points FROM story WHERE status = 'backlog' ORDER 
 To take on a story, update its status:
 
 ```bash
-loom mutate story://my-feature.md set status in_progress
+loom mutate story:my-feature.md set status in_progress
 ```
 
 ## 2. Record Architecture Decisions
@@ -111,9 +111,9 @@ loom mutate story://my-feature.md set status in_progress
 When a story requires significant design or pattern changes, record an ADR:
 
 ```bash
-loom create adr://use-redis-cache.md title="Use Redis Cache" status=accepted decided=$(date +%Y-%m-%d)
-loom body set adr://use-redis-cache.md "## Context\n\nHigh load on DB.\n\n## Decision\n\nCache user sessions in Redis."
-loom mutate story://my-feature.md add constrained-by adr://use-redis-cache.md
+loom create adr:use-redis-cache.md title="Use Redis Cache" status=accepted decided=$(date +%Y-%m-%d)
+loom body set adr:use-redis-cache.md "## Context\n\nHigh load on DB.\n\n## Decision\n\nCache user sessions in Redis."
+loom mutate story:my-feature.md add constrained-by adr:use-redis-cache.md
 ```
 
 ## 3. Implement and Link Code & Tests
@@ -121,8 +121,8 @@ loom mutate story://my-feature.md add constrained-by adr://use-redis-cache.md
 When implementing, link the story to the relevant source symbols and test cases:
 
 ```bash
-loom mutate story://my-feature.md add implemented-by src://cache/redis.ts#SessionCache
-loom mutate story://my-feature.md add verified-by test://cache/redis.test.ts#testSessionExpiry
+loom mutate story:my-feature.md add implemented-by src:cache/redis.ts#SessionCache
+loom mutate story:my-feature.md add verified-by test:cache/redis.test.ts#testSessionExpiry
 ```
 
 Loom automatically checks that `#SessionCache` and `#testSessionExpiry` exist in the AST of those files.
@@ -144,7 +144,7 @@ loom validate
 Update status to done and regenerate the index board:
 
 ```bash
-loom mutate story://my-feature.md set status done
+loom mutate story:my-feature.md set status done
 loom index
 ```
 ```
@@ -276,8 +276,8 @@ Use this skill when capturing thoughts, clarifying inbox items, choosing what to
 Capture any idea, task, or commitment immediately without friction:
 
 ```bash
-loom create inbox://boiler-service.md title="Boiler service notice received" captured=$(date +%Y-%m-%d)
-loom body set inbox://boiler-service.md "Letter from British Gas arrived today with annual service reminder."
+loom create inbox:boiler-service.md title="Boiler service notice received" captured=$(date +%Y-%m-%d)
+loom body set inbox:boiler-service.md "Letter from British Gas arrived today with annual service reminder."
 ```
 
 ## 2. Clarify & Process the Inbox
@@ -288,14 +288,14 @@ Process inbox items into actionable next actions or multi-step projects. Use cha
 # clarify-boiler.yaml
 ops:
   - op: create
-    uri: action://call-boiler-service.md
+    uri: action:call-boiler-service.md
     attrs:
       title: "Call British Gas to book annual service"
       status: next
       context: phone
       minutes: 10
   - op: delete
-    uri: inbox://boiler-service.md
+    uri: inbox:boiler-service.md
 ```
 
 ```bash
@@ -305,8 +305,8 @@ loom apply clarify-boiler.yaml
 If it represents a multi-step outcome, create a `project` and link the initial next action to it:
 
 ```bash
-loom create project://fix-boiler.md title="Service and certify boiler" outcome="Boiler serviced and signed off" status=active supports=area://home.md
-loom mutate action://call-boiler-service.md set advances project://fix-boiler.md
+loom create project:fix-boiler.md title="Service and certify boiler" outcome="Boiler serviced and signed off" status=active supports=area:home.md
+loom mutate action:call-boiler-service.md set advances project:fix-boiler.md
 ```
 
 ## 3. Working by Context
@@ -324,7 +324,7 @@ loom query "SELECT waiting_on, title FROM action WHERE status = 'waiting' ORDER 
 Mark an action done:
 
 ```bash
-loom mutate action://call-boiler-service.md set status done
+loom mutate action:call-boiler-service.md set status done
 ```
 
 ## 4. Weekly Review Routine
@@ -339,7 +339,7 @@ loom query "SELECT p.uri, p.title FROM project p WHERE p.status = 'active' AND N
 loom query "SELECT uri, title, due FROM action WHERE status = 'next' AND due < CURRENT_DATE"
 
 # 3. Record the completed review:
-loom create review://review-$(date +%Y-W%W).md title="Weekly Review $(date +%Y-W%W)" performed=$(date +%Y-%m-%d)
+loom create review:review-$(date +%Y-W%W).md title="Weekly Review $(date +%Y-W%W)" performed=$(date +%Y-%m-%d)
 loom index
 ```
 ```

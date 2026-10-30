@@ -8,7 +8,7 @@ const { schema } = parseModel(MODEL);
 
 function codes(data: Record<string, unknown>, className = "issue"): string[] {
   return validateInstance(schema, {
-    uri: `${className}://a.md`,
+    uri: `${className}:a.md`,
     className,
     data,
   }).map((d) => d.code);
@@ -58,11 +58,11 @@ test("a scalar where a list is declared is reported", () => {
 });
 
 test("relations accept a list of uris", () => {
-  assert.deepEqual(codes({ ...VALID, blocks: ["issue://b.md"] }), []);
+  assert.deepEqual(codes({ ...VALID, blocks: ["issue:b.md"] }), []);
 });
 
 test("a relation uri pointing at the wrong class is reported", () => {
-  assert.ok(codes({ ...VALID, blocks: ["src://a.R"] }).includes("instance/wrong-target-class"));
+  assert.ok(codes({ ...VALID, blocks: ["src:a.R"] }).includes("instance/wrong-target-class"));
 });
 
 test("a subclass is accepted where the parent class is the declared target", () => {
@@ -71,9 +71,9 @@ test("a subclass is accepted where the parent class is the declared target", () 
     issue <|-- bug
 `).schema;
   const found = validateInstance(sub, {
-    uri: "issue://a.md",
+    uri: "issue:a.md",
     className: "issue",
-    data: { ...VALID, blocks: ["bug://b.md"] },
+    data: { ...VALID, blocks: ["bug:b.md"] },
   });
   assert.deepEqual(found.map((d) => d.code), []);
 });
@@ -84,7 +84,7 @@ test("a malformed relation uri is reported", () => {
 
 test("outbound cardinality is enforced", () => {
   // implemented-by is "0..*" src per issue, so any count is fine
-  assert.deepEqual(codes({ ...VALID, "implemented-by": ["src://a.R", "src://b.R"] }), []);
+  assert.deepEqual(codes({ ...VALID, "implemented-by": ["src:a.R", "src:b.R"] }), []);
 
   const limited = parseModel(`classDiagram
     class a {
@@ -96,9 +96,9 @@ test("outbound cardinality is enforced", () => {
     a "0..*" --> "1" b : one
 `).schema;
   const tooMany = validateInstance(limited, {
-    uri: "a://x.md",
+    uri: "a:x.md",
     className: "a",
-    data: { title: "t", one: ["b://p.md", "b://q.md"] },
+    data: { title: "t", one: ["b:p.md", "b:q.md"] },
   });
   assert.ok(tooMany.some((d) => d.code === "instance/cardinality"));
 });

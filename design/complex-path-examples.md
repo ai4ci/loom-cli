@@ -90,14 +90,14 @@ In this example:
 For this example:
 
 ```
-issue://    -> $REPO_ROOT/docs/issue
-adr://      -> $REPO_ROOT/architecture/design-records
-src://      -> $REPO_ROOT/src
-main://     -> $REPO_ROOT/src/main
-test://     -> $REPO_ROOT/src/test
-resource:// -> $REPO_ROOT/data
-fixture://  -> $REPO_ROOT/data/test-fixtures
-config://   -> $REPO_ROOT/input
+issue:    -> $REPO_ROOT/docs/issue
+adr:      -> $REPO_ROOT/architecture/design-records
+src:      -> $REPO_ROOT/src
+main:     -> $REPO_ROOT/src/main
+test:     -> $REPO_ROOT/src/test
+resource: -> $REPO_ROOT/data
+fixture:  -> $REPO_ROOT/data/test-fixtures
+config:   -> $REPO_ROOT/input
 ```
 
 ---
@@ -129,4 +129,4 @@ Every class in the model resolves to a single unique path from `$REPO_ROOT`:
    - Loom emits a warning during validation if a resolved class directory does not exist on disk. The warning fires for **every** missing root, not only those outside a UML parent, so that typos in class names and in `@path` arguments are surfaced consistently for both human and agent consumers.
 6. **Path-to-URI canonicalisation**:
    - Paths resolve to the most specific matching class URI scheme (longest matching root prefix wins).
-   - If a path matches no class root, it falls back to `repo://relative/path`.
+   - If a path matches no class root, it falls back to `repo:relative/path`.

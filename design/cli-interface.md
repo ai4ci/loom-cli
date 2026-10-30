@@ -18,8 +18,8 @@ Global options must appear **before** the command name, because they are
 declared on the root program:
 
 ```
-loom --json resolve issue://a.md      # correct
-loom resolve issue://a.md --json      # not recognised as global
+loom --json resolve issue:a.md      # correct
+loom resolve issue:a.md --json      # not recognised as global
 ```
 
 | Global option | Default | Effect |
@@ -41,7 +41,7 @@ derived from model inheritance and `%% @path` directives in the model. See
 
 ### `<uri>` arguments are uris, never paths
 
-Every argument spelled `<uri>` takes a design uri — `issue://a.md`, not
+Every argument spelled `<uri>` takes a design uri — `issue:a.md`, not
 `design/issue/a.md`. The path is an implementation detail of where the class
 root happens to point; the uri is the address.
 
@@ -51,12 +51,12 @@ silently resolved, and the error names the uri to use instead:
 ```
 $ loom resolve design/issue/a.md
 uri/bare-path: "design/issue/a.md" is a filesystem path, not a design uri
-  fix: use issue://a.md instead
+  fix: use issue:a.md instead
 ```
 
 The suggestion is computed from the class roots, so it handles absolute paths
 inside the repository, `#anchor` suffixes, and paths under no class root (which
-become `repo://`). Where no model can be loaded the generic hint is given
+become `repo:`). Where no model can be loaded the generic hint is given
 instead. The same check runs on changeset `ops`, and the same explanation is
 reused by `validate` when a bare path is written into frontmatter.
 
@@ -86,7 +86,7 @@ Every command emits exactly one of these, and an agent has to handle all three.
 **Data** — a plain result object on stdout, exit 0.
 
 ```yaml
-uri: issue://a.md
+uri: issue:a.md
 scheme: issue
 path: design/issue/a.md
 ```
@@ -105,7 +105,7 @@ diagnostics:
   - severity: error
     code: instance/invalid-enum-value
     message: '"status" must be one of open, closed, got "nonsense"'
-    uri: issue://bad.md
+    uri: issue:bad.md
 ```
 
 **Error** — stdout is empty, stderr carries `code: message`, exit 1. Thrown for
@@ -119,7 +119,7 @@ instance/not-found: no file at design/issue/ghost.md
 
 ```
 uri/bare-path: "design/issue/a.md" is a filesystem path, not a design uri
-  fix: use issue://a.md instead
+  fix: use issue:a.md instead
 ```
 
 ### Diagnostic record
@@ -146,7 +146,7 @@ writes.
 
 ### `resolve <uri>`
 
-Resolve a design uri to a repo-relative path, and a `src://` anchor to a line
+Resolve a design uri to a repo-relative path, and a `src:` anchor to a line
 number.
 
 | | |
@@ -155,7 +155,7 @@ number.
 | Exit | 0 always, including for a path that does not exist; 1 only for a malformed uri |
 
 ```yaml
-uri: src://app.ts#runApp      # canonical, most-compact form
+uri: src:app.ts#runApp      # canonical, most-compact form
 scheme: src
 path: src/app.ts              # repo-relative
 absolutePath: /abs/src/app.ts
@@ -179,7 +179,7 @@ config should disambiguate.
 Read one instance.
 
 ```yaml
-uri: issue://a.md
+uri: issue:a.md
 path: design/issue/a.md
 frontmatter:            # parsed yaml header, or null
   class: issue
@@ -197,9 +197,9 @@ Read the editable prose: everything in the markdown that is neither the yaml
 header nor the protected link block.
 
 ```yaml
-uri: issue://a.md
+uri: issue:a.md
 path: design/issue/a.md
-body: "Alpha.\n\nSee [D1](decision://d1.md).\n"
+body: "Alpha.\n\nSee [D1](decision:d1.md).\n"
 ```
 
 `show` returns the markdown verbatim, including the link block and the relative
@@ -216,10 +216,10 @@ is a deeper level than the path, so `ls` is directory descent and needs no mode
 switch.
 
 ```
-loom ls issue://                  # instances of a class
-loom ls src://                    # directories and files
-loom ls src://pkg/app.ts          # linkable anchors in the file
-loom ls src://pkg/app.ts#Service  # anchors nested in that anchor
+loom ls issue:                  # instances of a class
+loom ls src:                    # directories and files
+loom ls src:pkg/app.ts          # linkable anchors in the file
+loom ls src:pkg/app.ts#Service  # anchors nested in that anchor
 ```
 
 | Option | Default | Effect |
@@ -229,9 +229,9 @@ loom ls src://pkg/app.ts#Service  # anchors nested in that anchor
 | `--linked` / `--unlinked` | both | Filter by whether a design document already points there. |
 
 ```yaml
-parent: src://pkg/app.ts
+parent: src:pkg/app.ts
 entries:
-  - uri: src://pkg/app.ts#Service
+  - uri: src:pkg/app.ts#Service
     kind: Class
     line: 6
     signature: class Service
@@ -252,12 +252,12 @@ The address of a line: the reverse of `resolve`.
 
 ```yaml
 anchor:
-  uri: src://app.ts#Service.run     # innermost linkable ancestor
+  uri: src:app.ts#Service.run     # innermost linkable ancestor
   kind: Method
   span: { startLine: 40, endLine: 55 }
 ancestors:                           # coarser choices, outermost last
-  - { uri: "src://app.ts#Service", kind: Class }
-  - { uri: "src://app.ts", kind: File }
+  - { uri: "src:app.ts#Service", kind: Class }
+  - { uri: "src:app.ts", kind: File }
 ```
 
 A line in an import block or a top-level statement has no linkable ancestor:
@@ -341,13 +341,13 @@ implementation-plan §2.3.
 
 ```yaml
 ops:
-  - { op: create, uri: "issue://new.md", attrs: { title: "N", status: open } }
-  - { op: set,    uri: "issue://new.md", attrs: { status: closed } }
-  - { op: link,   from: "issue://a.md", rel: blocks, to: "issue://b.md" }
-  - { op: unlink, from: "issue://a.md", rel: blocks, to: "issue://b.md" }
-  - { op: rename, from: "issue://a.md", to: "issue://archive/a.md" }
-  - { op: delete, uri: "issue://a.md" }
-  - { op: body,   uri: "issue://a.md", mode: append, text: "More prose.\n" }
+  - { op: create, uri: "issue:new.md", attrs: { title: "N", status: open } }
+  - { op: set,    uri: "issue:new.md", attrs: { status: closed } }
+  - { op: link,   from: "issue:a.md", rel: blocks, to: "issue:b.md" }
+  - { op: unlink, from: "issue:a.md", rel: blocks, to: "issue:b.md" }
+  - { op: rename, from: "issue:a.md", to: "issue:archive/a.md" }
+  - { op: delete, uri: "issue:a.md" }
+  - { op: body,   uri: "issue:a.md", mode: append, text: "More prose.\n" }
 ```
 
 `body` takes `mode: set | append | patch`.
@@ -460,15 +460,15 @@ literal): `status=open,closed` becomes `IN ('open', 'closed')`.
 `render` automatically rebuilds the DuckDB database if it does not already exist.
 
 `link` and `unlink` **dispatch on the subject's scheme**. A design instance
-writes the relation into its yaml; a `src://` subject writes a comment into the
+writes the relation into its yaml; a `src:` subject writes a comment into the
 source file. The shape is subject–relation–object either way, and the model
 already constrains which relations are legal in which direction, so there is no
 separate verb:
 
 ```
-loom link issue://a.md blocks issue://b.md          # writes yaml
-loom link src://app.ts#Service.run implements issue://a.md   # writes a comment
-loom link src://app.ts --line 42 implements issue://a.md     # resolves the line first
+loom link issue:a.md blocks issue:b.md          # writes yaml
+loom link src:app.ts#Service.run implements issue:a.md   # writes a comment
+loom link src:app.ts --line 42 implements issue:a.md     # resolves the line first
 ```
 
 The source-writing half goes through this same changeset pipeline, so it
@@ -550,7 +550,7 @@ Run arbitrary SQL against the derived database.
 
 ```yaml
 rows:
-  - { uri: "issue://a.md", title: Aye }
+  - { uri: "issue:a.md", title: Aye }
 ```
 
 A missing database is rebuilt automatically rather than failing: the database
@@ -563,9 +563,9 @@ Which design documents reference a source symbol. The reverse of following an
 `implemented-by` link.
 
 ```yaml
-target: src://app.ts#runApp
+target: src:app.ts#runApp
 references:
-  - { from: "issue://one.md", relation: implemented-by }
+  - { from: "issue:one.md", relation: implemented-by }
 ```
 
 ### `prefetch`
@@ -599,8 +599,8 @@ and its nearest neighbours returned — so a document ranks itself first.
 query: text               # or the canonical uri, when given one
 queryText: auth           # present only in text mode
 results:
-  - { uri: "issue://a.md", score: 0.577 }
-  - { uri: "issue://b.md", score: 0 }
+  - { uri: "issue:a.md", score: 0.577 }
+  - { uri: "issue:b.md", score: 0 }
 ```
 
 Only the unprotected markdown body is embedded; the generated link block is

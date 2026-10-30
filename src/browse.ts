@@ -60,14 +60,14 @@ function listInstances(cfg: Config, graph: Graph, className: string): ListEntry[
 function listDirectory(cfg: Config, scheme: string, root: string, relative: string): ListEntry[] {
   const dir = absolute(cfg, relative === "" ? root : `${root}/${relative}`);
   if (!existsSync(dir)) {
-    throw new LoomError(error("ls/not-found", `nothing at ${scheme}://${relative}`));
+    throw new LoomError(error("ls/not-found", `nothing at ${scheme}:${relative}`));
   }
 
   return readdirSync(dir, { withFileTypes: true })
     .filter((e) => !e.name.startsWith("."))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((e) => ({
-      uri: `${scheme}://${relative === "" ? "" : `${relative}/`}${e.name}`,
+      uri: `${scheme}:${relative === "" ? "" : `${relative}/`}${e.name}`,
       kind: e.isDirectory() ? "Directory" : "File",
     }));
 }
@@ -99,7 +99,7 @@ function listAnchors(
   return descend(anchors, prefix, options.depth ?? 1)
     .filter((a) => options.kinds === undefined || options.kinds.includes(a.kind))
     .map((a) => {
-      const anchorUri = `${uri.scheme}://${uri.path}#${a.fullName}`;
+      const anchorUri = `${uri.scheme}:${uri.path}#${a.fullName}`;
       const entry: ListEntry = {
         uri: anchorUri,
         kind: a.kind,
@@ -115,12 +115,13 @@ export function listUri(cfg: Config, graph: Graph, raw: string, options: ListOpt
   parent: string;
   entries: ListEntry[];
 } {
-  // A bare `scheme://` has no path, which parseUri rejects, so handle it here.
-  const bare = /^([A-Za-z][A-Za-z0-9+.-]*):\/\/$/.exec(raw.trim());
+  // A bare `scheme:` has no path, which parseUri rejects, so handle it here.
+  // The legacy two-slash form is accepted too.
+  const bare = /^([A-Za-z][A-Za-z0-9+.-]*):(?:\/\/)?$/.exec(raw.trim());
   const scheme = bare ? bare[1]!.toLowerCase() : parseUri(raw).scheme;
 
   if (RESERVED_SCHEMES.has(scheme)) {
-    throw new LoomError(error("ls/not-a-class", `${scheme}:// is not a class or source root`));
+    throw new LoomError(error("ls/not-a-class", `${scheme}: is not a class or source root`));
   }
 
   const isSource = !isInstantiable(graph.schema, scheme);

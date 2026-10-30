@@ -37,7 +37,7 @@ function committed(files: Record<string, string>): string {
 
 test("a renamed function is inferred from HEAD and offered as a fix", async () => {
   const root = committed({
-    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#runApp]"),
+    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src:app.ts#runApp]"),
     "src/app.ts": "export function runApp() {\n  return compute(1, 2, 3);\n}\n",
   });
   // Rename the function, keeping the body identical.
@@ -52,7 +52,7 @@ test("a renamed function is inferred from HEAD and offered as a fix", async () =
 
 test("--fix rewrites an inferred rename", async () => {
   const root = committed({
-    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#runApp]"),
+    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src:app.ts#runApp]"),
     "src/app.ts": "export function runApp() {\n  return compute(1, 2, 3);\n}\n",
   });
   writeFileSync(path.join(root, "src/app.ts"), "export function launchApp() {\n  return compute(1, 2, 3);\n}\n");
@@ -61,13 +61,13 @@ test("--fix rewrites an inferred rename", async () => {
   assert.equal(fixed.code, 0, "the repaired repository validates clean");
   assert.match(
     readFileSync(path.join(root, "design/issue/one.md"), "utf8"),
-    /src:\/\/app\.ts#launchApp/,
+    /src:app\.ts#launchApp/,
   );
 });
 
 test("a genuinely deleted function is not reported as a rename", async () => {
   const root = committed({
-    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#gone]"),
+    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src:app.ts#gone]"),
     "src/app.ts": "export function gone() {\n  return 1;\n}\nexport function other() {\n  return 999;\n}\n",
   });
   // Remove it entirely; `other` is unrelated and has a different body.
@@ -82,7 +82,7 @@ test("a genuinely deleted function is not reported as a rename", async () => {
 
 test("a rename with a changed body is not inferred", async () => {
   const root = committed({
-    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#runApp]"),
+    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src:app.ts#runApp]"),
     "src/app.ts": "export function runApp() {\n  return compute(1, 2, 3);\n}\n",
   });
   writeFileSync(
@@ -98,7 +98,7 @@ test("drift detection is skipped outside a git repository", async () => {
   const root = makeRepo({
     ".loom.yaml": CONFIG,
     "design/document-model.mmd": MODEL,
-    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src://app.ts#gone]"),
+    "design/issue/one.md": instance("class: issue\ntitle: One\nimplemented-by: [src:app.ts#gone]"),
     "src/app.ts": "export function other() {}\n",
   });
   // makeRepo creates a .git directory but no commits, so HEAD does not resolve.

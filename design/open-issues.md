@@ -7,7 +7,7 @@
 **File:** `src/render.ts` — function `renderView()`
 
 When a `%% @view` SQL query returns a column containing URIs (e.g.
-`issue://my-task.md`), the cell value is stringified as plain text.
+`issue:my-task.md`), the cell value is stringified as plain text.
 It should be rendered as a relative markdown link — `[title](relative/path.md)` —
 consistent with how `loom index` renders links in protected link blocks.
 
@@ -74,7 +74,17 @@ from commits.
 
 ## URI scheme not RDF compliant (0.8.0)
 
-the current scheme where an issue is referenced as `issue://my-issue.md` and the
+**Implemented in 0.8.2 (the uris).** The curie form `issue:my-issue.md` is now
+the only written form: `parseUri` accepts `scheme:path` with `#fragment`, and
+the superseded `scheme://path` still parses but is flagged `legacy` and
+`formatUri` never emits it, so anything that round-trips a uri migrates it.
+The two-slash form was dropped because under RFC 3986 it means
+`authority = first segment` (`issue://design/notes.md` addresses host `design`),
+which was never what loom meant. The curie has no authority, so the whole path
+is the path. Remaining from this issue: `%% @prefix` external prefixes, and the
+`.ttl` export (see RDF export, below).
+
+the current scheme where an issue is referenced as `issue:my-issue.md` and the
 path is declared in a comment in the mermaid like this:
 
 ```
@@ -98,7 +108,7 @@ of source code to the prefix of the enclosing loom UML class:
 
 ```
 function my_function() {
-    // resolves issue://my-issue.md 
+    // resolves issue:my-issue.md 
 }
 ```
 

@@ -174,9 +174,9 @@ test("render: named view renders its content into the file", async () => {
   assert(content.includes("| title"));
   assert(content.includes("| status"));
   // Should contain the open issues (URI derived from filename)
-  assert(content.includes("issue://open.md"));
-  assert(content.includes("issue://open2.md"));
-  assert(!content.includes("issue://closed.md")); // closed is filtered by WHERE
+  assert(content.includes("issue:open.md"));
+  assert(content.includes("issue:open2.md"));
+  assert(!content.includes("issue:closed.md")); // closed is filtered by WHERE
 });
 
 test("render: inline SQL renders into the file", async () => {
@@ -188,7 +188,7 @@ test("render: inline SQL renders into the file", async () => {
         +string status
     }
 `,
-    "test/issues/a.md": instance("uri: issue://a\ntitle: Alpha\nstatus: open\n"),
+    "test/issues/a.md": instance("uri: issue:a\ntitle: Alpha\nstatus: open\n"),
     "README.md": `# Test\n\n<!-- loom view: SELECT count(*) AS cnt FROM issue -->\n<!-- loom view: end -->\n`,
   });
 

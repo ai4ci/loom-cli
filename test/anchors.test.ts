@@ -197,16 +197,16 @@ test("decorators do not break attribution", () => {
 test("extractReverseLinks uses body containment", () => {
   const ts = `// file level
 export class Service {
-  // documents: issue://cls.md
+  // documents: issue:cls.md
   run() {
-    // implements: issue://run.md
+    // implements: issue:run.md
     return 1;
   }
 }`;
   const links = extractReverseLinks(ts, "typescript");
   const byTarget = Object.fromEntries(links.map((l) => [l.target, l.enclosingSymbol ?? null]));
-  assert.equal(byTarget["issue://run.md"], "Service.run");
-  assert.equal(byTarget["issue://cls.md"], "Service");
+  assert.equal(byTarget["issue:run.md"], "Service.run");
+  assert.equal(byTarget["issue:cls.md"], "Service");
 });
 
 test("the default policy is exported and excludes containers", () => {

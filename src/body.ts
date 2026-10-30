@@ -43,7 +43,8 @@ const LINK_RE = /(!?\[[^\]]*\]\()([^)\s]+)([^)]*\))/g;
 
 /** Anything of the form `scheme:` is a url or a uri, not a relative path. */
 const HAS_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
-const URI_RE = /^([A-Za-z][A-Za-z0-9+.-]*):\/\/(.+)$/;
+/** `scheme:path`, with the superseded `scheme://path` still accepted. */
+const URI_RE = /^([A-Za-z][A-Za-z0-9+.-]*):(?:\/\/)?(.+)$/;
 
 function mapLinks(prose: string, map: (target: string) => string | null): string {
   return prose.replace(LINK_RE, (whole, open: string, target: string, close: string) => {
@@ -91,7 +92,7 @@ export function toUris(prose: string, docPath: string, roots: ClassRoots): strin
     const scheme = schemeFor(roots, repoRelative);
     const root = scheme === "repo" ? "" : classRoot(roots, scheme);
     const rest = root === "" ? repoRelative : repoRelative.slice(root.length + 1);
-    return `${scheme}://${rest}${fragment}`;
+    return `${scheme}:${rest}${fragment}`;
   });
 }
 
