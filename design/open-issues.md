@@ -99,13 +99,20 @@ to:
 
 ```
 function my_function() {
-    // #resolves <issue:my-issue.md>
+    // resolves <issue:my-issue.md>
 }
 ```
 
 which would be directly interpretable as an RDF relationship, the nature of 
-which is correctly scoped to the `src:#resolves` relationship which is defined 
-in the UML. In theory the UML defines RDF domain and ranges for this relationship.
+which is correctly scoped to the `resolves` relationship declared on `src` in 
+the UML. In theory the UML defines RDF domain and ranges for this relationship.
+
+The relation is written as a bare term, not as a fragment. Which IRI it expands
+to is a function of the `@base` in force when the comment is interpreted, and
+that choice can be made later (see RDF export, below). Writing `#resolves`
+would bake a fragment-on-the-instance-namespace expansion into every source
+file and foreclose the alternatives for no gain, since the enclosing class
+already supplies the scope that the `#` was there to suggest.
 
 With this scheme it would make a lot of sense to extract the prefix declarations
 into a `.ttl` (text/turtle) file in a loom directory (see above) that travels 
@@ -151,11 +158,16 @@ Future possibilities this enables:
   so it travels with the branch — otherwise a branch switch leaves the namespace
   mapping inconsistent with the model.
 * **Relation terms are scoped by the subject's class.** `issue --> src : resolves`
-  is a different property from `src --> test-case : resolves`. A bare `#resolves`
+  is a different property from `src --> test-case : resolves`. A bare `resolves`
   in a source file resolves against the enclosing file's loom class. Resolution
   walks the UML ancestry from that class upward, first declaration wins;
   a subclass may override a parent's relation, mirroring UML. No declaration
   anywhere in the ancestry is a hard error.
+* **Relations are written as bare terms, never as fragments.** Source comments
+  carry `// implements <...>`, not `// #implements <...>`. The subject's class
+  already scopes the term, so the `#` adds nothing and would commit every source
+  file to one particular expansion. Leaving the term bare keeps the expansion a
+  decision for the interpreter, settable via `@base` at export time.
 * **The triple store stays non-conformant for relations.** The `relation` column
   keeps the bare label. The namespaced form is a pure function of the subject's
   class plus the label, both already in the store, so it can be computed at
@@ -167,15 +179,18 @@ Future possibilities this enables:
 Deferred until there is a reason to emit turtle. Collects the decisions that
 only matter at export time.
 
-**Relation term namespace.** Scoping relation terms by subject class means
-`issue:#resolves` expands into the *instance* namespace (`design/issues/#resolves`),
-putting vocabulary and data in one namespace. It resolves and nothing breaks
-internally, but a turtle consumer normally tells vocabulary from data by
-namespace. Options, decidable at export time because the stored data is
-unaffected:
+**Relation term namespace.** Relations are stored and written as bare terms
+scoped by the subject's class, so the expansion is entirely an export-time
+choice. Candidates:
 
 * a dedicated relation prefix — `rel:issue` giving `rel:issue#resolves`
 * the model file as the term namespace — `design/document-model.mmd#issue.resolves`
+* the instance namespace itself — `design/issues/#resolves`
+
+The last is the most direct reading of "scoped by the subject's class", but it
+puts vocabulary and data in one namespace, and a turtle consumer normally tells
+the two apart by namespace. Since nothing in the corpus or the triple store
+records the expansion, any of these can be chosen when the exporter is written.
 
 **Multiple ranges intersect in RDFS.** If one class declares the same relation
 label to two different target classes, emitting `rdfs:range` twice means "a
