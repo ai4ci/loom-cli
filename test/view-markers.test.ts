@@ -69,7 +69,7 @@ test("a qualified end marker terminates its own view", () => {
   assert.match(a, /a end/);
 });
 
-test("a view without an end marker ends at the next opener or EOF", () => {
+test("a view without an end marker has an empty section; prose below survives", () => {
   const text = `<!-- loom view: a -->
 prose in a
 
@@ -78,22 +78,22 @@ prose in b
 `;
   const ms = scanViewMarkers(text);
   assert.deepEqual(ms.map((m) => m.view), ["a", "b"]);
-  assert.ok(ms[0]!.end <= ms[1]!.start);
-  assert.ok(ms[1]!.end === text.length);
+  assert.ok(ms[0]!.end <= ms[1]!.start, "a's section is empty (before b's opener)");
+  assert.ok(ms[1]!.end <= text.length);
+  assert.ok(!text.slice(ms[0]!.start, ms[0]!.end).includes("prose"), "no prose inside an unterminated section");
 });
 
 test("two views in one page render without scrambling", async () => {
   const root = issueRepo([["a", "open"], ["b", "closed"]]);
   const page = path.join(root, "design/page.md");
+  // As an author would write it: no end markers at all.
   writeFileSync(page, `# Page
 
 <!-- loom view: a -->
-<!-- loom view: end -->
 
 middle
 
 <!-- loom view: b -->
-<!-- loom view: end -->
 `);
   const r = await run(["--cwd", root, "render"]);
   assert.equal(r.code, 0, r.err + r.out);

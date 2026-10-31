@@ -44,9 +44,9 @@ end marker is qualified — `<!-- loom view: <name> end -->` — so several view
 can share a page without their terminators being confused with each other
 (that is also what `loom render` writes; a bare `<!-- loom view: end -->` is
 still accepted when scanning, for files written by hand or by older looms).
-An absent end marker is fine while authoring: the section then reaches the
-next view marker (or the end of the file), and `loom render` inserts the
-qualified end marker on its first run.
+An absent end marker is fine while authoring: its section is empty, and
+`loom render` inserts the rendered content and the qualified end marker right
+after the opener — prose below the marker is never touched.
 
 ## 4. Output rules
 
