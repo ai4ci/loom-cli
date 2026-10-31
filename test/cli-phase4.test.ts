@@ -61,7 +61,7 @@ test("a date attribute compares without a cast", async () => {
   const root = makeRepo({
     ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": `classDiagram
-    %% @path issue /design/issue
+    %% @prefix issue: <repo:design/issue/> .
     class issue {
         +string title
         +date created
@@ -109,7 +109,7 @@ test("a list attribute becomes a duckdb list", async () => {
   const root = makeRepo({
     ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": `classDiagram
-    %% @path issue /design/issue
+    %% @prefix issue: <repo:design/issue/> .
     class issue {
         +string title
         +List~string~ tags

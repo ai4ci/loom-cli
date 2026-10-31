@@ -69,7 +69,7 @@ test("warnings alone do not fail the run", async () => {
   const root = repo();
   writeFileSync(
     path.join(root, "design/document-model.mmd"),
-    "classDiagram\n    %% @path issue /design/issue\n    class issue { +string title }\n    class decision { +string title }\n    issue --> decision : rel\n",
+    "classDiagram\n    %% @prefix issue: <repo:design/issue/> .\n    class issue { +string title }\n    class decision { +string title }\n    issue --> decision : rel\n",
   );
   const r = await run(["--cwd", root, "model", "check"]);
   assert.equal(r.code, 0);

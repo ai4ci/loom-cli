@@ -9,7 +9,8 @@ description: How to install, invoke, and use the loom CLI to inspect, validate, 
 
 `loom` will generally auto detect the Mermaid class diagram location and base
 the root of its documentation in the parent directory. `$LOOM_DEFAULT_ROOT` can 
-be explicitly set to skip that detection.
+be explicitly set to skip that detection. `repo:` means the git root unless
+`$LOOM_REPO_ROOT` overrides it (e.g. one loom per monorepo package).
 
 ## 1. Installation & Environment
 
@@ -117,7 +118,7 @@ loom --json body get issue:fix-login.md
 
 # Hierarchical directory and symbol exploration (ls)
 loom ls issue:                       # List all instances of class 'issue'
-loom ls src:                         # List files in source directory (src: IS the src/ root)
+loom ls src:                         # List files in source directory (src: is wherever the model's `%% @prefix src:` points)
 loom ls src:auth.ts                  # List linkable symbols/anchors in file
 loom ls src:auth.ts --kind Method   # Filter symbols by kind
 

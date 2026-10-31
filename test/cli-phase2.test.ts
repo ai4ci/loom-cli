@@ -107,7 +107,7 @@ test("validate --model analyses the impact of a proposed model", async () => {
   const proposed = path.join(root, "proposed.mmd");
   // Dropping the enumeration makes every existing status value invalid.
   writeFileSync(proposed, `classDiagram
-    %% @path issue /design/issue
+    %% @prefix issue: <repo:design/issue/> .
     class issue {
         +string title
         +int status
@@ -123,7 +123,7 @@ test("validate --model does not touch the report file", async () => {
   const root = repo({ "design/issue/a.md": OPEN("A") });
   const proposed = path.join(root, "proposed.mmd");
   writeFileSync(proposed, `classDiagram
-    %% @path issue /design/issue
+    %% @prefix issue: <repo:design/issue/> .
     class issue { +string title }
 `);
   await run(["--cwd", root, "validate", "--model", proposed]);

@@ -5,6 +5,7 @@ import { run } from "../src/cli.ts";
 import { instance, makeRepo } from "./helpers.ts";
 
 const MODEL = `classDiagram
+    %% @prefix src: <repo:src/> .
     class issue {
         +string title
         +IssueStatus status

@@ -1,76 +1,37 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { LoomError, type Diagnostic, error, warning } from "./diagnostics.ts";
-import { isInstantiable } from "./model/schema.ts";
-import {
-  type ClassDef,
-  type SchemaIR,
-} from "./model/types.ts";
-
-/** Terminal anchors: their `@path` is always resolved relative to `$REPO_ROOT`. */
-const TERMINAL_ANCHORS = new Set(["src", "resource"]);
+import { isAbstract, isEnumeration, type SchemaIR } from "./model/types.ts";
 
 /** Reserved class names that must never be declared by the model. */
 const RESERVED_CLASS_NAMES = new Set(["repo", "design"]);
 
 /**
- * Repo-relative POSIX path for a class. `null` for non-instantiable classes
- * (abstract, enumeration, src/resource family).
+ * Repo-relative POSIX path for a class. `null` for classes without files of
+ * their own (abstract, enumeration) and for external classes.
  */
 export type ClassRoot = string | null;
 
 /** Map of class name to its repo-relative root, computed from the schema. */
 export type ClassRoots = Map<string, ClassRoot>;
 
-/**
- * The raw annotation captured from a top-level `%% @path <class> <path>`
- * comment, stored on a class for later resolution.
- */
-export interface PathAnnotation {
-  /** Repo-relative absolute path (leading `/`): always. */
-  absolute: string | null;
-  /** Repo-relative path segment, joined onto the parent's resolved path. */
-  relative: string | null;
-  /** Line in the model file. */
-  line: number;
-}
-
 export interface PathResolution {
   roots: ClassRoots;
+  /** Prefixes whose target is an absolute URL (`https:`, `file:`, ...). */
+  external: Map<string, string>;
   /** Diagnostics produced during resolution; should be merged with model diagnostics. */
   diagnostics: Diagnostic[];
 }
 
-/**
- * Extract `%% @path` annotations from a list of top-level mermaid comments,
- * grouped by class name. Returns a map of class → annotation.
- *
- * A line matches `%% @path <name> <path>`. Names are lowercased.
- * Paths beginning with `/` are absolute (repo-relative); others are relative.
- */
-export function extractPathAnnotations(
-  comments: { text: string; line: number }[],
-): Map<string, PathAnnotation> {
-  const result = new Map<string, PathAnnotation>();
-  for (const { text, line } of comments) {
-    const match = /^%%\s+@path\s+([A-Za-z][A-Za-z0-9_-]*)\s+(\S+)\s*$/.exec(text);
-    if (match === null) continue;
-    const name = match[1]!;
-    const raw = match[2]!;
-    const ann: PathAnnotation = raw.startsWith("/")
-      ? { absolute: raw.slice(1), relative: null, line }
-      : { absolute: null, relative: raw, line };
-    // Multiple annotations on one class: keep the first, flag the rest.
-    if (!result.has(name)) result.set(name, ann);
-  }
-  return result;
-}
+const PREFIX_RE = /^%%\s+@prefix\s+([A-Za-z][A-Za-z0-9_-]*):\s+<?([^\s<>]+)>?\s*\.?\s*$/;
+const PATH_RE = /^%%\s+@path\s+([A-Za-z][A-Za-z0-9_-]*)\s+(\S+)\s*$/;
 
 /**
- * Extract `%% @prefix <name>: <target>` annotations. CURIE expansion is
- * string concatenation, not path join, so the target must end in a
- * delimiter (`/` or `#`) — otherwise `issue:6` would expand into
- * `...issues6`. Violations are hard errors.
+ * Extract `%% @prefix <name>: <target> .` annotations (the angle brackets
+ * and trailing ` .` are optional). Targets are returned raw; see
+ * {@link resolveClassRoots} for their meaning. CURIE expansion is string
+ * concatenation, not path join, so the target must end in `/` or `#`.
+ * The retired `%% @path` form is a hard error naming its replacement.
  */
 export function extractPrefixAnnotations(
   comments: { text: string; line: number }[],
@@ -78,7 +39,18 @@ export function extractPrefixAnnotations(
 ): Map<string, string> {
   const result = new Map<string, string>();
   for (const { text, line } of comments) {
-    const match = /^%%\s+@prefix\s+([A-Za-z][A-Za-z0-9_-]*):\s+(\S+)\s*$/.exec(text);
+    const old = PATH_RE.exec(text);
+    if (old !== null) {
+      const raw = old[2]!.replace(/\/+$/, "");
+      const target = raw.startsWith("/") ? `repo:${raw.slice(1)}/` : `${raw}/`;
+      diagnostics.push(error(
+        "model/path-removed",
+        `%% @path is no longer supported — use %% @prefix`,
+        { line, fix: `%% @prefix ${old[1]!.toLowerCase()}: <${target}> .` },
+      ));
+      continue;
+    }
+    const match = PREFIX_RE.exec(text);
     if (match === null) continue;
     const name = match[1]!.toLowerCase();
     const target = match[2]!;
@@ -129,102 +101,96 @@ function under(p: string, root: string): boolean {
 }
 
 /**
- * Compute the repo-relative path for every class in the schema. Resolution
- * follows architecture §2.2:
+ * Compute the repo-relative root of every class (design/prefix-unification.md):
  *
- *   1. `src` and `resource` are terminal anchors: their `@path` value is
- *      always repo-relative, no matter absolute or relative. Their default
- *      roots are `src` and `resource`.
- *   2. Other classes with an explicit `@path` annotation:
- *      - Absolute form (`/foo`): taken literally relative to `$REPO_ROOT`.
- *      - Relative form: joined onto the resolved path of the first UML parent.
- *        If the class has no parent, joined onto `$LOOM_DEFAULT_ROOT`.
- *   3. Classes with no `@path`:
- *      - If a class has a UML parent, the class name is appended to that
- *        parent's path.
- *      - Otherwise the class name is appended to `$LOOM_DEFAULT_ROOT`.
+ *   1. An explicit `%% @prefix` wins. `repo:x/` is repo-rooted; an absolute
+ *      URL (`https:`, `file:`) is external; anything else is relative to
+ *      `base` — the directory holding the model (`@base`).
+ *   2. Otherwise a class appends its name to its parent's root. Parents
+ *      without a root (abstract, enumeration) are skipped; parents that
+ *      disagree are `path/ambiguous-inheritance`.
+ *   3. A class with no rooted parent is `<base>/<name>`.
  *
- * `nonInstantiable` classes (abstract, enumeration, src/resource family)
- * always get `null` regardless of any annotation.
- *
- * Returns the map plus any diagnostics. Two classes resolving to identical
- * paths collide and produce `path/collision`. A path that escapes the repo
- * (`..`) produces `path/escapes-repo`. A missing directory produces
- * `path/missing-directory` as a warning, for every class.
+ * `src` and `resource` get no special case. Abstract and enumeration classes
+ * get `null`. Identical roots collide (`path/collision`); missing
+ * directories warn (`path/missing-directory`).
  */
 export function resolveClassRoots(
   schema: SchemaIR,
-  annotations: Map<string, PathAnnotation>,
+  prefixes: Map<string, string>,
   repoRoot: string,
-  designRoot: string,
+  base: string,
   existsCheck: (repoRelative: string) => boolean = (p) =>
     existsSync(path.join(repoRoot, p)),
 ): PathResolution {
   const diagnostics: Diagnostic[] = [];
-  const resolved = new Map<string, string>();
+  const roots: ClassRoots = new Map();
+  const external = new Map<string, string>();
+  const local = new Map<string, string>();
+  const baseDir = base === "." ? "" : base;
 
-  // First pass: classes with explicit annotations.
-  for (const [name, def] of schema.classes) {
-    // The terminal anchor families (`src`, `resource`) and their instantiable
-    // subclasses are all resolved here. Non-instantiable classes (abstract,
-    // enumeration, value types) are skipped and get `null` in the final map.
-    if (!isInstantiable(schema, name) && !TERMINAL_ANCHORS.has(name)) continue;
-    const ann = annotations.get(name);
+  for (const [name, target] of prefixes) {
+    if (target.startsWith("repo:")) local.set(name, target.slice("repo:".length));
+    else if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(target)) external.set(name, target);
+    else local.set(name, joinPath(baseDir, target));
+  }
 
-    if (TERMINAL_ANCHORS.has(name)) {
-      // Terminal anchors follow the same convention as any other class:
-      // absolute annotations (leading `/`) are repo-rooted; relative
-      // annotations are joined onto the design root. Their default when no
-      // annotation is given is the class name at the repo root.
-      const root = ann === undefined
-        ? defaultTerminalRoot(name)
-        : ann.absolute ?? resolveRelative(name, def, schema, resolved, designRoot, ann.relative!);
-      const normalised = normalisePath(root);
-      checkEscapes(name, normalised, diagnostics);
-      resolved.set(name, normalised);
-      continue;
+  const rootOf = (name: string, seen: Set<string>): ClassRoot => {
+    if (roots.has(name)) return roots.get(name)!;
+    const key = findClass(schema, name);
+    const def = key === undefined ? undefined : schema.classes.get(key);
+    let root: ClassRoot;
+    if (external.has(name)) {
+      root = null;
+    } else if (local.has(name)) {
+      root = normaliseRoot(name, local.get(name)!, diagnostics);
+    } else if (def === undefined || isAbstract(def) || isEnumeration(def) || seen.has(name)) {
+      root = null;
+    } else {
+      seen.add(name);
+      const inherited = new Set<string>();
+      for (const parent of def.parents) {
+        const r = rootOf(parent.toLowerCase(), seen);
+        if (r !== null) inherited.add(joinPath(r, def.name));
+      }
+      if (inherited.size > 1) {
+        diagnostics.push(error(
+          "path/ambiguous-inheritance",
+          `class "${def.name}" inherits several roots: ${[...inherited].join(", ")}`,
+          { fix: `add %% @prefix ${def.name.toLowerCase()}: <repo:.../> . to pick one` },
+        ));
+      }
+      root = inherited.size > 0 ? [...inherited][0]! : joinPath(baseDir, def.name);
+      root = normaliseRoot(name, root, diagnostics);
     }
+    roots.set(name, root);
+    return root;
+  };
 
-    if (ann !== undefined) {
-      const root = ann.absolute ?? resolveRelative(name, def, schema, resolved, designRoot, ann.relative!);
-      const normalised = normalisePath(root);
-      checkEscapes(name, normalised, diagnostics);
-      resolved.set(name, normalised);
+  for (const name of schema.classes.keys()) rootOf(name.toLowerCase(), new Set());
+  // Public keys use the declared spelling; lookups are case-insensitive.
+  for (const name of schema.classes.keys()) {
+    const lower = name.toLowerCase();
+    if (lower !== name) { roots.set(name, roots.get(lower)!); roots.delete(lower); }
+  }
+  // Prefixes for names the diagram never declares still address files.
+  for (const [name, target] of local) {
+    if (!roots.has(name) && findClass(schema, name) === undefined) {
+      roots.set(name, normaliseRoot(name, target, diagnostics));
     }
   }
 
-  // Second pass: classes that inherit (or default) without an annotation.
-  // Inheritance walks parents before the child, so by the time we reach a
-  // class its parents are already in `resolved`.
-  for (const [name, def] of schema.classes) {
-    if (!isInstantiable(schema, name) && !TERMINAL_ANCHORS.has(name)) continue;
-    if (resolved.has(name)) continue;
-    // Subclasses of `src`/`resource` resolve their roots like their parent:
-    // relative to `$REPO_ROOT`, NOT inherited as a child folder. So a `R`
-    // subclass of `src` with no explicit annotation takes its own root, not
-    // a folder inside `src/`.
-    const root = parentTerminalAnchor(def, schema) !== undefined
-      ? defaultTerminalRoot(name)
-      : inferFromInheritance(def, schema, resolved, designRoot);
-    const normalised = normalisePath(root);
-    checkEscapes(name, normalised, diagnostics);
-    resolved.set(name, normalised);
-  }
-
-  // Collision detection and existence warnings.
   const byPath = new Map<string, string[]>();
-  for (const [name, root] of resolved) {
-    const list = byPath.get(root) ?? [];
-    list.push(name);
-    byPath.set(root, list);
+  for (const [name, root] of roots) {
+    if (root === null) continue;
+    byPath.set(root, [...(byPath.get(root) ?? []), name]);
   }
   for (const [root, names] of byPath) {
     if (names.length > 1) {
-      const others = names.filter((n) => n !== names[0]).join(", ");
       diagnostics.push(error(
         "path/collision",
         `classes ${names.join(", ")} resolve to the same path "${root}"`,
-        { fix: `give one of them a %% @path annotation; involved: ${others}` },
+        { fix: `give one of them its own %% @prefix` },
       ));
     }
     if (!existsCheck(root)) {
@@ -234,130 +200,30 @@ export function resolveClassRoots(
       ));
     }
   }
-
-  // Build the public map: non-instantiable classes (abstract, enumeration,
-  // value type) get `null`. Terminal anchors (`src`, `resource`) are also
-  // non-instantiable in the instance sense but still have roots — they
-  // resolve to whatever `%% @path` (or the default) says.
-  const roots: ClassRoots = new Map();
-  for (const [name, def] of schema.classes) {
-    if (TERMINAL_ANCHORS.has(name)) {
-      roots.set(name, resolved.get(name) ?? defaultTerminalRoot(name));
-    } else if (!isInstantiable(schema, name)) {
-      roots.set(name, null);
-    } else {
-      roots.set(name, resolved.get(name) ?? inferFromInheritance(def, schema, resolved, designRoot));
-    }
-  }
-  return { roots, diagnostics };
+  return { roots, external, diagnostics };
 }
 
-function defaultTerminalRoot(name: string): string {
-  if (name === "src") return "src";
-  if (name === "resource") return "resource";
-  return name;
-}
-
-function resolveRelative(
-  name: string,
-  def: ClassDef,
-  schema: SchemaIR,
-  resolved: Map<string, string>,
-  designRoot: string,
-  relative: string,
-): string {
-  // Terminal anchors (`src`, `resource`) treat their relative path as
-  // repo-relative (e.g. `%% @path resource data` -> `$REPO_ROOT/data`).
-  if (TERMINAL_ANCHORS.has(name)) return relative;
-
-  // Non-terminal classes: walk up the UML hierarchy to find the first
-  // ancestor that has already been resolved, and join the relative path
-  // onto that ancestor's root. This matches the spec rule that relative
-  // `%% @path` values nest under the parent's root.
-  const ancestor = firstResolvedAncestor(def, schema, resolved);
-  if (ancestor !== undefined) return joinPath(resolved.get(ancestor)!, relative);
-
-  // Orphan class (no UML parent): the relative path is a literal
-  // repo-relative hint, not joined onto the design root. The author
-  // writes `%% @path issue design/issue` because that's where the
-  // files actually sit.
-  return relative;
-}
-
-function inferFromInheritance(
-  def: ClassDef,
-  schema: SchemaIR,
-  resolved: Map<string, string>,
-  designRoot: string,
-): string {
-  const parent = firstResolvedParent(def, schema, resolved);
-  const base = parent !== undefined ? resolved.get(parent)! : designRoot;
-  return joinPath(base, def.name);
-}
-
-/**
- * True if any ancestor of `def` is a terminal anchor (`src`, `resource`).
- * Subclasses of those families inherit their parent's *kind* (a source class
- * whose files sit in some root) but each get their own root — they don't nest
- * under the parent's folder.
- */
-function parentTerminalAnchor(def: ClassDef, schema: SchemaIR): string | undefined {
-  for (const parent of def.parents) {
-    if (TERMINAL_ANCHORS.has(parent)) return parent;
-    const grandparent = schema.classes.get(parent)?.parents ?? [];
-    for (const gp of grandparent) {
-      if (TERMINAL_ANCHORS.has(gp)) return gp;
-    }
-  }
+function findClass(schema: SchemaIR, name: string): string | undefined {
+  if (schema.classes.has(name)) return name;
+  for (const key of schema.classes.keys()) if (key.toLowerCase() === name) return key;
   return undefined;
 }
 
-function firstResolvedParent(
-  def: ClassDef,
-  schema: SchemaIR,
-  resolved: Map<string, string>,
-): string | undefined {
-  for (const parent of def.parents) {
-    if (resolved.has(parent)) return parent;
+function normaliseRoot(name: string, raw: string, diagnostics: Diagnostic[]): string {
+  try {
+    return normalisePath(raw);
+  } catch {
+    diagnostics.push(error(
+      "path/escapes-repo",
+      `class "${name}" resolves to a path that escapes the repository: "${raw}"`,
+    ));
+    return raw;
   }
-  return undefined;
-}
-
-/**
- * Walk the full UML hierarchy to find the first ancestor whose path is
- * already resolved. Unlike {@link firstResolvedParent}, this follows
- * grandparents and beyond so that a grandchild class with a relative
- * `@path` can nest under a grandparent's root even when the intermediate
- * class has no annotation of its own.
- */
-function firstResolvedAncestor(
-  def: ClassDef,
-  schema: SchemaIR,
-  resolved: Map<string, string>,
-): string | undefined {
-  const seen = new Set<string>();
-  const queue = [...def.parents];
-  while (queue.length > 0) {
-    const name = queue.shift()!;
-    if (!seen.add(name)) continue;
-    if (resolved.has(name)) return name;
-    const parentDef = schema.classes.get(name);
-    if (parentDef) queue.push(...parentDef.parents);
-  }
-  return undefined;
 }
 
 function joinPath(base: string, rest: string): string {
+  if (base === "") return rest;
   return rest === "" ? base : `${base}/${rest}`;
-}
-
-function checkEscapes(name: string, normalised: string, diagnostics: Diagnostic[]): void {
-  if (normalised.split("/").includes("..")) {
-    diagnostics.push(error(
-      "path/escapes-repo",
-      `class "${name}" resolves to a path that escapes the repository: "${normalised}"`,
-    ));
-  }
 }
 
 /**

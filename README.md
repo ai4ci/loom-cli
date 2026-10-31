@@ -66,6 +66,7 @@ loom prefetch typescript python r
 Loom uses a Mermaid class diagram to declare document classes, attributes, and allowed relations:
 
 ```mermaid
+%% @prefix src: <repo:src/> .
 classDiagram
     class IssueStatus {
         <<enumeration>>
@@ -91,7 +92,7 @@ classDiagram
     src "0..*" --> "0..*" issue : implements
 ```
 
-Loom requires zero configuration files: it finds `document-model.mmd` automatically inside the git repository. Document classes without explicit roots resolve under the model's directory (here `design/issue` and `design/adr`). Custom paths can be declared via `%% @path <class> <path>` in the model.
+Loom requires zero configuration files: it finds `document-model.mmd` automatically inside the git repository. Document classes without explicit roots resolve under the model's directory (here `design/issue` and `design/adr`). Other locations are declared with `%% @prefix <class>: <repo:path/> .` — `src` needs one (above) because it would otherwise resolve under the model's directory too. `loom rebuild` also writes the resolved prefixes to `design/.loom/namespaces.ttl`. Set `LOOM_REPO_ROOT` to treat a monorepo package as its own repository.
 
 ### 2. Validate the Graph
 ```bash
@@ -116,7 +117,7 @@ loom --json <command> ...
 - `loom ls <uri>`: Hierarchical listing of classes, files, or linkable symbols in code.
   ```bash
   loom ls issue:                       # List all issue documents
-  loom ls src:                         # List source files (src: IS the src/ root)
+  loom ls src:                         # List source files (src: is wherever `%% @prefix src:` points)
   loom ls src:auth.ts                  # List functions, methods, classes in auth.ts
   ```
 - `loom resolve <uri>`: Resolve any document URI to disk path, or source anchor to line number.

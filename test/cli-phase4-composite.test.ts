@@ -8,7 +8,7 @@ import { loadModel } from "../src/model/load.ts";
 import { rebuild, query } from "../src/duckdb.ts";
 
 const MODEL = `classDiagram
-    %% @path issue design/issue
+    %% @prefix issue: <repo:design/issue/> .
     class issue {
         +string title
         +Contact reporter

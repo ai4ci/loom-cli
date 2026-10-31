@@ -40,7 +40,7 @@ test("extractViewAnnotations: multi-line body", () => {
 
 test("extractViewAnnotations: non-view comments are ignored", () => {
   const comments = [
-    { text: "%% @path issue design/issue", line: 1 },
+    { text: "%% @prefix issue: <repo:design/issue/> .", line: 1 },
     { text: "%% this is a regular comment", line: 2 },
     { text: "%% @view simple", line: 3 },
     { text: "%% SELECT 1 AS n", line: 4 },
@@ -140,7 +140,7 @@ test("substituteParams: escaped comma in list value", () => {
 test("render: named view renders its content into the file", async () => {
   const root = makeRepo({
     "design/document-model.mmd": `classDiagram
-    %% @path issue test/issues
+    %% @prefix issue: <repo:test/issues/> .
     class issue {
         +string title
         +string status
@@ -182,7 +182,7 @@ test("render: named view renders its content into the file", async () => {
 test("render: inline SQL renders into the file", async () => {
   const root = makeRepo({
     "design/document-model.mmd": `classDiagram
-    %% @path issue test/issues
+    %% @prefix issue: <repo:test/issues/> .
     class issue {
         +string title
         +string status

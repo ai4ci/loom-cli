@@ -174,7 +174,7 @@ query text is embedded. Result is a ranked list of `{uri, title, score}`.
 
 Parse and validate the mermaid model itself: unknown types, untyped
 attributes, duplicate classes, inheritance cycles, composition arrows,
-malformed `%% @path` / `%% @prefix` / `%% @view` annotations, enum and value
+malformed `%% @prefix` / `%% @view` annotations (and any retired `%% @path`), enum and value
 type rules (§7 `model/`).
 
 ### `validate [uri] [--model <file>] [--fix]`
@@ -250,6 +250,9 @@ Rebuild the DuckDB projection at `design/.loom/db/<branch>/loom.duckdb` — one
 database file per git branch, so model changes on a branch never collide with
 `main`. `main` itself uses `design/.loom/db/main/loom.duckdb`. The `.loom/`
 directory is created on demand with a `.gitignore` containing `db/`.
+`rebuild` also regenerates `design/.loom/namespaces.ttl` (export-only turtle
+`@base` + `@prefix` declarations, checked in; see architecture §2.2) and
+reports its path as `namespaces`.
 
 One table per instantiable class: `uri`, `id`, `path`, plus one column per
 attribute. Enumerations become native DuckDB ENUM types. Class-typed
@@ -288,7 +291,7 @@ Codes are stable identifiers; match on these rather than on message text.
 |---|---|---|
 | `cli/` | argument parsing | `bad-assignment`, `missing-argument`, `missing-option`, `file-not-found` |
 | `uri/` | uri handling | `malformed`, `bare-path`, `not-a-class` |
-| `path/` | class root resolution | `collision`, `escapes-root`, `escapes-repo`, `missing-directory` *(warning)*, `unknown-class` |
+| `path/` | class root resolution | `collision`, `ambiguous-inheritance`, `escapes-root`, `escapes-repo`, `missing-directory` *(warning)*, `unknown-class` |
 | `model/` | model parsing and validation | see below |
 | `instance/` | one instance against the model | see below |
 | `graph/` | cross-file checks | see below |
@@ -303,7 +306,7 @@ Codes are stable identifiers; match on these rather than on message text.
 `ambiguous`, `empty-enumeration`, `inheritance-cycle`, `reserved-has-attributes`,
 `value-type-has-relations`, `value-type-cycle`, `composition-arrow`,
 `unnamed-relation`, `no-title-attribute` *(warning)*, `not-found`,
-`duplicate-prefix`, `prefix-delimiter`, `duplicate-view`.
+`duplicate-prefix`, `prefix-delimiter`, `path-removed`, `duplicate-view`.
 
 **`instance/`** — `unknown-class`, `not-instantiable`, `class-mismatch`,
 `id-mismatch`, `missing-required`, `unknown-key`, `type-mismatch`,

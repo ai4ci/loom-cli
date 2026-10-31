@@ -133,7 +133,11 @@ export function loadConfig(startDir: string = process.cwd()): Config {
 
   // Use the directory containing `.loom.yaml` as the repo root when no git
   // root was found (mirrors the original loadConfig behaviour).
-  const repoRoot = gitRoot ?? (configPath !== null ? path.dirname(configPath) : path.resolve(startDir));
+  // LOOM_REPO_ROOT overrides the git root, e.g. one loom per monorepo package.
+  const override = process.env["LOOM_REPO_ROOT"];
+  const repoRoot = override !== undefined && override.length > 0
+    ? path.resolve(override)
+    : gitRoot ?? (configPath !== null ? path.dirname(configPath) : path.resolve(startDir));
   return configFrom(repoRoot, raw, configPath);
 }
 

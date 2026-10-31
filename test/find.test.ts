@@ -11,8 +11,8 @@ const MODEL = `classDiagram
     class decision {
         +string title
     }
-    %% @path issue issues
-    %% @path src src
+    %% @prefix issue: <repo:issues/> .
+    %% @prefix src: <repo:src/> .
 `;
 
 const CONFIG = "designRoot: design\n";

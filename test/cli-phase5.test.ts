@@ -5,9 +5,9 @@ import { run } from "../src/cli.ts";
 import { instance, makeRepo } from "./helpers.ts";
 
 const MODEL_WITH_SRC = `classDiagram
-    %% @path issue /design/issue
-    %% @path src /src
-    %% @path R /R
+    %% @prefix issue: <repo:design/issue/> .
+    %% @prefix src: <repo:src/> .
+    %% @prefix R: <repo:R/> .
     class issue {
         +string title
     }
