@@ -48,7 +48,9 @@ hand-written against the *proposed* semantics; the current CLI still runs
 
 classDiagram
     class src
-    class resource <<interface>>
+    class resource {
+        <<abstract>>
+    }
     class gh
     class fixture
     class WorkStatus {
@@ -101,7 +103,7 @@ subclass at a differently-named folder you annotate it explicitly
 @prefix src:   <repo:src/> .
 @prefix main:  <repo:src/main/> .
 @prefix test:  <repo:tests/> .
-# N.B. no prefix for resource: because is an interface not a class.
+# N.B. no prefix for resource: because it is abstract, not instantiable.
 @prefix fixture: <repo:resource/fixture/> .
 
 # --- external resources ---
@@ -159,8 +161,8 @@ root as the model directory.
 | `main:store.ts` | `repo:src/main/store.ts` | inherited from `src:` + class name |
 | `adr:001.md` | `repo:architecture/decisions/001.md` | explicit prefix relative to repo: |
 | `test:auth.test.ts` | `repo:tests/auth.test.ts` instead of `repo:src/test/auth.test.ts` | explicit prefix overrides inheritance |
-| `resource:x.md` | Not allowed | resource is declared as an interface and cannot be instantiated |
-| `fixture:y.md` (implements `resource`) | `repo:resource/fixture/y.md` | explicit prefix required as `resource` is interface|
+| `resource:x.md` | Not allowed | resource is `<<abstract>>` and cannot be instantiated |
+| `fixture:y.md` (specialises `resource`) | `repo:resource/fixture/y.md` | explicit prefix required as `resource` is abstract|
 | `gh:417` | `https://github.com/my-org/my-repo/issues/417` | external |
 | `repo:relative/thing.md` | `repo:relative/thing.md` | reserved scheme, no prefix needed |
 
@@ -195,7 +197,14 @@ majority but might not make so much sense when there is a multi-package layout.
 Fundamentally the `src` classes are only different because they cannot have 
 frontmatter metadata (and they have internal structure due to the code). `resource`
 classes are different because they cannot have metadata or links out (they can 
-only be the range of an `owl:ObjectProperty`)
+only be the range of an `owl:ObjectProperty`). Both are declared `<<abstract>>`
+rather than `<<interface>>` — loom has no interface stereotype. Confirmed
+against the parser: the inline `class resource <<interface>>` spelling makes
+tree-sitter emit `model/syntax` plus a phantom class named `""` carrying the
+annotation — the annotation is never attached to `resource`. Use the block
+form. (If `<<interface>>` proves common in the wild, tolerating it as an
+alias for `<<abstract>>` is a one-line change in `isAbstract`; deliberately
+not done now.)
 
 In the no surprises ethos option A is better. 
 
@@ -205,7 +214,7 @@ is placed in the repository root then `src` will by default resolve to `repo:src
 but in all other cases it must be explicity mapped to the source location in a
 repository. This is probably a good thing as source directories vary far more than document directories.
 
-The only alternative is to declare it as an interface and explicity prefix subtypes,
+The only alternative is to declare it `<<abstract>>` and explicitly prefix subtypes,
 which is what is demonstrated for `resource` in the example.
 
 ## Trailing delimiter
