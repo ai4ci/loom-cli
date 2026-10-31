@@ -75,7 +75,7 @@ export interface ViewMarker {
   params: Record<string, string>;
   /** Byte offset where the opening `<!-- loom view:` starts. */
   start: number;
-  /** Byte offset where the closing `<!-- loom view: end -->` ends (or start if absent). */
+    /** Byte offset where the end marker ends (just after the opener if absent). */
   end: number;
 }
 
@@ -110,8 +110,9 @@ export function scanViewMarkers(text: string): ViewMarker[] {
     }
 
     // Find the terminator: `<name> end` if present after this opener, else
-    // the first bare `end`. A missing terminator ends at the next opener or
-    // EOF, so an authoring page never needs to write `end` by hand.
+    // the first bare `end`. An unterminated view is not an error while
+    // authoring — its section is empty (render inserts the content and the
+    // qualified end right after the opener), so prose below is never eaten.
     const own = new RegExp(`<!--\\s*loom\\s+view:\\s*${escapeRegExp(view)}\\s+end\\s*-->`);
     let end = match.index + match[0].length;
     const rest = /<!--\s*loom\s+view:\s*(.+?)\s*-->/g;
@@ -123,10 +124,7 @@ export function scanViewMarkers(text: string): ViewMarker[] {
         end = candidate.index + candidate[0].length;
         break;
       }
-      // Any other opener terminates an unterminated section.
-      if (!raw2.endsWith(" end")) { end = candidate.index; break; }
     }
-    if (end === match.index + match[0].length) end = text.length;
 
     markers.push({ view, params, start, end });
   }

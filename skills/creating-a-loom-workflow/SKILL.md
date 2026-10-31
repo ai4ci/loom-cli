@@ -238,8 +238,9 @@ Running `loom render` replaces the span between a marker and its end marker
 with the query result as a markdown table (2–4 columns), bullet list (1
 column), or compact bold-key list (5+ columns). End markers are qualified
 (`<!-- loom view: <name> end -->`) so several views can share one page; a
-missing end marker is fine — `loom render` inserts it (a bare
-`<!-- loom view: end -->` is also accepted). `loom render --check` is the CI-safe variant
+missing end marker is fine — `loom render` inserts the content and the
+qualified end right after the marker, leaving surrounding prose untouched (a
+bare `<!-- loom view: end -->` is also accepted). `loom render --check` is the CI-safe variant
 that exits 1 if any marker would change.
 
 ### Parameters

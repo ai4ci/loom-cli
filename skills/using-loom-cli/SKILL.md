@@ -264,8 +264,9 @@ Scans every `.md` file in the repo for `<!-- loom view: ... -->` markers and
 replaces the content between the marker and its matching end marker with live
 data from the DuckDB graph. End markers are qualified — `<!-- loom view: <name>
 end -->` — so several views can share one page; a bare `<!-- loom view: end -->`
-is still accepted. A missing end marker is fine: the section ends at the next
-marker (or EOF) and `loom render` inserts the qualified end automatically.
+is still accepted. A missing end marker is fine: the section is empty and
+`loom render` inserts the content and the qualified end right after the
+marker — prose below is never touched.
 
 ```bash
 # Render all view markers in every .md file
