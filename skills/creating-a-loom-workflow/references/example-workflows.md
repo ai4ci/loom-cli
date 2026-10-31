@@ -25,6 +25,7 @@ classDiagram
     %% @prefix src: <repo:src/> .
     %% @prefix test: <repo:test/> .
     %% @prefix ticket: <https://github.com/my-org/my-repo/issues/> .
+    class ticket
     class WorkStatus {
         <<enumeration>>
         backlog
