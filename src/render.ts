@@ -90,8 +90,8 @@ export function scanViewMarkers(text: string): ViewMarker[] {
 
   while ((match = re.exec(text)) !== null) {
     const raw = match[1]!.trim();
-    // Skip <!-- loom view: end --> markers, they are terminators not views.
-    if (raw === "end") continue;
+    // Terminators: bare `end`, or `<name> end` for the view that owns them.
+    if (raw === "end" || raw.endsWith(" end")) continue;
     const start = match.index;
 
     // Parse optional query-string parameters.
@@ -109,11 +109,24 @@ export function scanViewMarkers(text: string): ViewMarker[] {
       }
     }
 
-    // Find matching <!-- loom view: end --> (the first one after start).
-    const endRe = /<!--\s*loom\s+view:\s*end\s*-->/g;
-    endRe.lastIndex = match.index + match[0].length;
-    const endMatch = endRe.exec(text);
-    const end = endMatch ? endMatch.index + endMatch[0].length : start;
+    // Find the terminator: `<name> end` if present after this opener, else
+    // the first bare `end`. A missing terminator ends at the next opener or
+    // EOF, so an authoring page never needs to write `end` by hand.
+    const own = new RegExp(`<!--\\s*loom\\s+view:\\s*${escapeRegExp(view)}\\s+end\\s*-->`);
+    let end = match.index + match[0].length;
+    const rest = /<!--\s*loom\s+view:\s*(.+?)\s*-->/g;
+    rest.lastIndex = end;
+    let candidate: RegExpExecArray | null;
+    while ((candidate = rest.exec(text)) !== null) {
+      const raw2 = candidate[1]!.trim();
+      if (own.test(candidate[0]) || raw2 === "end") {
+        end = candidate.index + candidate[0].length;
+        break;
+      }
+      // Any other opener terminates an unterminated section.
+      if (!raw2.endsWith(" end")) { end = candidate.index; break; }
+    }
+    if (end === match.index + match[0].length) end = text.length;
 
     markers.push({ view, params, start, end });
   }
@@ -124,6 +137,11 @@ export function scanViewMarkers(text: string): ViewMarker[] {
 // ---------------------------------------------------------------------------
 // Parameter substitution
 // ---------------------------------------------------------------------------
+
+/** Escape a string for literal use inside a RegExp. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function escapeSqlLiteral(value: string): string {
   return `'${value.replace(/\\'/g, "''").replace(/'/g, "''")}'`;
@@ -307,7 +325,7 @@ function updateSection(text: string, marker: ViewMarker, renderedMd: string): st
   const section = renderedMd
     ? `${opening}\n\n${renderedMd}\n`
     : `${opening}\n`;
-  return `${head}${section}<!-- loom view: end -->${tail}`;
+  return `${head}${section}<!-- loom view: ${marker.view} end -->${tail}`;
 }
 
 /** True when a render would change the section in this file. */
@@ -357,12 +375,14 @@ export async function renderAll(
 
     const link = { graph, fromPath: toRepoRelative(cfg, file) };
     let updated = text;
-    for (const marker of markers) {
+    // Render right-to-left: earlier markers' offsets stay valid.
+    for (const marker of [...markers].reverse()) {
       const { markdown, debug } = await renderView(cfg, marker.view, marker.params, namedViews, link);
       note(`${file}: view ${debug.name}\n  ${debug.sql.replaceAll("\n", "\n  ")}`);
       updated = updateSection(updated, marker, markdown);
       rendered.push({ file, view: marker.view });
     }
+    rendered.reverse();
     writeFileSync(file, updated, "utf8");
   }
 
