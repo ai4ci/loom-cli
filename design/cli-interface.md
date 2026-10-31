@@ -233,7 +233,11 @@ its innermost anchor at input time (never stored).
 Expand inline views (see `design/inline-views.md`): `<!-- loom view: ... -->`
 markers in markdown and `%% @view` definitions in the model.
 
-- default: rewrite each marker's section in place with the query result.
+- default: rewrite each marker's section in place with the query result. The
+  section runs from the marker to its end marker (`<!-- loom view: <name>
+  end -->`, also written when absent — a bare `<!-- loom view: end -->` is
+  accepted); a missing end marker means an empty section, so surrounding
+  prose is never replaced.
 - `--check`: no-write dry run; exit 1 naming stale repo-relative files, exit 0
   silently when everything is fresh. For CI.
 - `--debug`: also emit `<file>: view <name>` plus the resolved SQL (indented

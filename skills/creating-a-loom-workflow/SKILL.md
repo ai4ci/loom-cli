@@ -722,5 +722,5 @@ class: index
 ---
 
 <!-- loom view: indexed_issues?status=open -->
-<!-- loom view: end -->
+<!-- loom view: indexed_issues end -->
 ```
