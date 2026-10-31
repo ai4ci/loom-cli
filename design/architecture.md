@@ -53,50 +53,70 @@ cardinalities are UML-style (`"0..*"`, `"1"`); the keyword aliases `one` and
 Mermaid comments in the model file carry loom annotations:
 
 ```
-%% @path <class> <path>      where a class's files live
-%% @prefix <name>: <target>  external uri namespace (see 2.4)
-%% @view <name>              named SQL view for inline rendering
-%% SELECT ...                (continuation lines of a @view)
+%% @prefix <name>: <target> .   where a class's files live, or an external namespace
+%% @view <name>                 named SQL view for inline rendering
+%% SELECT ...                   (continuation lines of a @view)
 ```
+
+The angle brackets and trailing ` .` (turtle form) are optional. The retired
+`%% @path` annotation is a hard error, `model/path-removed`, whose fix names
+the equivalent `%% @prefix` line.
 
 ### 2.2 Path resolution
 
 A class root is where a class's files live; the class name is the uri scheme
-(`issue:a.md` lives under the `issue` root). Resolution rules
-(`src/path-resolution.ts`):
+(`issue:a.md` lives under the `issue` root). `@base` is implicit: the
+directory holding `document-model.mmd`. `repo:` is a reserved,
+always-available scheme meaning the repository root. Resolution
+(`src/path-resolution.ts` `resolveClassRoots`; worked cases in
+`design/prototype.md`):
 
-1. **Explicit `%% @path <class> <path>`.**
-   - Leading `/`: repo-rooted — `<REPO>/<path>`.
-   - Otherwise: relative to the resolved path of the first UML parent; a
-     class with no parent resolves against the design root.
-   - Terminal anchors (`src`, `resource`) are always repo-rooted, even with a
-     relative annotation.
-2. **No annotation.** A class with a UML parent appends the class name to the
-   parent's path; otherwise the class name is appended to the design root.
-3. Subclasses nest under their parent's root automatically
-   (`firstResolvedAncestor`), so `test` under `src` gets `src/test/...` unless
-   it declares its own root.
+1. **Explicit `%% @prefix <class>: <target> .`** wins.
+   - `repo:x/` — repo-rooted.
+   - An absolute URL (`https:`, `file:`, …) — external (2.4); ignores `@base`.
+   - Anything else — relative to `@base`; `../` allowed, but a path escaping
+     the repository is `path/escapes-repo`.
+2. **No prefix, with a UML parent:** the parent's root plus the class name
+   (`src <|-- main` with `src: <repo:src/>` gives `src/main`). Parents with no
+   root (abstract, enumeration) are skipped. Parents that disagree are
+   `path/ambiguous-inheritance` — give the class an explicit prefix.
+3. **No prefix, no rooted parent:** `@base` plus the class name.
+
+There is no special case for `src` or `resource`: with the model in
+`design/`, an unprefixed `src` resolves to `design/src`, so a real source
+tree needs `%% @prefix src: <repo:src/> .`. Only a model at the repo root gets
+`src/` for free.
 
 Collision between two classes resolving to the same path is a hard error
-`path/collision`; a path escaping the repo is `path/escapes-repo`; a missing
-directory is a warning `path/missing-directory`. There is exactly one root per
-class — no multi-root ambiguity to resolve at read time.
+`path/collision`; a missing directory is a warning `path/missing-directory`.
+There is exactly one root per class.
+
+The repository root is the git root; `LOOM_REPO_ROOT` overrides it (e.g. one
+self-contained loom per monorepo package, so `repo:` means the package).
+
+`loom rebuild` also writes `<model dir>/.loom/namespaces.ttl`: an export-only
+turtle file with `@base` and one `@prefix` per rooted class (always in `repo:`
+form, so it stays portable) plus the external prefixes. It is regenerated, not
+read, and is checked in (only `.loom/db/` is ignored).
 
 ### 2.3 Terminal anchors
 
 `src` and `resource` are non-instantiable classes that anchor the two
 exterior families: `src:` addresses code files and symbols,
 `resource:` addresses anything referenced but not modelled as a document.
-Subclasses (`test`, `spec`, …) inherit the family role but get their own
-root. Membership is determined by the schema (`inReservedFamily`), and
+Subclasses (`test`, `spec`, …) inherit the family role and nest under the
+family root like any other subclass (`src/test`) unless given their own
+prefix. Membership is determined by the schema (`inReservedFamily`), and
 relations may target the family or a subclass.
 
 ### 2.4 External prefixes
 
 ```
-%% @prefix gh: https://github.com/org/repo/issues/
+%% @prefix gh: <https://github.com/org/repo/issues/> .
+%% @prefix data: <file:///srv/shared-data/> .
 ```
 
+A prefix whose target is an absolute URL is external.
 The target **must** end in `/` or `#` (`model/prefix-delimiter`) — expansion is
 string concatenation, so the delimiter is what makes `gh:6` unambiguous.
 A prefix wins over a same-named class. Resolving `gh:6` yields the expanded
@@ -195,11 +215,11 @@ See `design/source-linkage.md`.
 
 ## 8. Environment
 
-Only one environment variable is read: `LOOM_DEFAULT_ROOT`, overriding the
-discovered design root. Everything else is either discovered or declared in
-the model.
+Two environment variables are read: `LOOM_DEFAULT_ROOT` overrides the
+discovered design root, and `LOOM_REPO_ROOT` overrides the git root.
+Everything else is either discovered or declared in the model.
 
 ## 9. Deferred
 
-MCP server, RDF/Turtle export, watermarks, pre-commit hook, concurrency — see
+MCP server, RDF export of relations, watermarks, pre-commit hook, concurrency — see
 `cli-interface.md` §9 and `design/open-issues.md`.

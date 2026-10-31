@@ -10,7 +10,7 @@ import { instance, makeRepo } from "./helpers.ts";
  * assertion here fails if the column degrades to VARCHAR.
  */
 const MODEL = `classDiagram
-    %% @path issue /design/issue
+    %% @prefix issue: <repo:design/issue/> .
     class Stage {
         <<enumeration>>
         triage
@@ -111,7 +111,7 @@ test("a list of enum values becomes an ENUM[] column", async () => {
   const root = makeRepo({
     ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": `classDiagram
-    %% @path issue /design/issue
+    %% @prefix issue: <repo:design/issue/> .
     class Stage {
         <<enumeration>>
         triage
@@ -141,7 +141,7 @@ test("an enum inside a composite attribute is an ENUM field of the STRUCT", asyn
   const root = makeRepo({
     ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": `classDiagram
-    %% @path issue /design/issue
+    %% @prefix issue: <repo:design/issue/> .
     class Stage {
         <<enumeration>>
         triage
@@ -176,7 +176,7 @@ test("an enumeration clashing with a built-in type name fails with a loom diagno
   const root = makeRepo({
     ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": `classDiagram
-    %% @path issue /design/issue
+    %% @prefix issue: <repo:design/issue/> .
     class date {
         <<enumeration>>
         early
@@ -199,7 +199,7 @@ test("two enumerations keep their own independent orderings", async () => {
   const root = makeRepo({
     ".loom.yaml": "designRoot: design\n",
     "design/document-model.mmd": `classDiagram
-    %% @path issue /design/issue
+    %% @prefix issue: <repo:design/issue/> .
     class Stage {
         <<enumeration>>
         triage

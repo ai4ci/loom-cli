@@ -86,7 +86,7 @@ test("resolveUri: without prefixes a class scheme resolves as before", () => {
 // ---------------------------------------------------------------------------
 
 const PREFIX_MODEL = `classDiagram
-    %% @path issue design/issue
+    %% @prefix issue: <repo:design/issue/> .
     %% @prefix gh: https://github.com/org/repo/issues/
     class issue {
         +string title
@@ -96,7 +96,7 @@ const PREFIX_MODEL = `classDiagram
 `;
 
 const PREFIX_MODEL_NO_REL = `classDiagram
-    %% @path issue design/issue
+    %% @prefix issue: <repo:design/issue/> .
     %% @prefix gh: https://github.com/org/repo/issues/
     class issue {
         +string title
@@ -155,7 +155,7 @@ test("body get renders a curie as the expanded url", async () => {
 test("model check reports a prefix target missing its delimiter", async () => {
   const root = makeRepo({
     "design/document-model.mmd": `classDiagram
-    %% @path issue design/issue
+    %% @prefix issue: <repo:design/issue/> .
     %% @prefix gh: https://github.com/org/repo/issues
     class issue {
         +string title
@@ -171,8 +171,8 @@ test("model check reports a prefix target missing its delimiter", async () => {
 test("validate: an external relation target is not flagged as missing", async () => {
   const root = makeRepo({
     "design/document-model.mmd": `classDiagram
-    %% @path issue design/issue
-    %% @path resource design/resource
+    %% @prefix issue: <repo:design/issue/> .
+    %% @prefix resource: <repo:design/resource/> .
     %% @prefix gh: https://github.com/org/repo/issues/
     class issue {
         +string title

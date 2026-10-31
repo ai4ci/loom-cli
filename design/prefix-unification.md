@@ -1,9 +1,14 @@
 # Prefix unification prototype
 
-Draft for discussion — not yet implemented. Companion to the "unify `@path`
-under `@base`/`@prefix`" section in `open-issues.md`. Everything here is
-hand-written against the *proposed* semantics; the current CLI still runs
-`@path`.
+**Implemented in 0.10.0.** Companion to the "unify `@path` under
+`@base`/`@prefix`" section in `open-issues.md`; current reference is
+`architecture.md` §2.2.
+
+One clarification made during implementation: a parent with no root
+(abstract, enumeration) is skipped when inheriting, so a subclass of an
+abstract `resource` with no prefix of its own defaults to `@base/<name>` —
+an explicit prefix is how you get `repo:resource/fixture/`, not a
+requirement.
 
 ## The scheme
 

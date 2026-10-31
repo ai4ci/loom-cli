@@ -19,12 +19,12 @@ A lightweight software development workflow for feature tracking and architectur
 
 ```mermaid
 classDiagram
-    %% @path story design/stories
-    %% @path bug design/bugs
-    %% @path adr design/decisions
-    %% @path src /src
-    %% @path test /test
-    %% @prefix ticket: https://github.com/my-org/my-repo/issues/
+    %% @prefix story: <repo:design/stories/> .
+    %% @prefix bug: <repo:design/bugs/> .
+    %% @prefix adr: <repo:design/decisions/> .
+    %% @prefix src: <repo:src/> .
+    %% @prefix test: <repo:test/> .
+    %% @prefix ticket: <https://github.com/my-org/my-repo/issues/> .
     class WorkStatus {
         <<enumeration>>
         backlog
@@ -78,7 +78,7 @@ classDiagram
 
 ### Key Model Decisions
 - `work` is an abstract parent defining shared fields (`title`, `status`, `created`). Subclasses inherit them automatically.
-- `src` is Loom's built-in terminal anchor family for source code. Subclassing `src <|-- test` creates a specialized terminal anchor scheme `test:` pointing at `/test`.
+- `src` is Loom's built-in terminal anchor family for source code. Subclassing `src <|-- test` creates a `test:` scheme; it would nest at `src/test` by default, so the explicit `%% @prefix test: <repo:test/> .` points it at `/test`.
 - Code and tests are referenced down to symbol level via anchors: `src:auth.ts#login`, `test:auth.test.ts#testLogin`.
 - `story` points to `adr` via `constrained-by`, giving architectural context to feature implementation.
 - `ticket:` is an external prefix (a GitHub issue tracker), so a story can link
@@ -180,7 +180,7 @@ designRoot: gtd
 
 ```mermaid
 classDiagram
-    %% @path resource gtd/files
+    %% @prefix resource: <repo:gtd/files/> .
     class ActionStatus {
         <<enumeration>>
         next
@@ -244,7 +244,7 @@ classDiagram
         +date performed
     }
 
-    %% @prefix bookmark: https://example.com/bookmarks/
+    %% @prefix bookmark: <https://example.com/bookmarks/> .
 
     project "0..*" --> "0..1" area : supports
     action "0..*" --> "0..1" project : advances
@@ -259,7 +259,7 @@ classDiagram
 - `action` is classified by `ActionStatus` (`next`, `waiting`, `scheduled`, `someday`, `done`) and physical `Context` (`home`, `office`, `computer`, `phone`, `errands`, `anywhere`).
 - `project` has an explicit desired `outcome` and belongs to an `area` of responsibility.
 - `action "0..*" --> "0..1" project : advances` allows standalone actions (actions that do not belong to a multi-step project).
-- `%% @prefix bookmark: https://example.com/bookmarks/` lets notes link to web
+- `%% @prefix bookmark: <https://example.com/bookmarks/> .` lets notes link to web
   bookmarks by curie (`bookmark:looming`) — no local file needed, and
   `validate` skips the filesystem check for external targets.
 - DuckDB queries easily find stalled projects (active projects with no pending `next` action).

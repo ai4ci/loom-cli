@@ -9,6 +9,7 @@ import { instance, makeRepo } from "./helpers.ts";
 // `implements` runs source -> doc, so it is a different relation from the
 // forward `implemented-by`, declared in the opposite direction.
 const MODEL = `classDiagram
+    %% @prefix src: <repo:src/> .
     class issue {
         +string title
     }

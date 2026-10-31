@@ -116,11 +116,11 @@ It discovers `document-model.mmd` in the git repository:
 - The parent directory of `document-model.mmd` becomes `$LOOM_DEFAULT_ROOT` (e.g. `docs` or `design`).
 - Optional environment overrides:
   - `LOOM_DEFAULT_ROOT`: Specifies the root directory relative to repository root if multiple models exist.
-  - `LOOM_DEFAULT_SRC_ROOT`: Defaults to `src`. Where suporting code lives/
-  - `LOOM_DEFAULT_RESOURCE_ROOT`: Defaults to `resource`. Where data resources, inputs or outputs live.
+  - `LOOM_REPO_ROOT`: Overrides the git root, which is what `repo:` means — e.g. one self-contained loom per monorepo package.
 
-Class paths and directory mappings are declared directly in the model via `%% @path <class> <path>` directives
-at the beginning of the mermaid class file (see Appendix A).
+Class locations are declared directly in the model via `%% @prefix <class>: <target> .`
+lines at the beginning of the mermaid class file (see Appendix A). Unless the model sits
+at the repository root, `src` needs one: `%% @prefix src: <repo:src/> .`
 
 Run initial validation to verify graph structure:
 ```bash
@@ -309,7 +309,7 @@ This repository uses \`loom\` governed by \`$LOOM_DEFAULT_ROOT/document-model.mm
 Refer to \`using-loom-cli\` for general CLI operation syntax.
 
 ## 1. Document Classes & Locations
-- Issues: \`issue:<name>.md\` -> \`$LOOM_DEFAULT_ROOT/issue/<name>.md\` (class default: no %% @path needed)
+- Issues: \`issue:<name>.md\` -> \`$LOOM_DEFAULT_ROOT/issue/<name>.md\` (class default: no %% @prefix needed)
 - ADRs: \`adr:<name>.md\` -> \`$LOOM_DEFAULT_ROOT/adr/<name>.md\` (class default)
 
 ## 2. Common Operations
@@ -382,57 +382,61 @@ Always run before committing changes to design docs:
 
 ---
 
-## Appendix A — Path resolution reference (`%% @path`)
+## Appendix A — Path resolution reference (`%% @prefix`)
 
-Class roots are declared in the model itself, not in a config file. Each
-`%% @path <class> <path>` directive binds a class scheme to a directory.
+Class roots are declared in the model itself, not in a config file. A
+`%% @prefix <class>: <target> .` line binds a class scheme to a location.
+(The old `%% @path` form is rejected with `model/path-removed`; its fix
+names the equivalent `@prefix` line.)
 
 ### A.1 Syntax
 
 ```
-%% @path <class> <path>
+%% @prefix <class>: <target> .
 ```
 
-- `<class>` is the mermaid class name (case-sensitive in the model).
-- `<path>` is one of:
-  - **Absolute** (begins with `/`): resolved against `$REPO_ROOT`.
-    The leading `/` is stripped; `%% @path config /input` → `$REPO_ROOT/input`.
-  - **Relative** (no leading `/`): taken as a literal repo-relative path.
-    The class's directory is exactly what you wrote — join it onto nothing.
-  - **Default**: with no annotation, the class takes its own name at the
-    relevant base (see A.3).
+- `@base` is implicit: the directory holding `document-model.mmd`.
+- `<target>` must end in `/` (or `#`), and is one of:
+  - **`repo:path/`** — repo-rooted: `%% @prefix config: <repo:input/> .` → `$REPO_ROOT/input`.
+    `repo:` is reserved and always available; it means the git root, or
+    `LOOM_REPO_ROOT` if set.
+  - **Relative** (`issues/`, `../src/`) — resolved against `@base`.
+  - **Absolute URL** (`https://…/`, `file:///…/`) — external (Appendix B).
+- **Default** with no prefix: see A.3.
 
-### A.2 The three terminal anchors
+### A.2 `src` and `resource`
 
-The design root (parent of `document-model.mmd`, overridable by
-`LOOM_DEFAULT_ROOT` or a `.loom.yaml` `designRoot:` key) is the default parent
-of every class path. `src` and `resource` are reserved terminal families —
-no structured YAML, no attributes; each gets its root from `%% @path`
-(defaults `src/` and `resource/` under the repo root). Subclasses inherit the
-family constraints but get their own URI scheme and their own root:
+`src` and `resource` are reserved families — no structured YAML, no
+attributes — but they **resolve like any other class**. With the model in
+`design/`, an unprefixed `src` is `design/src`, so point it at the code:
 
 ```mermaid
-%% @path resource data
+%% @prefix src: <repo:src/> .
+%% @prefix resource: <repo:data/> .
 src <|-- test
 src <|-- main
 resource <|-- fixture
 ```
 
 Resolves to:
-- `src:`     → `$REPO_ROOT/src`
-- `main:`    → `$REPO_ROOT/src/main`           (default under parent)
-- `test:`    → `$REPO_ROOT/src/test`           (default under parent)
+- `src:`      → `$REPO_ROOT/src`
+- `main:`     → `$REPO_ROOT/src/main`   (parent + name)
+- `test:`     → `$REPO_ROOT/src/test`   (parent + name)
 - `resource:` → `$REPO_ROOT/data`
-- `fixture:`  → `$REPO_ROOT/data/test-fixtures` (default under parent)
+- `fixture:`  → `$REPO_ROOT/data/fixture`
+
+Give a subclass its own prefix to put it elsewhere
+(`%% @prefix test: <repo:tests/> .`). A model at the repository root gets
+`src/` and `resource/` for free.
 
 ### A.3 Inheritance-driven default
 
-If a class has no `%% @path`, its root is inferred from its UML parents:
+If a class has no `%% @prefix`:
 
-1. **Subclass of `src` or `resource`**: takes its own name at the
-   repo-relative base (`main <|-- src` → `src/main`).
-2. **Subclass of any other class**: nested under the parent's root.
-3. **No parent**: nested under `$LOOM_DEFAULT_ROOT`.
+1. **With a UML parent**: the parent's root plus the class name. Parents
+   with no root (abstract, enumeration) are skipped. Two parents giving
+   different roots is `path/ambiguous-inheritance` — add a prefix.
+2. **No rooted parent**: `@base` plus the class name.
 
 ### A.4 Path attributes and URI attributes
 
@@ -447,9 +451,10 @@ Two primitive types carry locations:
 ### A.5 Worked example
 
 ```mermaid
-%% @path adr /architecture/design-records
-%% @path fixture test-fixtures
-%% @path config /input
+%% @prefix adr: <repo:architecture/design-records/> .
+%% @prefix src: <repo:src/> .
+%% @prefix fixture: <repo:test-fixtures/> .
+%% @prefix config: <repo:input/> .
 
 classDiagram
     class IssueStatus {
@@ -467,6 +472,12 @@ classDiagram
         +string title
         +string status
     }
+    class src
+    class resource
+    class main
+    class test
+    class fixture
+    class config
     issue "0..*" --> "0..*" issue : blocks
     issue "0..*" --> "0..*" adr : relates-to
     issue "1" --> "0..*" main : fixed-by
@@ -489,10 +500,13 @@ adr:      -> $REPO_ROOT/architecture/design-records
 src:      -> $REPO_ROOT/src
 main:     -> $REPO_ROOT/src/main
 test:     -> $REPO_ROOT/src/test
-resource: -> $REPO_ROOT/resource
-fixture:  -> $REPO_ROOT/fixture
+resource: -> $REPO_ROOT/docs/resource
+fixture:  -> $REPO_ROOT/test-fixtures
 config:   -> $REPO_ROOT/input
 ```
+
+`loom rebuild` writes these as turtle to `docs/.loom/namespaces.ttl`
+(export-only, checked in).
 
 ### A.6 Rules & edge cases
 
@@ -500,7 +514,7 @@ config:   -> $REPO_ROOT/input
   is a validation error.
 - **Missing directory**: Loom emits a warning for every resolved root that
   does not exist on disk, including default paths under UML parents — so
-  typos in class names or `@path` arguments surface consistently for
+  typos in class names or `@prefix` targets surface consistently for
   both humans and agents.
 - **Canonicalisation**: a filesystem path resolves to the longest matching
   class URI scheme (`src/auth.ts` → `main:auth.ts` if `main` is `src/main`).
@@ -512,11 +526,12 @@ config:   -> $REPO_ROOT/input
 
 ## Appendix B — External prefixes (`%% @prefix`)
 
-A curie usually names a class bound by `%% @path`, but a model can also bind a
-scheme to something outside the repository:
+A curie usually names a class located by `%% @prefix` or its default, but a
+prefix whose target is an absolute URL binds a scheme to something outside the
+repository:
 
 ```
-%% @prefix gh: https://github.com/my-org/my-project/issues/
+%% @prefix gh: <https://github.com/my-org/my-project/issues/> .
 ```
 
 - The target **must end in `/` or `#`** — curie expansion is string

@@ -31,7 +31,7 @@ export function instance(frontmatter: string, markdown = ""): string {
 export function defaultModel(annotations: Record<string, string> = {}): string {
   const lines = [
     "classDiagram",
-    ...Object.entries(annotations).map(([cls, p]) => `    %% @path ${cls} ${p}`),
+    ...Object.entries(annotations).map(([cls, p]) => `    %% @prefix ${cls}: <repo:${p}/> .`),
     "    class issue {",
     "        +string title",
     "        +string status",

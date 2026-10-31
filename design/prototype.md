@@ -2,7 +2,8 @@
 
 Companion to `prefix-unification.md`. Six minimal cases, each a repository
 layout with a `document-model.mmd` and the `.ttl` loom would generate. These
-double as test fixtures when the unified scheme is implemented. Every case
+are the acceptance tests in `test/prefix-unification.test.ts` (implemented in
+0.10.0). Every case
 follows the agreed semantics:
 
 - `@base` is implicit = the directory containing `document-model.mmd`

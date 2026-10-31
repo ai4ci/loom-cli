@@ -168,7 +168,7 @@ export function parseModel(text: string): {
 
   // The mermaid grammar collapses the whole file into a single `diagram_class`
   // node, so comments are not separately reported as children. Scan the
-  // source line by line to collect `%% @path` annotations.
+  // source line by line to collect `%% @prefix` and `%% @view` annotations.
   const comments: { text: string; line: number }[] = [];
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {

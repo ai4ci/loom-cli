@@ -20,7 +20,7 @@ import { commit, planChangeset } from "./mutate.ts";
 import { loadGraph, resolvePath, validateGraph } from "./graph.ts";
 import { renderCommand } from "./render.ts";
 import { validateInstance } from "./instance.ts";
-import { loadModel } from "./model/load.ts";
+import { loadModel, writeNamespaces } from "./model/load.ts";
 import { writeReport } from "./report.ts";
 import { serialise, type OutputFormat } from "./output.ts";
 import { canonicalise, formatUri, parseUri, resolveUri } from "./uri.ts";
@@ -269,9 +269,9 @@ function applyOps(ctx: LoadedContext, ops: Op[], options: { dryRun?: boolean }):
 
 async function rebuildCommand(ctx: LoadedContext): Promise<CommandOutput> {
   const { cfg, roots } = ctx;
-  const { schema } = loadModel(cfg);
-  const { graph } = loadGraph(cfg, schema, roots);
-  return { value: await rebuild(graph) };
+  const model = loadModel(cfg);
+  const { graph } = loadGraph(cfg, model.schema, roots);
+  return { value: { ...(await rebuild(graph)), namespaces: writeNamespaces(cfg, model) } };
 }
 
 async function queryCommand(ctx: LoadedContext, sql: string): Promise<CommandOutput> {

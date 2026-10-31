@@ -53,7 +53,7 @@ export function inReservedFamily(schema: SchemaIR, name: string): boolean {
  * reserved-family roots themselves.
  *
  * Subclasses of `src`/`resource` ARE instantiable — they each declare their
- * own `%% @path`. Only the bare roots are non-instantiable: they are abstract
+ * own `%% @prefix` (or inherit one). Only the bare roots are non-instantiable: they are abstract
  * shapes of the source/resource family rather than concrete kinds.
  */
 export function isInstantiable(schema: SchemaIR, name: string): boolean {
