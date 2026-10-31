@@ -226,17 +226,20 @@ classDiagram
 ## Open Issues
 
 <!-- loom view: blocking_issues -->
-<!-- loom view: end -->
+<!-- loom view: blocking_issues end -->
 
 ## By Status
 
 <!-- loom view: by_status -->
-<!-- loom view: end -->
+<!-- loom view: by_status end -->
 ```
 
-Running `loom render` replaces the span between the markers with the query
-result as a markdown table (2–4 columns), bullet list (1 column), or compact
-bold-key list (5+ columns). `loom render --check` is the CI-safe variant
+Running `loom render` replaces the span between a marker and its end marker
+with the query result as a markdown table (2–4 columns), bullet list (1
+column), or compact bold-key list (5+ columns). End markers are qualified
+(`<!-- loom view: <name> end -->`) so several views can share one page; a
+missing end marker is fine — `loom render` inserts it (a bare
+`<!-- loom view: end -->` is also accepted). `loom render --check` is the CI-safe variant
 that exits 1 if any marker would change.
 
 ### Parameters
@@ -658,7 +661,7 @@ title: Open Issues
 # Open Issues
 
 <!-- loom view: open_issues -->
-<!-- loom view: end -->
+<!-- loom view: open_issues end -->
 ```
 
 Processed by: `loom render` → replaces the span with a table. Mark old
@@ -672,8 +675,8 @@ to `loom index` (but keeping `class: index` does not break anything).
 2. Verify the query works: `loom rebuild && loom query "<your SQL>"`.
 3. Open the index file, remove the `view:` key from frontmatter (leave
    `class: index` — harmless), and replace the `<!-- loom:links start -->`
-   / `<!-- loom:links end -->` pair with `<!-- loom view: <name> -->` /
-   `<!-- loom view: end -->`.
+   / `<!-- loom:links end -->` pair with `<!-- loom view: <name> -->`
+   (the end marker is inserted by `loom render`).
 4. Run `loom render` to fill in the table.
 5. Delete the old generated content between the markers — `loom render`
    replaces it anyway, but the file is cleaner to read before CI runs.
