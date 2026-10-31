@@ -29,7 +29,7 @@ substituted with escaped SQL values at render time.
 ```markdown
 <!-- loom view: openIssues?status=open -->
 
-<!-- loom view: end -->
+<!-- loom view: openIssues end -->
 
 <!-- loom view: SELECT subject, object FROM edge WHERE relation = 'blocks' -->
 
@@ -39,9 +39,14 @@ substituted with escaped SQL values at render time.
 A marker is either a view name with optional query-string parameters
 (`name?param=value&other=v2`) or a literal `SELECT`/`WITH` query. Comma
 separation in a parameter (`status=open,closed`) expands to `IN ('open',
-'closed')`; a single value to `= 'open'`. The section between the marker and
-`<!-- loom view: end -->` is replaced on render (an absent end marker makes
-the section empty, immediately after the marker).
+'closed')`; a single value to `= 'open'`. The section between the marker and its end marker is replaced on render. The
+end marker is qualified — `<!-- loom view: <name> end -->` — so several views
+can share a page without their terminators being confused with each other
+(that is also what `loom render` writes; a bare `<!-- loom view: end -->` is
+still accepted when scanning, for files written by hand or by older looms).
+An absent end marker is fine while authoring: the section then reaches the
+next view marker (or the end of the file), and `loom render` inserts the
+qualified end marker on its first run.
 
 ## 4. Output rules
 

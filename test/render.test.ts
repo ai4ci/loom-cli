@@ -94,12 +94,12 @@ test("scanViewMarkers: inline SQL marker", () => {
   assert(markers[0]!.view.startsWith("SELECT"));
 });
 
-test("scanViewMarkers: without end marker", () => {
+test("scanViewMarkers: without end marker ends at EOF", () => {
   const md = "<!-- loom view: adrs -->";
   const markers = scanViewMarkers(md);
   assert.equal(markers.length, 1);
-  // end should equal start when no closing marker
-  assert.equal(markers[0]!.end, markers[0]!.start);
+  // Section reaches EOF so the terminator is inserted on render.
+  assert.equal(markers[0]!.end, md.length);
 });
 
 test("scanViewMarkers: multiple markers", () => {
@@ -168,7 +168,7 @@ test("render: named view renders its content into the file", async () => {
   // The rendered file should have marker content replaced with a table
   const content = readFileSync(`${root}/README.md`, "utf8");
   assert(content.includes("<!-- loom view: open_issues -->"));
-  assert(content.includes("<!-- loom view: end -->"));
+  assert(content.includes("<!-- loom view: open_issues end -->"));
   // Should contain table header
   assert(content.includes("| uri"));
   assert(content.includes("| title"));

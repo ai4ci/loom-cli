@@ -261,8 +261,11 @@ loom index --check
 ### Inline Views (Live Query Results in Any Markdown File)
 
 Scans every `.md` file in the repo for `<!-- loom view: ... -->` markers and
-replaces the content between the marker and its matching `<!-- loom view: end -->`
-with live data from the DuckDB graph.
+replaces the content between the marker and its matching end marker with live
+data from the DuckDB graph. End markers are qualified — `<!-- loom view: <name>
+end -->` — so several views can share one page; a bare `<!-- loom view: end -->`
+is still accepted. A missing end marker is fine: the section ends at the next
+marker (or EOF) and `loom render` inserts the qualified end automatically.
 
 ```bash
 # Render all view markers in every .md file
@@ -298,7 +301,7 @@ Then use the name in any markdown file:
 ## Open Issues
 
 <!-- loom view: open_issues -->
-<!-- loom view: end -->
+<!-- loom view: open_issues end -->
 ```
 
 #### Inline SQL (no model definition needed)
