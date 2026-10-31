@@ -54,14 +54,16 @@ set as an env var.
 - **Abstract Classes**: Label with `<<abstract>>` (not directly instantiated). Used both as supertypes and as the type of class-typed attributes.
 - **Inheritance**: Expressed with `<|--` (e.g. `document <|-- adr`).
 - **Source Code Integration**: Use or subclass the reserved `src` class.
-  - Subclasses of `src` define custom root directories or schemes (e.g. `src <|-- test`).
+  - Subclasses of `src` get their own scheme and nest under `src`'s folder (`src <|-- test` → `src/test`) unless given their own `%% @prefix`.
+  - Unless the model sits at the repo root, declare where code lives: `%% @prefix src: <repo:src/> .`
   - Loom forbids structured YAML on the `src` family — anchors carry no frontmatter.
- **Data or external resource integration**: Use or subclass the reserved `resource` class.
-  - Subclasses of `resource` define custom root directories or schemes (e.g. `resource <|-- test`), or external resources (e.g. `resource <|-- github-issue`).
+- **Data or external resource integration**: Use or subclass the reserved `resource` class.
+  - Subclasses of `resource` get their own scheme and nest under `resource`'s folder (e.g. `resource <|-- fixture`); an external resource is a class whose `%% @prefix` target is a URL (e.g. `%% @prefix gh: <https://github.com/org/repo/issues/> .`, see Appendix B).
   - Loom classes can link to `resource` family items but cannot link from, and they have no metadata.
 - **Inline Views**: Define named SQL queries directly in the model with `%% @view <name>`, a multi-line body using continuation `%%` lines. Parameters use `$name` placeholders; list params are comma-separated (see Step 6).
 - **Relations**: Arrow `-->` with cardinality at both ends and relation label:
   ```mermaid
+  %% @prefix src: <repo:src/> .
   classDiagram
       class IssueStatus {
           <<enumeration>>

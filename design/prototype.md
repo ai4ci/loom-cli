@@ -44,6 +44,7 @@ classDiagram
     class issue {
         +string title
     }
+    class test
     src <|-- test
     issue "0..*" --> "0..*" src : implemented-by
 ```
@@ -87,6 +88,7 @@ classDiagram
     class issue {
         +string title
     }
+    class test
     src <|-- test
 ```
 
@@ -245,6 +247,8 @@ repo/
 classDiagram
     class src
     class resource
+    class main
+    class fixture
     src <|-- main
     resource <|-- fixture
 ```

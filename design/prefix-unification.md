@@ -58,6 +58,8 @@ classDiagram
     }
     class gh
     class fixture
+    class main
+    class test
     class WorkStatus {
         <<enumeration>>
         open

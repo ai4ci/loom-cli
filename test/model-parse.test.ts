@@ -143,3 +143,18 @@ test("a relation with no cardinality defaults to 0..*", () => {
   assert.deepEqual(r.toCardinality, { min: 0, max: null });
   assert.deepEqual(r.fromCardinality, { min: 0, max: null });
 });
+
+test("comment groups separated by a blank line at the end of the diagram parse", () => {
+  const { diagnostics } = parseModel(`classDiagram
+    class issue {
+        +string title
+    }
+
+    %% @view a
+    %% SELECT uri FROM issue
+
+    %% @view b
+    %% SELECT title FROM issue
+`);
+  assert.deepEqual(diagnostics.filter((d) => d.code === "model/syntax"), []);
+});

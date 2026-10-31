@@ -161,6 +161,11 @@ export function parseModel(text: string): {
   comments: { text: string; line: number }[];
 } {
   const diagnostics: Diagnostic[] = [];
+  // The grammar chokes on comment groups split by blank lines at the end of a
+  // diagram; comments are collected below, so drop them (keeping the line,
+  // so line numbers hold) before parsing.
+  const source = text;
+  text = text.replace(/^[ \t]*%%.*$/gm, "");
   const tree = pack.getParser("mermaid").parse(text) as unknown as { rootNode(): Node };
   const root = tree.rootNode();
   const slice = (n: Node) => text.slice(n.startByte(), n.endByte());
@@ -170,7 +175,7 @@ export function parseModel(text: string): {
   // node, so comments are not separately reported as children. Scan the
   // source line by line to collect `%% @prefix` and `%% @view` annotations.
   const comments: { text: string; line: number }[] = [];
-  const lines = text.split("\n");
+  const lines = source.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     const trimmed = line.trim();
