@@ -281,7 +281,7 @@ async function queryCommand(ctx: LoadedContext, sql: string): Promise<CommandOut
 }
 
 /** A query arg that looks like a design uri (any scheme), not free text. */
-const HAS_URI = /^[a-zA-Z][A-Za-z0-9+.-]*:/;
+const HAS_URI = /^[a-zA-Z][A-Za-z0-9_.-]*:/;
 
 async function similarCommand(
   ctx: LoadedContext,

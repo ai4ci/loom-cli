@@ -93,3 +93,9 @@ test("the one-slash form is no longer malformed, it is the curie form", () => {
   // `issue:/a.md` normalises to the same place as `issue:a.md`.
   assert.equal(parseUri("issue:/a.md").path, "a.md");
 });
+
+test("an underscore is a legal scheme character (snake_case class names)", () => {
+  const parsed = parseUri("issue_status:a.md");
+  assert.equal(parsed.scheme, "issue_status");
+  assert.equal(parsed.path, "a.md");
+});
