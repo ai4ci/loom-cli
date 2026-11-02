@@ -42,11 +42,14 @@ set as an env var.
 
 ### Rules & Conventions
 - **Class naming**: A class name becomes a URI scheme, so it must start with a
-  letter and contain only letters, digits, and underscores — `issue`,
-  `in_progress`, `adr2` are fine. Dashes, dots and spaces are rejected by the
-  mermaid grammar (`adr-001` fails with `model/syntax`; write `adr001` or
-  `adr_001`). Matching is case-insensitive (`ADR:` and `adr:` are the same
-  scheme) but the canonical form is the lower-case one used in the model.
+  letter and contain only letters, digits, and underscores. Dashes, dots and
+  spaces are rejected by the mermaid grammar (`adr-001` fails with
+  `model/syntax`). **Prefer camelCase** (`issueStatus`, `adr2`): no
+  underscores in uris to type or read, and it stays a valid scheme should the
+  model ever be exported to RDF (which does not allow `_` in scheme names).
+  snake_case works but is second choice. Matching is case-insensitive
+  (`ADR:` and `adr:` are the same scheme); the canonical form is the
+  spelling used in the model.
 - **Instantiable Classes**: Concrete classes that become Markdown files.
 - **Attributes**: One per line with visibility and type (e.g. `+string title`, `+IssueStatus status`).
   - Supported primitives: `string`, `int`, `float`, `bool`, `date`, `path`, `uri`.

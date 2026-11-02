@@ -53,10 +53,12 @@ model (e.g. `gh:`) expand to absolute URLs; ordinary schemes (`https:`,
 `mailto:`) pass through untouched.
 
 A scheme — and therefore a class name — starts with a letter and contains
-only letters, digits, and underscores (`issue`, `in_progress`, `adr2`).
-Scheme lookup is case-insensitive; the model's spelling is canonical.
-Mermaid rejects dashes, dots, and spaces in class names outright
-(`model/syntax`), so `adr-001` must be written `adr001` or `adr_001`.
+only letters, digits, and underscores. CamelCase is the recommended style
+(`issueStatus`, `adr2`): shorter uris and portable to RDF, which forbids
+`_` in scheme names. snake_case works but is second choice. Mermaid rejects
+dashes, dots, and spaces in class names outright (`model/syntax`), so
+`adr-001` must be written `adr001`. Scheme lookup is case-insensitive; the
+model's spelling is canonical.
 
 ## 2. Output contract
 
