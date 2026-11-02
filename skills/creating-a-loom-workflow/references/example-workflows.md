@@ -1,9 +1,10 @@
 # Example Loom Workflows
 
-Two concrete, validated reference workflows showing how to design a Mermaid document model, configure paths and indexes, and write the companion agent skill that puts it into practice.
+Three concrete, validated reference workflows showing how to design a Mermaid document model, configure paths and indexes, and write the companion agent skill that puts it into practice.
 
 1. **[Agile Feature Flow](#1-agile-feature-flow)**: Traceable software development linking user stories, ADRs, source code anchors, and test anchors.
 2. **[Getting Things Done (GTD)](#2-getting-things-done-gtd)**: Personal productivity system with inbox capture, projects, next actions with contexts, and review routines.
+3. **[Local Knowledge Base](#3-local-knowledge-base-obsidian-style)**: Obsidian-style research vault — sources flow in, summaries distil them, themes organise the summaries; the inbox is a view, not a list.
 
 ---
 
@@ -267,14 +268,19 @@ classDiagram
 
 ## Dynamic Views (`gtd/NEXT.md`, `gtd/PROJECTS.md`)
 
-```markdown
----
-class: index
-view:
-  query: "SELECT uri, title FROM action WHERE status = 'next' ORDER BY context, title"
----
+Declare the queries in the model, then let `loom render` fill the boards:
 
+```markdown
 # Next Actions
+
+<!-- loom view: next_actions -->
+```
+
+```mermaid
+    %% @view next_actions
+    %% SELECT uri, title, context FROM action
+    %% WHERE status = 'next'
+    %% ORDER BY context, title
 ```
 
 ## Companion Skill (`skills/gtd-workflow/SKILL.md`)
@@ -368,3 +374,83 @@ loom create review:review-$(date +%Y-W%W).md title="Weekly Review $(date +%Y-W%W
 loom index
 ```
 ```
+
+---
+
+# 3. Local Knowledge Base (Obsidian-style)
+
+A research vault with sources flowing in continuously, summaries distilling them, and themes organising the summaries. Designed for an Obsidian-style folder layout (`kb/sources/`, `kb/summaries/`, `kb/themes/`) — loom never touches Obsidian's `.obsidian/` config, and Obsidian is happy to open the same files.
+
+The core pattern: **inputs arrive as sources with no summary; the pending-work view is "sources whose `summary` attribute is still empty"; a summary links back to its source; themes link the summaries together.** Processing the inbox means summarising a source — the attribute fills in and the item disappears from the board on its own.
+
+## Configuration (`.loom.yaml`)
+
+```yaml
+designRoot: kb
+```
+
+## Mermaid Model (`kb/document-model.mmd`)
+
+```mermaid
+classDiagram
+    %% @prefix source: <repo:kb/sources/> .
+    %% @prefix summary: <repo:kb/summaries/> .
+    %% @prefix theme: <repo:kb/themes/> .
+    class source {
+        +string title
+        +string summary?
+    }
+    class summary {
+        +string title
+        +string body
+    }
+    class theme {
+        +string title
+    }
+
+    summary "0..*" --> "0..1" source : summarises
+    theme "0..*" --> "0..*" summary : collects
+```
+
+### Key Model Decisions
+- `source` is anything that arrives: web clippings, meeting notes, papers. Its `summary?` attribute is **empty until processed** — an optional attribute that is absent from the frontmatter reads as SQL `NULL`, which is what makes the unsummarised view a one-liner.
+- `summary` is a *document*, not an attribute string, when the distillation needs to be a page in its own right (backlinks, its own links to themes). The `summarises` edge ties it to exactly one source.
+- `theme` collects summaries. Themes with zero summaries still show up — that is the signal to go reading.
+- External material (web pages, videos) can live behind an external prefix instead: `%% @prefix web: <https://example.com/reading/> .` — see Appendix B of the creating skill.
+
+## Dynamic Views (`kb/INBOX.md`, `kb/THEMES.md`)
+
+```markdown
+# Unsummarised sources
+
+<!-- loom view: SELECT uri, title FROM source WHERE summary IS NULL ORDER BY uri -->
+```
+
+```markdown
+# Themes
+
+<!-- loom view: SELECT t.title, count(e.object) AS n FROM theme t LEFT JOIN edge e ON e.subject = t.uri AND e.relation = 'collects' GROUP BY t.title ORDER BY t.title -->
+```
+
+`loom render` fills both. The inbox list shrinks as summaries are written; the theme table grows as `collects` links are added.
+
+## Working the Vault
+
+```bash
+# What is waiting to be summarised: the inbox view above, or directly
+loom query "SELECT uri, title FROM source WHERE summary IS NULL"
+
+# Process one source: write a summary page and link it back
+loom create summary:article-embeddings.md title="Embeddings article" body="What the article claims is..."
+loom link summary:article-embeddings.md summarises source:clippings/article.md
+
+# File a summary under a theme
+loom link theme:embeddings.md collects summary:article-embeddings.md
+
+# Sources still missing a summary after a link was made? Just re-render.
+loom render
+```
+
+## Companion Skill
+
+A `kb-workflow` skill follows the same shape as the two above: capture (append to `source:`), process (create `summary:` + link), curate (link `theme:` → `summary:`), weekly review (render the boards, check for themes with `n = 0`).

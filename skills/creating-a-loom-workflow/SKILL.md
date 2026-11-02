@@ -72,8 +72,8 @@ set as an env var.
 - **Inline Views**: Define named SQL queries directly in the model with `%% @view <name>`, a multi-line body using continuation `%%` lines. Parameters use `$name` placeholders; list params are comma-separated (see Step 6).
 - **Relations**: Arrow `-->` with cardinality at both ends and relation label:
   ```mermaid
-  %% @prefix src: <repo:src/> .
   classDiagram
+      %% @prefix src: <repo:src/> .
       class IssueStatus {
           <<enumeration>>
           open
@@ -281,6 +281,36 @@ one value).
 
 Inline SQL needs no `%% @view` annotation; just write `SELECT` after the marker.
 
+### Selective views: what to leave out
+
+Views are usually more useful when they show a *subset*. Patterns that come
+up constantly:
+
+```sql
+-- Issue lists that hide closed work:
+SELECT uri, title FROM issue WHERE status != 'closed'
+
+-- Tasks still to do, excluding ones blocked by another task:
+SELECT uri, title FROM task
+WHERE status != 'done'
+  AND uri NOT IN (SELECT object FROM edge WHERE relation = 'blocks')
+
+-- Inputs with no summary yet (pending work on a knowledge base):
+SELECT uri, title FROM source WHERE summary IS NULL
+
+-- Count per linked item (theme with its number of summaries):
+SELECT t.title, count(e.object) AS n
+FROM theme t
+LEFT JOIN edge e ON e.subject = t.uri AND e.relation = 'collects'
+GROUP BY t.title ORDER BY t.title
+```
+
+The `edge` table has columns `subject`, `relation`, `object` — use it in a
+subquery whenever a view depends on links rather than attributes. Prefer a
+named `%% @view` when the query is reused across pages; use inline SQL for
+one-offs. An open-ended issue list (`SELECT uri, title FROM issue`) is fine
+for a dashboard, but day-to-day boards want the filter.
+
 ### When to use vs `loom index`
 
 | Feature | `loom index` | `loom render` |
@@ -304,7 +334,7 @@ Reference this skill in the `AGENTS.md` file.
 
 Copy the `document-model.mmd` file into the skill's `references/` subdirectory for future re-use.
 
-For complete, end-to-end examples of document models paired with their companion workflow skills (including Agile feature tracking and Getting Things Done), see:
+For complete, end-to-end examples of document models paired with their companion workflow skills (Agile feature tracking, Getting Things Done, and an Obsidian-style knowledge base whose inbox is a view), see:
 - [`references/example-workflows.md`](references/example-workflows.md)
 
 ### Example template for Generated Workflow Skill:
