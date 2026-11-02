@@ -80,6 +80,14 @@ containment**: the link belongs to the innermost declaration whose span
 contains the comment line, which is robust to the comment moving within the
 body.
 
+Each source file is attributed to its **most-specific src-family class**:
+every class inheriting from `src` declares a root, and the file belongs to
+the class whose root is the longest prefix of its path. This matters when a
+subclass refines a parent's territory — `coretest: <repo:packages/core/test/>`
+under `src: <repo:packages/>` — so relations declared on the subclass (or its
+parent) validate against the subclass, and the diagnostic names the owning
+scheme rather than the broad ancestor.
+
 ### 4.2 Writing
 
 `loom link src:auth.ts#login implements issue:a.md` inserts the comment as

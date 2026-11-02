@@ -187,3 +187,36 @@ test("a changeset that fails validation leaves the source untouched", async () =
   assert.equal(r.code, 1);
   assert.equal(read(root, "src/app.ts"), TS);
 });
+
+test("a reverse link in a nested src subclass is validated against that subclass", async () => {
+  // coretest owns packages/core/test; its ancestor src owns packages. The
+  // file must be classified as coretest (most-specific root), not src, or
+  // the relation declared on test would be rejected with
+  // source/invalid-reverse-relation "from src".
+  const root = makeRepo({
+    "design/document-model.mmd": `classDiagram
+    %% @prefix src: <repo:packages/> .
+    %% @prefix coretest: <repo:packages/core/test/> .
+    class task {
+        +string title
+    }
+    class test {
+        <<abstract>>
+    }
+    class coretest
+
+    test "0..*" --> "0..*" task : tests
+
+    src <|-- test
+    test <|-- coretest
+`,
+    "design/task/project-registry-and-exclusions.md": instance("class: task\ntitle: Project Registry"),
+    "packages/core/test/schema.test.ts": "export function evaluateUriGrantsSuite() {}\n",
+  });
+
+  const link = await run(["--cwd", root, "link", "coretest:schema.test.ts#evaluateUriGrantsSuite", "tests", "task:project-registry-and-exclusions.md"]);
+  assert.equal(link.code, 0, link.err + link.out);
+
+  const validate = await run(["--cwd", root, "validate"]);
+  assert.equal(validate.code, 0, validate.out);
+});
