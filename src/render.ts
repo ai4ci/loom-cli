@@ -441,6 +441,9 @@ export async function renderAll(
   // Loaded once so uri cells can link with real titles.
   const { graph } = loadGraph(cfg, schema, roots);
 
+  // Render every file in memory first: if any view fails, nothing is written
+  // anywhere, so a failed render cannot leave a half-updated repo.
+  const updates: { file: string; content: string }[] = [];
   for (const file of files) {
     const text = readFileSync(file, "utf8");
     const markers = scanViewMarkers(text);
@@ -456,8 +459,9 @@ export async function renderAll(
       rendered.push({ file, view: marker.view });
     }
     rendered.reverse();
-    writeFileSync(file, updated, "utf8");
+    updates.push({ file, content: updated });
   }
+  for (const update of updates) writeFileSync(update.file, update.content, "utf8");
 
   return { rendered, debug: debugLines };
 }

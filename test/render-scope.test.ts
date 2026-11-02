@@ -113,3 +113,14 @@ test("render --check fails on an unknown view too", async () => {
   assert.match(check.out + check.err, /render\/unknown-view/);
 });
 
+
+test("one unknown view aborts the whole run, even healthy files", async () => {
+  const healthy = "<!-- loom view: backlog -->\n\n<!-- loom view: backlog end -->\n";
+  const root = repoWithIssue({
+    "design/good.md": healthy,
+    "design/bad.md": "<!-- loom view: typo -->\n\nx\n\n<!-- loom view: typo end -->\n",
+  });
+  const r = await run(["--cwd", root, "render"]);
+  assert.equal(r.code, 1);
+  assert.equal(readFileSync(path.join(root, "design/good.md"), "utf8"), healthy);
+});
