@@ -13,6 +13,8 @@ export interface InstanceFile {
   markdown: string;
   /** Line ending of the source, restored on write. */
   eol: "\n" | "\r\n";
+  /** Indentation the source uses for sequence items, preserved on write. */
+  seqIndent: string;
 }
 
 function findFrontmatterEnd(text: string): { start: number; after: number } | null {
@@ -33,16 +35,26 @@ export function parseInstance(raw: string): InstanceFile {
   const eol = raw.includes("\r\n") ? "\r\n" : "\n";
   const text = eol === "\r\n" ? raw.replace(/\r\n/g, "\n") : raw;
 
-  if (!text.startsWith("---\n")) return { frontmatter: null, markdown: text, eol };
+  if (!text.startsWith("---\n")) return { frontmatter: null, markdown: text, eol, seqIndent: "" };
 
   const end = findFrontmatterEnd(text);
-  if (end === null) return { frontmatter: null, markdown: text, eol };
+  if (end === null) return { frontmatter: null, markdown: text, eol, seqIndent: "" };
 
   return {
     frontmatter: parseDocument(text.slice(4, end.start)),
     markdown: text.slice(end.after),
     eol,
+    // The yaml lib always emits two-space sequence indentation; re-indenting
+    // on write would make every untouched list a whitespace-only diff and burn
+    // blame history, so remember the file's own style instead.
+    seqIndent: seqIndentOf(text.slice(4, end.start)),
   };
+}
+
+/** Indentation before the first ` - ` item in the raw frontmatter text. */
+function seqIndentOf(frontmatter: string): string {
+  const match = /^([ \t]+)\s*(- )/m.exec(frontmatter);
+  return match?.[1] ?? "";
 }
 
 export function stringifyInstance(file: InstanceFile): string {
@@ -51,9 +63,19 @@ export function stringifyInstance(file: InstanceFile): string {
     text = file.markdown;
   } else {
     const body = enforceSafeScalars(file.frontmatter).toString({ lineWidth: 0 });
-    text = `---\n${body}---\n${file.markdown}`;
+    text = `---\n${reindentSequences(body, file.seqIndent)}---\n${file.markdown}`;
   }
   return file.eol === "\r\n" ? text.replace(/\n/g, "\r\n") : text;
+}
+
+/**
+ * Re-indent sequence items the file originally used. The yaml lib puts items
+ * two spaces past the key; shifting every `- ` line to the recorded indent
+ * keeps serialised output byte-stable for files that were written by hand.
+ */
+function reindentSequences(yaml: string, indent: string): string {
+  if (indent === "  ") return yaml;
+  return yaml.replace(/^(  )(- )/gm, (_match, _pad, dash) => indent + dash);
 }
 
 /** Content of the protected link block, or null when there is none. */

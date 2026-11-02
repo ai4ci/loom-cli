@@ -376,18 +376,17 @@ export function validateGraph(graph: Graph): Diagnostic[] {
       }
       if (owner === null) return;
       const name: string = owner;
+      // Only a word the model actually permits from this class is a link;
+      // anything else is ordinary human prose ("TODO:", "NOTE:", "see:") and
+      // must be ignored, not validated.
       for (const rl of extractReverseLinks(code, lang, cfg.anchorPolicy)) {
+        if (!schema.relations.some((r) => r.name === rl.relation && isSubclassOf(schema, name, r.from))) {
+          continue;
+        }
         if (!graph.instances.has(rl.target)) {
           found.push(error(
             "source/dangling-reverse-link",
             `comment points to non-existent ${rl.target}`,
-            { uri: `${name}:${rel}`, line: rl.line },
-          ));
-        }
-        if (!schema.relations.some((r) => r.name === rl.relation && isSubclassOf(schema, name, r.from))) {
-          found.push(error(
-            "source/invalid-reverse-relation",
-            `relation "${rl.relation}" is not permitted from ${name}`,
             { uri: `${name}:${rel}`, line: rl.line },
           ));
         }

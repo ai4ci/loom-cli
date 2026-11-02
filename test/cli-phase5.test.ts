@@ -17,6 +17,7 @@ const MODEL_WITH_SRC = `classDiagram
     src <|-- R
 
     issue "1" --> "0..*" src : implemented-by
+    src "0..*" --> "0..*" issue : documents
 `;
 
 function repo(): string {
@@ -79,7 +80,7 @@ test("validate catches dangling reverse link comment in source file", async () =
     "design/document-model.mmd": MODEL_WITH_SRC,
     "design/issue/one.md": instance("class: issue\ntitle: One"),
     "src/app.ts": `
-// implemented-by: issue:does-not-exist.md
+// documents: issue:does-not-exist.md
 export function foo() {}
 `,
   });

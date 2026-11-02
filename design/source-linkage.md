@@ -71,7 +71,7 @@ A language the pack does not know produces `source/unsupported-language`.
 A reverse link is a comment line of the shape:
 
 ```ts
-// implements issue:a.md
+// implements: issue:a.md
 ```
 
 `REVERSE_LINK_RE` accepts the comment tokens `//`, `#`, `--`, `/* */`, a bare
@@ -79,6 +79,15 @@ relation term, and a curie target. Attribution is **whole-declaration
 containment**: the link belongs to the innermost declaration whose span
 contains the comment line, which is robust to the comment moving within the
 body.
+
+The regex is deliberately permissive, so validation filters what it reads:
+a comment word is only treated as a link when the model declares that
+relation **from the file's class** (links written in source run code →
+document, so the relation must exist on the src side). `// TODO: <url>`
+and similar prose in languages where `// WORD: text` is ordinary writing
+are ignored, not validated — an unknown word in a human comment is
+evidence of nothing. A permitted relation with a target that has no
+instance file is still `source/dangling-reverse-link`.
 
 Each source file is attributed to its **most-specific src-family class**:
 every class inheriting from `src` declares a root, and the file belongs to
