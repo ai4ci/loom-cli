@@ -19,7 +19,7 @@ import {
   isSubclassOf,
 } from "./model/schema.ts";
 import type { Cardinality, SchemaIR } from "./model/types.ts";
-import { classRoot, type ClassRoots } from "./path-resolution.ts";
+import { classRoot, type ClassRoots, under } from "./path-resolution.ts";
 import { contentAtHead, inferRename } from "./drift.ts";
 import { similarity } from "./similarity.ts";
 import { canonicalise, formatUri, parseUri, resolveUri } from "./uri.ts";
@@ -348,14 +348,34 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     }
   }
 
-  // Scan source files for reverse-link comments (architecture §7)
-  for (const [name] of schema.classes) {
-    if (!isSubclassOf(schema, name, "src")) continue;
-    const root = classRoot(graph.roots, name);
+  // Scan source files for reverse-link comments (architecture §7). Each file
+  // is visited once and attributed to its most-specific src-family class
+  // (longest matching root), so a nested subclass prefix (coretest under
+  // test under src) owns its files even though ancestor roots overlap.
+  const srcSchemes = [...schema.classes.keys()].filter((n) => isSubclassOf(schema, n, "src"));
+  const visited = new Set<string>();
+  for (const scheme of srcSchemes) {
+    const root = classRoot(graph.roots, scheme);
     if (root === "") continue;
     const absRoot = absolute(cfg, root);
     if (!existsSync(absRoot)) continue;
     scanSourceTree(cfg, absRoot, (rel, lang, code) => {
+      if (visited.has(rel)) return;
+      visited.add(rel);
+      // Most specific src-family class whose root contains this file.
+      let owner: string | null = null;
+      let bestRoot = "";
+      for (const candidate of srcSchemes) {
+        const candidateRoot = classRoot(graph.roots, candidate);
+        if (candidateRoot === "") continue;
+        if (!under(rel, candidateRoot)) continue;
+        if (candidateRoot.length >= bestRoot.length) {
+          owner = candidate;
+          bestRoot = candidateRoot;
+        }
+      }
+      if (owner === null) return;
+      const name: string = owner;
       for (const rl of extractReverseLinks(code, lang, cfg.anchorPolicy)) {
         if (!graph.instances.has(rl.target)) {
           found.push(error(

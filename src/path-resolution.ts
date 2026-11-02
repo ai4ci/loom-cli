@@ -96,7 +96,7 @@ export function normalisePath(raw: string): string {
 }
 
 /** True iff `p` equals `root` or sits under it. */
-function under(p: string, root: string): boolean {
+export function under(p: string, root: string): boolean {
   return root !== "" && (p === root || p.startsWith(`${root}/`));
 }
 
