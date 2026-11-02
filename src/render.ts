@@ -95,8 +95,13 @@ function codeRanges(text: string): [number, number][] {
   while ((open = fence.exec(text)) !== null) {
     const char = open[1]![0]!;
     const len = open[1]!.length;
-    const close = new RegExp(`^ {0,3}${char === "`" ? "`" : "~"}{${len},}[ \\t]*$`, "m");
-    close.lastIndex = open.index + open[0].length;
+    const from = open.index + open[0].length;
+    // Global is load-bearing: exec() IGNORES lastIndex on a plain /m regex,
+    // and a bare closing fence matches its own opener — the search then
+    // rewound behind the opener and the outer loop spun forever on any
+    // untagged fence pair (downstream hang report, 0.10.12).
+    const close = new RegExp(`^ {0,3}${char === "`" ? "`" : "~"}{${len},}[ \t]*$`, "gm");
+    close.lastIndex = from;
     const end = close.exec(text);
     const stop = end === null ? text.length : end.index + end[0].length;
     ranges.push([open.index, stop]);

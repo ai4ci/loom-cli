@@ -1,6 +1,6 @@
 {
   "name": "loom",
-  "version": "0.10.12",
+  "version": "0.10.13",
   "description": "Model-driven markdown documentation graph with typed relations, DuckDB projections and source code linkage",
   "type": "module",
   "license": "MIT",

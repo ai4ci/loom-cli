@@ -124,3 +124,56 @@ test("one unknown view aborts the whole run, even healthy files", async () => {
   assert.equal(r.code, 1);
   assert.equal(readFileSync(path.join(root, "design/good.md"), "utf8"), healthy);
 });
+
+// Regression: codeRanges rewound the fence scan on untagged fence pairs, so
+// render spun at 100% CPU forever (downstream report, v0.10.12). The timeout
+// is the point: a future spin must fail the suite, not hang CI.
+test("untagged fence pairs do not hang render", { timeout: 10_000 }, async () => {
+  const docs = [
+    "Before.",
+    "",
+    "```",
+    "foo",
+    "```",
+    "",
+    "```",
+    "bar",
+    "```",
+    "",
+    "<!-- loom view: backlog -->",
+    "<!-- loom view: backlog end -->",
+    "",
+  ].join("\n");
+  const root = repoWithIssue({ "design/doc.md": docs });
+  const r = await run(["--cwd", root, "render"]);
+  assert.equal(r.code, 0, r.err);
+  const out = readFileSync(path.join(root, "design/doc.md"), "utf8");
+  // The real view after the fences still rendered (uri + title = a table)...
+  assert.match(out, /\| uri \| title \|/);
+  assert.match(out, /Alpha/);
+  // ...and the fenced blocks are untouched.
+  assert.match(out, /```\nfoo\n```/);
+});
+
+test("fence awareness follows CommonMark close rules", async () => {
+  const docs = [
+    "```text",
+    "<!-- loom view: backlog -->",
+    "```",
+    "",
+    "~~~",
+    "<!-- loom view: backlog -->",
+    "~~~",
+    "",
+    "````",
+    "```",
+    "<!-- loom view: backlog -->",
+    "```",
+    "````",
+    "",
+  ].join("\n");
+  const root = repoWithIssue({ "design/doc.md": docs });
+  const r = await run(["--cwd", root, "render"]);
+  assert.equal(r.code, 0, r.err);
+  assert.equal(readFileSync(path.join(root, "design/doc.md"), "utf8"), docs);
+});
