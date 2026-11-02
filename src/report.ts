@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { absolute, type Config } from "./config.ts";
+import { ensureLoomDir, loomDir } from "./duckdb.ts";
 import type { Diagnostic, Report } from "./diagnostics.ts";
 
 export const REPORT_FILENAME = "VALIDATION.md";
@@ -39,9 +40,15 @@ export function renderReport(report: Report): string {
   return `${lines.join("\n")}\n`;
 }
 
+/**
+ * The report is generated state, not a design document, so it lives under
+ * `.loom/` with the database — gitignored by the directory's own .gitignore,
+ * which keeps `git status` clean after a validate.
+ */
 export function writeReport(cfg: Config, report: Report): string {
-  const target = absolute(cfg, `${cfg.designRoot}/${REPORT_FILENAME}`);
+  ensureLoomDir(cfg);
+  const target = absolute(cfg, `${loomDir(cfg)}/${REPORT_FILENAME}`);
   mkdirSync(path.dirname(target), { recursive: true });
   writeFileSync(target, renderReport(report));
-  return `${cfg.designRoot}/${REPORT_FILENAME}`;
+  return `${loomDir(cfg)}/${REPORT_FILENAME}`;
 }

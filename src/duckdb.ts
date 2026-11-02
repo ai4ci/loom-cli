@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { absolute, type Config } from "./config.ts";
@@ -60,11 +60,17 @@ export function databasePath(cfg: Config): string {
  * databases. Only `db/` is ignored: the rest of `.loom/` is checked in so
  * generated state that must agree with the model travels with the branch.
  */
+/** Entries .loom always keeps out of git; generated state and reports. */
+export const LOOM_IGNORED = ["db/", "VALIDATION.md"];
+
 export function ensureLoomDir(cfg: Config): string {
   const dir = absolute(cfg, loomDir(cfg));
   mkdirSync(dir, { recursive: true });
   const ignoreFile = path.join(dir, ".gitignore");
-  if (!existsSync(ignoreFile)) writeFileSync(ignoreFile, "db/\n");
+  const existing = existsSync(ignoreFile) ? readFileSync(ignoreFile, "utf8") : "";
+  const lines = existing.split("\n").filter((line) => line !== "");
+  const missing = LOOM_IGNORED.filter((entry) => !lines.includes(entry));
+  if (missing.length > 0) writeFileSync(ignoreFile, `${[...lines, ...missing].join("\n")}\n`);
   return dir;
 }
 

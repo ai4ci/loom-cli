@@ -80,7 +80,7 @@ test("a branch name cannot escape the loom directory", () => {
   assert.ok(resolved.startsWith("design/.loom/db/"), resolved);
 });
 
-test("connecting writes a gitignore that excludes only the db directory", async () => {
+test("connecting writes a gitignore that excludes the generated state", async () => {
   const root = makeGitRepo("feat/ignore-me");
   const cfg = config(root);
   const { ensureLoomDir } = await import("../src/duckdb.ts");
@@ -88,5 +88,5 @@ test("connecting writes a gitignore that excludes only the db directory", async 
 
   const ignoreFile = path.join(root, "design", LOOM_DIR, ".gitignore");
   assert.ok(existsSync(ignoreFile), "expected design/.loom/.gitignore");
-  assert.equal(readFileSync(ignoreFile, "utf8"), "db/\n");
+  assert.equal(readFileSync(ignoreFile, "utf8"), "db/\nVALIDATION.md\n");
 });
