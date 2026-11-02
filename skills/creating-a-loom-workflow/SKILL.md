@@ -410,7 +410,7 @@ Always run before committing changes to design docs:
 1. \`loom validate --fix\`
 2. \`loom index\`
 3. `loom render` (regenerate any inline view markers)
-4. Verify zero errors in \`design/VALIDATION.md\`
+4. Verify zero errors in \`design/.loom/VALIDATION.md\`
 
 ```
 

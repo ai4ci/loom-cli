@@ -93,7 +93,7 @@ depending on `ok`.
 
 ```yaml
 instances: 3
-report: design/VALIDATION.md
+report: design/.loom/VALIDATION.md
 ok: false
 errors: 1
 warnings: 0
@@ -190,7 +190,8 @@ type rules (§7 `model/`).
 Validate the repository (or one instance) against the model: frontmatter
 against class definitions, links against relations and cardinalities, source
 anchors against the code, file placement against class roots. Writes a human
-report to `designRoot/VALIDATION.md` and returns the report shape.
+report to `.loom/VALIDATION.md` (under the design root, gitignored —
+it is generated state, not a design document) and returns the report shape.
 
 `--fix` repairs what is mechanically repairable — stale link blocks,
 non-canonical uris, renamed symbols — by planning and applying a changeset.

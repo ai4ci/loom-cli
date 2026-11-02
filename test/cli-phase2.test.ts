@@ -27,10 +27,10 @@ test("validate with no uri checks the whole repository", async () => {
   assert.equal(out.instances, 2);
 });
 
-test("validate writes a report to the design folder", async () => {
+test("validate writes a report under .loom, out of the working tree", async () => {
   const root = repo({ "design/issue/a.md": OPEN("A", "blocks: [issue:ghost.md]") });
   await run(["--cwd", root, "validate"]);
-  const report = readFileSync(path.join(root, "design/VALIDATION.md"), "utf8");
+  const report = readFileSync(path.join(root, "design/.loom/VALIDATION.md"), "utf8");
   assert.match(report, /graph\/dangling-link/);
   assert.match(report, /generated/i);
 });
@@ -41,8 +41,26 @@ test("the report is rewritten clean when the problems go away", async () => {
   writeFileSync(path.join(root, "design/issue/a.md"), OPEN("A"));
   const r = await run(["--cwd", root, "validate"]);
   assert.equal(r.code, 0);
-  const report = readFileSync(path.join(root, "design/VALIDATION.md"), "utf8");
+  const report = readFileSync(path.join(root, "design/.loom/VALIDATION.md"), "utf8");
   assert.doesNotMatch(report, /dangling-link/);
+});
+
+test("the report is gitignored so it cannot pollute the working tree", async () => {
+  const root = repo({ "design/issue/a.md": OPEN("A", "blocks: [issue:ghost.md]") });
+  await run(["--cwd", root, "validate"]);
+  const ignore = readFileSync(path.join(root, "design/.loom/.gitignore"), "utf8");
+  assert.match(ignore, /^VALIDATION\.md$/m);
+});
+
+test("an existing .gitignore gains missing entries instead of being skipped", async () => {
+  const root = repo({
+    "design/.loom/.gitignore": "db/\n",
+    "design/issue/a.md": OPEN("A"),
+  });
+  await run(["--cwd", root, "validate"]);
+  const ignore = readFileSync(path.join(root, "design/.loom/.gitignore"), "utf8");
+  assert.match(ignore, /^db\/$/m);
+  assert.match(ignore, /^VALIDATION\.md$/m);
 });
 
 test("validate exits 1 when the repository has errors", async () => {
@@ -127,5 +145,5 @@ test("validate --model does not touch the report file", async () => {
     class issue { +string title }
 `);
   await run(["--cwd", root, "validate", "--model", proposed]);
-  assert.throws(() => readFileSync(path.join(root, "design/VALIDATION.md"), "utf8"));
+  assert.throws(() => readFileSync(path.join(root, "design/.loom/VALIDATION.md"), "utf8"));
 });
