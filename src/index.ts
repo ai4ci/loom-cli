@@ -191,17 +191,32 @@ export async function indexCommand(
   const { cfg, roots } = ctx;
   const { schema } = loadModel(cfg);
   if (options.check) {
+    // A projection behind the files is exactly the drift --check exists to
+    // catch, so rescan the markdown first.
+    if (existsSync(absolute(cfg, databasePath(cfg)))) {
+      const { loadGraph } = await import("./graph.ts");
+      const { refresh } = await import("./duckdb.ts");
+      const { graph } = loadGraph(cfg, schema, roots);
+      await refresh(graph);
+    }
     const stale = await checkIndexes(cfg, schema, roots);
     return {
       updated: [],
       unchanged: stale,
     };
   }
+  // Rebuild if missing; otherwise rescan the markdown so the projection
+  // reflects hand edits (indexes read the projection).
   if (!existsSync(absolute(cfg, databasePath(cfg)))) {
     const { loadGraph } = await import("./graph.ts");
     const { rebuild } = await import("./duckdb.ts");
     const { graph } = loadGraph(cfg, schema, roots);
     await rebuild(graph);
+  } else {
+    const { loadGraph } = await import("./graph.ts");
+    const { refresh } = await import("./duckdb.ts");
+    const { graph } = loadGraph(cfg, schema, roots);
+    await refresh(graph);
   }
   const updates = await regenerateIndexes(cfg, schema, roots);
   return {

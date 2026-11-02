@@ -247,7 +247,9 @@ markers in markdown and `%% @view` definitions in the model.
   accepted); a missing end marker means an empty section, so surrounding
   prose is never replaced.
 - `--check`: no-write dry run; exit 1 naming stale repo-relative files, exit 0
-  silently when everything is fresh. For CI.
+  silently when everything is fresh. For CI. Both `render` and `render
+  --check` rescan the markdown first (hand edits reach the projection
+  through `refresh`, so the check never passes on stale data).
 - `--debug`: also emit `<file>: view <name>` plus the resolved SQL (indented
   two spaces) to stderr; inline markers are named `(inline)`.
 
@@ -288,7 +290,9 @@ loom query "SELECT subject, object FROM edge WHERE relation = 'blocks'"
 
 Regenerate navigational indexes: any markdown file with `class: index`
 frontmatter defines a filtered or SQL-driven listing rendered into its
-protected `loom:links` block. `--check` exits 1 when any index is stale.
+protected `loom:links` block. `--check` exits 1 when any index is stale. Like
+`render --check`, the index commands rescan the markdown before reading the
+projection, so hand edits are always seen.
 
 ### `prefetch <languages...>`
 

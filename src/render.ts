@@ -2,7 +2,7 @@ import { type Diagnostic, error } from "./diagnostics.ts";
 import { type Config, absolute } from "./config.ts";
 import { type ViewAnnotation } from "./model/types.ts";
 import { loadModel } from "./model/load.ts";
-import { databasePath, query, rebuild } from "./duckdb.ts";
+import { databasePath, query, rebuild, refresh } from "./duckdb.ts";
 import { type Graph, loadGraph, relativeLink, titleOf, toRepoRelative } from "./graph.ts";
 import { parseUri, resolveUri } from "./uri.ts";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -348,10 +348,15 @@ export async function renderAll(
   const model = loadModel(cfg);
   const { schema } = model;
 
-  // Rebuild DB if it doesn't exist yet.
+  // Rebuild DB if it doesn't exist yet; otherwise rescan the markdown so the
+  // projection reflects hand edits (render reads the projection, so --check
+  // would otherwise pass on stale data).
   if (!hasStat(absolute(cfg, databasePath(cfg)))) {
     const { graph } = loadGraph(cfg, schema, roots);
     await rebuild(graph);
+  } else {
+    const { graph } = loadGraph(cfg, schema, roots);
+    await refresh(graph);
   }
 
   const namedViews = new Map(model.views.map((v) => [v.name, v]));
@@ -431,6 +436,9 @@ async function checkStale(
   if (!hasStat(absolute(cfg, databasePath(cfg)))) {
     const { graph } = loadGraph(cfg, schema, roots);
     await rebuild(graph);
+  } else {
+    const { graph } = loadGraph(cfg, schema, roots);
+    await refresh(graph);
   }
 
   const namedViews = new Map(model.views.map((v) => [v.name, v]));

@@ -191,11 +191,22 @@ export interface TableSummary {
   rows: number;
 }
 
+// One instance per database file: separate DuckDBInstance objects on the
+// same file do not share WAL state reliably (a second instance could read a
+// stale snapshot mid-checkpoint of the first), and loom opens short-lived
+// connections all over. Rebuild drops the file, so its entry is evicted.
+const instances = new Map<string, Promise<DuckDBInstance>>();
+
 async function connect(cfg: Config): Promise<DuckDBConnection> {
   const target = absolute(cfg, databasePath(cfg));
   ensureLoomDir(cfg);
   mkdirSync(path.dirname(target), { recursive: true });
-  return (await DuckDBInstance.create(target)).connect();
+  let instance = instances.get(target);
+  if (instance === undefined) {
+    instance = DuckDBInstance.create(target);
+    instances.set(target, instance);
+  }
+  return (await instance).connect();
 }
 
 /**
@@ -207,6 +218,7 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
   const target = absolute(cfg, databasePath(cfg));
   rmSync(target, { force: true });
   rmSync(`${target}.wal`, { force: true });
+  instances.delete(target);
 
   const connection = await connect(cfg);
   const tables: TableSummary[] = [];
@@ -294,6 +306,49 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
 
   connection.closeSync();
   return { database: databasePath(cfg), tables };
+}
+
+/**
+ * Bring the projection in line with the files without a full rebuild: delete
+ * every row the graph knows about, re-insert from the graph. Cheaper than
+ * rebuild (no schema setup, embeddings preserved) and makes view/index --check
+ * see hand edits (render/index read the projection; without this they would
+ * pass on stale data).
+ */
+export async function refresh(graph: Graph): Promise<void> {
+  const { cfg, schema } = graph;
+  const connection = await connect(cfg);
+  try {
+    for (const className of [...schema.classes.keys()].sort()) {
+      if (!isInstantiable(schema, className)) continue;
+      await connection.run(`DELETE FROM ${quote(className)} WHERE 1=1`);
+      const attributes = effectiveAttributes(schema, className);
+      const nodes = [...graph.instances.values()]
+        .filter((n) => n.className === className)
+        .sort((a, b) => a.uri.localeCompare(b.uri));
+      for (const node of nodes) {
+        const values = [
+          `'${node.uri.replace(/'/g, "''")}'`,
+          `'${node.id.replace(/'/g, "''")}'`,
+          `'${node.path.replace(/'/g, "''")}'`,
+          ...attributes.map((a) => literal(schema, a, node.data[a.name])),
+        ];
+        await connection.run(`INSERT INTO ${quote(className)} VALUES (${values.join(", ")})`);
+      }
+    }
+    await connection.run("DELETE FROM edge WHERE 1=1");
+    const edges = [...graph.edges].sort((a, b) =>
+      a.from.localeCompare(b.from) || a.relation.localeCompare(b.relation) || a.to.localeCompare(b.to));
+    for (const edge of edges) {
+      const values = [edge.from, edge.relation, edge.to]
+        .map((v) => `'${v.replace(/'/g, "''")}'`)
+        .join(", ");
+      await connection.run(`INSERT INTO edge VALUES (${values})`);
+    }
+  } finally {
+    await connection.run("CHECKPOINT");
+    connection.closeSync();
+  }
 }
 
 /** Strip the generated protected region so it doesn't pollute the embedding. */

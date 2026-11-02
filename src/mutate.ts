@@ -117,7 +117,7 @@ function applyOps(graph: Graph, ops: Op[]): Diagnostic[] {
           id: parsed.path,
           path: pathFor(graph.roots, parsed.scheme, parsed.path),
           data,
-          file: { frontmatter: new Document(data), markdown: "", eol: "\n" },
+          file: { frontmatter: new Document(data), markdown: "", eol: "\n", seqIndent: "" },
           source: "",
         });
         break;
