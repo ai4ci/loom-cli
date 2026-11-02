@@ -124,20 +124,22 @@ test("a missing end marker is inserted on render", async () => {
   assert.ok(!out.includes("[undefined:"), `no unresolved view error:\n${out}`);
 });
 
-test("a view query error still terminates before the next view", async () => {
+test("an unknown view aborts the run before any file is written", async () => {
   const root = issueRepo([]);
   const page = path.join(root, "design/page.md");
-  writeFileSync(page, `<!-- loom view: nope -->
+  const before = `<!-- loom view: nope -->
 <!-- loom view: end -->
 
 <!-- loom view: a -->
 <!-- loom view: end -->
-`);
+`;
+  writeFileSync(page, before);
   const r = await run(["--cwd", root, "render"]);
-  const out = readFileSync(page, "utf8");
-  assert.ok(out.indexOf("loom view: a") < out.lastIndexOf("loom view: a"), `markers intact:\n${out}`);
-  assert.match(out, /_Unknown view "nope"\._/);
-  assert.doesNotMatch(out, /--> end|end --> --/);
+  // Unknown view is a hard error now; nothing is written, so the file keeps
+  // its original shape and no content is lost.
+  assert.equal(r.code, 1, r.out + r.err);
+  assert.match(r.err, /render\/unknown-view/);
+  assert.equal(readFileSync(page, "utf8"), before);
 });
 
 test("render is idempotent once qualified ends are written", async () => {

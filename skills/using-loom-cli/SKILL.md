@@ -341,7 +341,11 @@ literal): `status=open,in_progress` expands to `status IN ('open', 'in_progress'
 | 1+ | 2–4 | markdown table |
 | 1+ | 5+ | compact bold-key list (`**col:** val  **col2:** val2`) |
 | error | any | `_Query failed: <message>_` |
-| — | — | `_Unknown view "<name>"._` if the name is not defined in the model |
+
+An unknown view name is a `render/unknown-view` **error** (exit 1, nothing
+written), not a row. Markers inside fenced code blocks or inline code spans
+are ignored — safe to document the syntax. Files under `node_modules`,
+dot-directories, or matched by `.gitignore` are never touched.
 
 **URI cells become links.** A cell holding a design uri that resolves to an
 existing file renders as `[<title>](<relative path>)` — the document title
