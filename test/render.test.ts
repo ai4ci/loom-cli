@@ -201,7 +201,7 @@ test("render: inline SQL renders into the file", async () => {
   assert(content.includes("1"));
 });
 
-test("render: unknown view produces error message inline", async () => {
+test("render: unknown view is an error and writes nothing", async () => {
   const root = makeRepo({
     "design/document-model.mmd": GRAPH_MODEL,
     "README.md": `# Test\n\n<!-- loom view: nonexistent -->\n<!-- loom view: end -->\n`,
@@ -209,10 +209,12 @@ test("render: unknown view produces error message inline", async () => {
 
   await run(["--cwd", root, "index"]);
   const r = await run(["--cwd", root, "render"]);
-  assert.equal(r.code, 0);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /render\/unknown-view/);
+  assert.match(r.err, /nonexistent/);
 
   const content = readFileSync(`${root}/README.md`, "utf8");
-  assert(content.includes("Unknown view"));
+  assert.equal(content, `# Test\n\n<!-- loom view: nonexistent -->\n<!-- loom view: end -->\n`);
 });
 
 test("render --check exits 1 when a marker would be updated, and writes nothing", async () => {

@@ -1,11 +1,12 @@
-import { type Diagnostic, error } from "./diagnostics.ts";
-import { type Config, absolute } from "./config.ts";
+import { LoomError, type Diagnostic, error } from "./diagnostics.ts";
+import { IGNORED_DIRS, type Config, absolute } from "./config.ts";
 import { type ViewAnnotation } from "./model/types.ts";
 import { loadModel } from "./model/load.ts";
 import { databasePath, query, rebuild, refresh } from "./duckdb.ts";
 import { type Graph, loadGraph, relativeLink, titleOf, toRepoRelative } from "./graph.ts";
 import { parseUri, resolveUri } from "./uri.ts";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import type { ClassRoots } from "./path-resolution.ts";
 
@@ -80,15 +81,54 @@ export interface ViewMarker {
 }
 
 /**
+ * Byte ranges covered by fenced code blocks and inline code spans. A marker
+ * inside one is documentation of the syntax, not a view site: expanding it
+ * would destroy prose in any file that documents loom itself.
+ */
+function codeRanges(text: string): [number, number][] {
+  const ranges: [number, number][] = [];
+  // Fences: three or more backticks/tildes at line start, closed by a fence of
+  // at least the same length. Everything from the opening fence to the closing
+  // one (or EOF for an unclosed fence) is off limits.
+  const fence = /^ {0,3}(`{3,}|~{3,})[^\n]*$/gm;
+  let open: RegExpExecArray | null;
+  while ((open = fence.exec(text)) !== null) {
+    const char = open[1]![0]!;
+    const len = open[1]!.length;
+    const close = new RegExp(`^ {0,3}${char === "`" ? "`" : "~"}{${len},}[ \\t]*$`, "m");
+    close.lastIndex = open.index + open[0].length;
+    const end = close.exec(text);
+    const stop = end === null ? text.length : end.index + end[0].length;
+    ranges.push([open.index, stop]);
+    fence.lastIndex = stop;
+  }
+  // Inline spans: a run of N backticks closed by exactly N. Overlap with the
+  // fence ranges is harmless.
+  const span = /(?<!`)(`+)(?!`)([\s\S]*?)(?<!`)\1(?!`)/g;
+  let spanMatch: RegExpExecArray | null;
+  while ((spanMatch = span.exec(text)) !== null) {
+    ranges.push([spanMatch.index, spanMatch.index + spanMatch[0].length]);
+  }
+  return ranges;
+}
+
+function inRanges(ranges: [number, number][], at: number): boolean {
+  return ranges.some(([from, to]) => at >= from && at < to);
+}
+
+/**
  * Find every `<!-- loom view: ... -->` marker in markdown text.
- * Returns markers in document order.
+ * Returns markers in document order. Markers inside code fences or inline
+ * code spans are skipped: they document the syntax rather than use it.
  */
 export function scanViewMarkers(text: string): ViewMarker[] {
   const re = /<!--\s*loom\s+view:\s*(.+?)\s*-->/g;
   const markers: ViewMarker[] = [];
+  const code = codeRanges(text);
   let match: RegExpExecArray | null;
 
   while ((match = re.exec(text)) !== null) {
+    if (inRanges(code, match.index)) continue;
     const raw = match[1]!.trim();
     // Terminators: bare `end`, or `<name> end` for the view that owns them.
     if (raw === "end" || raw.endsWith(" end")) continue;
@@ -119,6 +159,7 @@ export function scanViewMarkers(text: string): ViewMarker[] {
     rest.lastIndex = end;
     let candidate: RegExpExecArray | null;
     while ((candidate = rest.exec(text)) !== null) {
+      if (inRanges(code, candidate.index)) continue;
       const raw2 = candidate[1]!.trim();
       if (own.test(candidate[0]) || raw2 === "end") {
         end = candidate.index + candidate[0].length;
@@ -229,6 +270,7 @@ export async function renderView(
   params: Record<string, string>,
   namedViews: Map<string, ViewAnnotation>,
   link?: LinkContext,
+  file?: string,
 ): Promise<{ markdown: string; debug: DebugView }> {
   // Check for inline SQL (starts with SELECT).
   const isInline = /^SELECT\b/i.test(view);
@@ -241,10 +283,13 @@ export async function renderView(
   } else {
     const def = namedViews.get(view);
     if (!def) {
-      return {
-        markdown: `_Unknown view "${view}"._`,
-        debug: { name: view, params, sql: `-- unknown view: ${view}` },
-      };
+      throw new LoomError(
+        error(
+          "render/unknown-view",
+          `unknown view "${view}"${file === undefined ? "" : " (in " + file + ")"}`,
+          { fix: `define it with "%% @view ${view}" in document-model.mmd, or fix the marker` },
+        ),
+      );
     }
     sql = substituteParams(def.sql, params);
     name = view;
@@ -297,7 +342,8 @@ function mdFiles(root: string): string[] {
     let entries: string[];
     try { entries = readdirSync(dir); } catch { return; }
     for (const e of entries) {
-      if (e.startsWith(".")) continue;
+      // Vendored and generated trees are not loom's to overwrite.
+      if (e.startsWith(".") || IGNORED_DIRS.has(e)) continue;
       const full = path.join(dir, e);
       let s: ReturnType<typeof statSync>;
       try { s = statSync(full); } catch { continue; }
@@ -307,6 +353,30 @@ function mdFiles(root: string): string[] {
   }
   walk(root);
   return files;
+}
+
+/**
+ * Markdown files render may write to: everything under the repo root except
+ * ignored trees and paths git ignores. Generated output (a `build/` dir,
+ * say) is not loom's to overwrite, and .gitignore is the only ignore ruleset
+ * a repository already has. Outside a git repository only IGNORED_DIRS apply.
+ */
+function renderableMdFiles(cfg: Config): string[] {
+  const files = mdFiles(cfg.repoRoot);
+  if (files.length === 0) return files;
+  let ignored: Set<string>;
+  try {
+    const child = spawnSync("git", ["-C", cfg.repoRoot, "check-ignore", "--stdin"], {
+      input: files.map((f) => toRepoRelative(cfg, f)).join("\n"),
+      encoding: "utf8",
+    });
+    // Exit 0 means some paths matched, 1 means none did, 128 means no repo.
+    if (child.status !== 0 && child.status !== 1) return files;
+    ignored = new Set(child.stdout.split("\n").filter((line) => line !== ""));
+  } catch {
+    return files;
+  }
+  return files.filter((f) => !ignored.has(toRepoRelative(cfg, f)));
 }
 
 function hasStat(p: string): boolean {
@@ -360,7 +430,7 @@ export async function renderAll(
   }
 
   const namedViews = new Map(model.views.map((v) => [v.name, v]));
-  const files = mdFiles(cfg.repoRoot);
+  const files = renderableMdFiles(cfg);
   const rendered: RenderResult[] = [];
   const debugLines: string[] = [];
   const note = (line: string) => {
@@ -380,7 +450,7 @@ export async function renderAll(
     let updated = text;
     // Render right-to-left: earlier markers' offsets stay valid.
     for (const marker of [...markers].reverse()) {
-      const { markdown, debug } = await renderView(cfg, marker.view, marker.params, namedViews, link);
+      const { markdown, debug } = await renderView(cfg, marker.view, marker.params, namedViews, link, toRepoRelative(cfg, file));
       note(`${file}: view ${debug.name}\n  ${debug.sql.replaceAll("\n", "\n  ")}`);
       updated = updateSection(updated, marker, markdown);
       rendered.push({ file, view: marker.view });
@@ -446,7 +516,7 @@ async function checkStale(
 
   const { graph } = loadGraph(cfg, schema, roots);
 
-  for (const file of mdFiles(cfg.repoRoot)) {
+  for (const file of renderableMdFiles(cfg)) {
     const text = readFileSync(file, "utf8");
     const markers = scanViewMarkers(text);
     if (markers.length === 0) continue;
@@ -454,7 +524,7 @@ async function checkStale(
     const link = { graph, fromPath: toRepoRelative(cfg, file) };
     let touched = false;
     for (const marker of markers) {
-      const { markdown, debug: info } = await renderView(cfg, marker.view, marker.params, namedViews, link);
+      const { markdown, debug: info } = await renderView(cfg, marker.view, marker.params, namedViews, link, toRepoRelative(cfg, file));
       if (writeDebug !== undefined) {
         writeDebug(`${file}: view ${info.name}\n  ${info.sql.replaceAll("\n", "\n  ")}`);
       }

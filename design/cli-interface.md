@@ -254,6 +254,13 @@ markers in markdown and `%% @view` definitions in the model.
 - `--debug`: also emit `<file>: view <name>` plus the resolved SQL (indented
   two spaces) to stderr; inline markers are named `(inline)`.
 
+Scope: a marker is only honoured outside fenced code blocks and inline code
+spans — a file may document the syntax safely, fences included. Files under
+`IGNORED_DIRS` (`node_modules`, dot-directories) or matched by `.gitignore`
+are never written; generated output cannot be clobbered. An unknown named
+view is a `render/unknown-view` error (nothing is written, non-zero exit),
+never substituted text in the file.
+
 Uri columns render as `[title](relative-path)` links; external-prefix targets
 render as links to the expanded URL; uris that do not resolve stay plain text.
 
@@ -315,6 +322,7 @@ Codes are stable identifiers; match on these rather than on message text.
 | `source/` | source addressing and reverse links | `dangling-reverse-link`, `ambiguous-anchor`, `unsupported-language`, `not-annotatable`, `verification-failed`, `not-found` |
 | `changeset/` | changeset parsing and application | see below |
 | `query/` | derived database | `no-database`, `failed`, `enum-type` |
+| `render/` | view expansion | `unknown-view` |
 | `ls/` | discovery | `not-found`, `not-a-class`, `not-a-directory` |
 | `body/` | prose editing | `patch-failed` |
 
