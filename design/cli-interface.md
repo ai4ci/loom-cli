@@ -307,7 +307,7 @@ Codes are stable identifiers; match on these rather than on message text.
 | `model/` | model parsing and validation | see below |
 | `instance/` | one instance against the model | see below |
 | `graph/` | cross-file checks | see below |
-| `source/` | source addressing and reverse links | `dangling-reverse-link`, `invalid-reverse-relation`, `ambiguous-anchor`, `unsupported-language`, `not-annotatable`, `verification-failed`, `not-found` |
+| `source/` | source addressing and reverse links | `dangling-reverse-link`, `ambiguous-anchor`, `unsupported-language`, `not-annotatable`, `verification-failed`, `not-found` |
 | `changeset/` | changeset parsing and application | see below |
 | `query/` | derived database | `no-database`, `failed`, `enum-type` |
 | `ls/` | discovery | `not-found`, `not-a-class`, `not-a-directory` |
