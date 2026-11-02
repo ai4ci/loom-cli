@@ -42,9 +42,9 @@ export function joinProse(split: SplitBody): string {
 const LINK_RE = /(!?\[[^\]]*\]\()([^)\s]+)([^)]*\))/g;
 
 /** Anything of the form `scheme:` is a url or a uri, not a relative path. */
-const HAS_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+const HAS_SCHEME = /^[A-Za-z][A-Za-z0-9_.-]*:/;
 /** `scheme:path`, with the superseded `scheme://path` still accepted. */
-const URI_RE = /^([A-Za-z][A-Za-z0-9+.-]*):(?:\/\/)?(.+)$/;
+const URI_RE = /^([A-Za-z][A-Za-z0-9_.-]*):(?:\/\/)?(.+)$/;
 
 function mapLinks(prose: string, map: (target: string) => string | null): string {
   return prose.replace(LINK_RE, (whole, open: string, target: string, close: string) => {

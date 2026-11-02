@@ -37,7 +37,7 @@ export type ExistsCheck = (repoRelativePath: string) => boolean;
  * host `design` with path `/notes.md` — never what loom meant. One slash is
  * just noise. The curie form has no authority and says what it looks like.
  */
-const URI_RE = /^([A-Za-z][A-Za-z0-9+.-]*):(\/\/)?([^]*)$/;
+const URI_RE = /^([A-Za-z][A-Za-z0-9_.-]*):(\/\/)?([^]*)$/;
 
 /** A trailing `.ext`, which makes a slash-free string read as a filename. */
 const FILE_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;

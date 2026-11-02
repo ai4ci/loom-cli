@@ -117,7 +117,7 @@ export function listUri(cfg: Config, graph: Graph, raw: string, options: ListOpt
 } {
   // A bare `scheme:` has no path, which parseUri rejects, so handle it here.
   // The legacy two-slash form is accepted too.
-  const bare = /^([A-Za-z][A-Za-z0-9+.-]*):(?:\/\/)?$/.exec(raw.trim());
+  const bare = /^([A-Za-z][A-Za-z0-9_.-]*):(?:\/\/)?$/.exec(raw.trim());
   const scheme = bare ? bare[1]!.toLowerCase() : parseUri(raw).scheme;
 
   if (RESERVED_SCHEMES.has(scheme)) {
@@ -175,7 +175,7 @@ export function findUri(cfg: Config, graph: Graph, raw: string, options: ListOpt
   parent: string;
   entries: ListEntry[];
 } {
-  const bare = /^([A-Za-z][A-Za-z0-9+.-]*):(\/\/)?$/.exec(raw.trim());
+  const bare = /^([A-Za-z][A-Za-z0-9_.-]*):(\/\/)?$/.exec(raw.trim());
   const scheme = bare ? bare[1]!.toLowerCase() : parseUri(raw).scheme;
   const isSource = !isInstantiable(graph.schema, scheme);
 
