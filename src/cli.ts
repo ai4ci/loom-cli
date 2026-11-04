@@ -35,7 +35,7 @@ export interface CliRun {
 }
 
 // Near the top or bottom of src/cli.ts
-const LOOM_VERSION = "0.10.13"; // Will be updated automatically by build hooks
+const LOOM_VERSION = "0.10.14"; // Will be updated automatically by build hooks
 
 
 /** A command returns data to emit and, optionally, a non-zero exit code. */
