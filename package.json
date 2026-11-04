@@ -17,11 +17,18 @@
     "LICENSE"
   ],
   "scripts": {
-    "version": "node scripts/stamp-version.cjs && git add src/",
+
     "prebuild": "node scripts/stamp-version.cjs",
     "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --test 'test/**/*.test.ts'"
+    "test": "node --test 'test/**/*.test.ts'",
+
+    "build:binary": "npm run build && bun build ./src/cli.ts --compile --outfile ./bin/loom",
+
+    "preversion": "npm run typecheck && npm test",
+    "version": "npm run build:binary && git add src/cli.ts",
+    "postversion": "(git push origin main && git push origin main --tags) || echo 'Automatic push failed (credentials/sandbox block). Push manually using: git push origin main --tags'"
+
   },
   "dependencies": {
     "@duckdb/node-api": "^2.0.0-r.1",
