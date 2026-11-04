@@ -16,6 +16,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "prebuild": "node scripts/stamp-version.cjs",
     "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
