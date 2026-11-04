@@ -11,6 +11,8 @@ This meta-skill guides an agent through establishing a documentation architectur
 
 - Setting up `loom` in a repository for the first time, or updating an existing methodology.
 - Modeling design artefacts (ADRs, RFCs, Issues, Requirements, Test Plans, Services).
+- Modeling a knowledge base (Topics, Themes, References).
+- Modeling project management (Tasks, Goals, Resources).
 - Defining document lifecycle transition rules (e.g. `draft` -> `review` -> `accepted` -> `implemented`).
 - Creating a companion project-specific workflow skill (e.g. `manage-architecture-docs`, `issue-lifecycle-workflow`) tailored to the repository's domain model.
 
@@ -120,6 +122,7 @@ source:
   transparentKinds: [export_statement, statement_block]
 ```
 
+Loom parses code in the repository to allow you to link code and documents. 
 Grammars are not configured: they download lazily on first parse, and
 `loom prefetch <languages...>` warms them for offline use.
 
@@ -140,70 +143,7 @@ loom validate
 
 ---
 
-## Step 4: Configure Navigational Index Views
-
-Human readers navigate the corpus via Markdown links. Create index files under `$LOOM_DEFAULT_ROOT` with `class: index` and a `view`.
-
-### Filter View Example (`$LOOM_DEFAULT_ROOT/INDEX.md`)
-```markdown
----
-class: index
-title: Project Index
-view:
-  class: issue
-  where:
-    status: open
-  orderBy: created DESC
----
-
-# Open Issues
-
-<!-- loom:links start -->
-<!-- loom:links end -->
-```
-
-### SQL Query View Example (`$LOOM_DEFAULT_ROOT/adrs/INDEX.md`)
-```markdown
----
-class: index
-title: Architecture Decision Records
-view:
-  query: "SELECT uri, title FROM adr ORDER BY accepted_date DESC"
----
-
-# Architecture Decisions
-
-<!-- loom:links start -->
-<!-- loom:links end -->
-```
-
-Generate the link blocks:
-```bash
-loom index
-```
-
----
-
-## Step 5: Codify the Lifecycle & Transition Rules
-
-Identify state machines and invariants that agents or contributors must respect when modifying documents.
-
-For example, for an Issue Tracker:
-1. **Creation**:
-   - Must specify `title` and initial `status: open`.
-   - Filename slug matches title (e.g. `issue:fix-token-refresh.md`).
-2. **Transition: `open` -> `in_progress`**:
-   - Permitted if no unresolved blocking issues (`blocks`).
-   - Agent links relevant source files or branches.
-3. **Transition: `in_progress` -> `resolved`**:
-   - Must have at least one `implemented-by` or `implements` relation pointing to source code.
-   - All tests passing.
-4. **Transition: `resolved` -> `closed`**:
-   - Final review or verification completed.
-
----
-
-## Step 6: Add Inline Views (Live Data in Markdown Files)
+## Step 4: Add Loom graph views (Live Data in Markdown Files)
 
 Add `%% @view` annotations to `document-model.mmd` for SQL queries you want
 to embed in markdown files. Inline views render live data from the DuckDB graph
@@ -311,18 +251,24 @@ named `%% @view` when the query is reused across pages; use inline SQL for
 one-offs. An open-ended issue list (`SELECT uri, title FROM issue`) is fine
 for a dashboard, but day-to-day boards want the filter.
 
-### When to use vs `loom index`
+---
 
-| Feature | `loom index` | `loom render` |
-|---|---|---|
-| Managed link blocks | Yes | No |
-| Editable prose | No | No (read-only output) |
-| Inline in any document | No | Yes |
-| Parameters per invocation | No | Yes (`?key=val`) |
-| CI check | `--check` | `--check` |
+## Step 5: Codify the Lifecycle & Transition Rules
 
-To migrate existing `view:`-based index files to `%% @view` annotations,
-see [Appendix D](#appendix-d--migration-guide-view-frontmatter--view-annotations).
+Identify state machines and invariants that agents or contributors must respect when modifying documents.
+
+For example, for an Issue Tracker:
+1. **Creation**:
+   - Must specify `title` and initial `status: open`.
+   - Filename slug matches title (e.g. `issue:fix-token-refresh.md`).
+2. **Transition: `open` -> `in_progress`**:
+   - Permitted if no unresolved blocking issues (`blocks`).
+   - Agent links relevant source files or branches.
+3. **Transition: `in_progress` -> `resolved`**:
+   - Must have at least one `implemented-by` or `implements` relation pointing to source code.
+   - All tests passing.
+4. **Transition: `resolved` -> `closed`**:
+   - Final review or verification completed.
 
 ---
 
@@ -416,7 +362,16 @@ Always run before committing changes to design docs:
 
 ---
 
-## Step 8: Verification Checklist
+## Step 8: Setup git pre-commit hooks
+
+By running pre-commit hooks that run `loom validate && loom index --check && loom render --check`
+the agent is unable to commit unless the document model is consistent and up to 
+date. Specific lifecycle validation queries can also be run in pre-commit to make
+sure that each commit has had documentation updates.
+
+---
+
+## Step 9: Verification Checklist
 
 1. Model passes `loom model check`.
 2. Graph validates clean with `loom validate`.
@@ -672,6 +627,21 @@ view:
 <!-- loom:links end -->
 ```
 
+### SQL Query View Example (`$LOOM_DEFAULT_ROOT/adrs/INDEX.md`)
+```markdown
+---
+class: index
+title: Architecture Decision Records
+view:
+  query: "SELECT uri, title FROM adr ORDER BY accepted_date DESC"
+---
+
+# Architecture Decisions
+
+<!-- loom:links start -->
+<!-- loom:links end -->
+```
+
 Processed by: `loom index` → generates link block. Works forever.
 
 ### New format (recommended for new files, migrate when convenient)
@@ -707,6 +677,19 @@ title: Open Issues
 Processed by: `loom render` → replaces the span with a table. Mark old
 `class: index` as a data-only annotation — the file is no longer special
 to `loom index` (but keeping `class: index` does not break anything).
+
+### When to `loom render` vs `loom index`
+
+| Feature | `loom index` | `loom render` |
+|---|---|---|
+| Managed link blocks | Yes | No |
+| Editable prose | No | No (read-only output) |
+| Inline in any document | No | Yes |
+| Parameters per invocation | No | Yes (`?key=val`) |
+| CI check | `--check` | `--check` |
+
+`render` can do everything `index` can do and more. The only reason to not use 
+it is if you want the query and the result in the same file.
 
 ### Step-by-step recipe
 
@@ -763,3 +746,4 @@ class: index
 <!-- loom view: indexed_issues?status=open -->
 <!-- loom view: indexed_issues end -->
 ```
+
