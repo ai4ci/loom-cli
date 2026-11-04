@@ -4,13 +4,21 @@
   "description": "Model-driven markdown documentation graph with typed relations, DuckDB projections and source code linkage",
   "type": "module",
   "license": "MIT",
+  "main": "./dist/index.js",
   "bin": {
     "loom": "./dist/cli.js"
   },
   "engines": {
     "node": ">=22"
   },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
+    "version": "node scripts/stamp-version.cjs && git add src/",
+    "prebuild": "node scripts/stamp-version.cjs",
     "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
     "typecheck": "tsc --noEmit",
     "test": "node --test 'test/**/*.test.ts'"

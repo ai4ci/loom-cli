@@ -34,19 +34,9 @@ export interface CliRun {
   err: string;
 }
 
-/**
- * The version from the installed package.json. Both `src/` and `dist/` sit one
- * level below the package root, so the same relative path works whether loom
- * is run from source or from a build.
- */
-function packageVersion(): string {
-  try {
-    const manifest = path.join(import.meta.dirname, "..", "package.json");
-    return (JSON.parse(readFileSync(manifest, "utf8")) as { version?: string }).version ?? "unknown";
-  } catch {
-    return "unknown";
-  }
-}
+// Near the top or bottom of src/cli.ts
+const LOOM_VERSION = "0.10.13"; // Will be updated automatically by build hooks
+
 
 /** A command returns data to emit and, optionally, a non-zero exit code. */
 interface CommandOutput {
@@ -435,7 +425,7 @@ export function buildProgram(
   program
     .name("loom")
     .description("Model-driven markdown documentation graph")
-    .version(packageVersion(), "-v, --version", "print the installed loom version")
+    .version(LOOM_VERSION, "-v, --version", "print the installed loom version")
     .option("--json", "emit JSON instead of YAML")
     .option("--cwd <dir>", "directory to resolve configuration from");
 
