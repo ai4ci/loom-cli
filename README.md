@@ -1,5 +1,11 @@
 # loom
 
+<!-- badges: start -->
+![NPM Version](https://img.shields.io/npm/v/%40ai4ci%2Floom-cli)
+[![EPSRC badge](https://img.shields.io/badge/EPSRC%20grant-EP%2FY028392%2F1-05acb5)](https://gtr.ukri.org/projects?ref=EP%2FY028392%2F1)
+<!-- badges: end -->
+
+
 **Loom** is a markdown document-oriented workflow framework designed for coding agents and developer teams.
 
 Loom turns an ordinary repository of Markdown files into a typed, validated, and queryable graph of instances governed by a Mermaid class diagram (`document-model.mmd`). It enables agents and humans to manage architectures, ADRs, RFCs, issues, requirements, and test plans with mathematical rigor: schema-validated frontmatter, deterministic multi-file atomic changesets, bidirectional code-to-document linkage via Tree-Sitter AST inspection, relational SQL queries through an embedded DuckDB projection, and human-navigable Markdown link generation.
@@ -20,47 +26,48 @@ Loom turns an ordinary repository of Markdown files into a typed, validated, and
 
 ## Installation & Setup
 
-> **Note**: Loom is currently installed via local checkout. It will be published to npm as `loom-cli` in the future.
-
 ### 1. Prerequisites
-- Node.js >= 22
 
-### 2. Local Installation & Development Link
+- Node.js >= 22 & npm
+- global prefix set e.g.: `echo "prefix=~/.npm-global" > ~/.npmrc`
+- global directory on PATH, e.g.: `export PATH=$PATH:~/.npm-global/bin`
 
-#### In a consumer project (Bun or npm)
-In consumer projects using Bun or Node:
+### 2. Install
+
 ```bash
-# In the loom-cli directory:
-npm run build
-bun link          # or: npm link (if npm prefix is configured in user home)
-
-# In your target project:
-bun link loom     # or: npm link loom
-bun run loom --help
+npm install -g @ai4ci/loom-cli
+loom --version
 ```
 
-#### Run directly from source without installing (Fastest for local development)
-You do not need to link or compile `dist` while actively editing the codebase. You can run directly from `src/cli.ts` using Bun or Node 22+:
+Install the companion skills:
+
 ```bash
-# With Bun:
-bun /path/to/loom-cli/src/cli.ts --help
-
-# With Node 22+:
-node --experimental-strip-types /path/to/loom-cli/src/cli.ts --help
-
-# Tip: Add a shell alias in ~/.bashrc or ~/.zshrc:
-alias loom="bun /path/to/loom-cli/src/cli.ts"
+npx skills install ai4ci/loom-cli
 ```
 
-### 3. Grammar Prefetch
 Loom uses Tree-Sitter parsers for multi-language AST inspection. Grammars download lazily, on the first parse of a file in that language. For offline or isolated environments, warm the cache first by naming the languages the repository contains:
+
 ```bash
 loom prefetch typescript python r
 ```
 
 ---
 
-## Quickstart
+## Quickstart via agent skills
+
+Loom includes dedicated Agent Skills under `skills/`:
+
+1. **`skills/using-loom-cli`**:
+   Comprehensive operational manual for an agent working in a Loom-governed repository. Explains command invocations, JSON output contracts, changeset construction, AST annotation rules, and diagnostic troubleshooting.
+
+2. **`skills/creating-a-loom-workflow`**:
+   A meta-skill that walks an agent through creating a custom, domain-specific Loom architecture: designing the Mermaid model, configuring index views, formalizing state transition rules, and generating project-tailored workflow skills.
+
+To enable these in an agent harness (such as Pi or OpenCode), copy or link the skill directories into your agent's skill path, or use `npx skills`
+
+Once the skills are available ask your agent to "create a loom workflow in the current project".
+
+## Handroll your loom repository
 
 ### 1. Define Your Model (`design/document-model.mmd`)
 Loom uses a Mermaid class diagram to declare document classes, attributes, and allowed relations:
@@ -154,20 +161,36 @@ loom --json <command> ...
 
 ---
 
-## Agent Skills
-
-Loom includes dedicated Agent Skills under `skills/`:
-
-1. **`skills/using-loom-cli`**:
-   Comprehensive operational manual for an agent working in a Loom-governed repository. Explains command invocations, JSON output contracts, changeset construction, AST annotation rules, and diagnostic troubleshooting.
-
-2. **`skills/creating-a-loom-workflow`**:
-   A meta-skill that walks an agent through creating a custom, domain-specific Loom architecture: designing the Mermaid model, configuring index views, formalizing state transition rules, and generating project-tailored workflow skills.
-
-To enable these in an agent harness (such as Pi or OpenCode), copy or link the skill directories into your agent's skill path.
-
----
-
 ## License
 
 MIT
+
+## Development
+
+Clone `ai4ci/loom-cli` from github
+
+```bash
+# In the loom-cli directory:
+npm run build
+bun link          # or: npm link (if npm prefix is configured in user home)
+loom --version    # versions will update on npm run build
+```
+
+## Releases
+
+Releases use `npm version` to push to github and stage to npm.
+All tests must be working and no type check issues before the version can be
+incremented.
+
+```bash
+# git push the next patch version
+npm version patch
+# git push and stage to npm the next minor version
+npm version minor
+```
+
+## Funding
+
+The authors gratefully acknowledge the support of the UK Research and Innovation
+AI programme of the Engineering and Physical Sciences Research Council [EPSRC
+grant EP/Y028392/1](https://gtr.ukri.org/projects?ref=EP%2FY028392%2F1).
