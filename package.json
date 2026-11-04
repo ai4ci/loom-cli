@@ -21,9 +21,8 @@
     "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
     "typecheck": "tsc --noEmit",
     "test": "node --test 'test/**/*.test.ts'",
-    "build:binary": "npm run build && bun build ./src/cli.ts --compile --external=@duckdb/node-api --external=@duckdb/node-bindings --external=@xberg-io/tree-sitter-language-pack --outfile ./bin/loom",
     "preversion": "npm run typecheck && npm test",
-    "version": "npm run build:binary && git add src/cli.ts",
+    "version": "npm run build && git add src/cli.ts",
     "postversion": "(git push origin main && git push origin main --tags) || echo 'Automatic push failed (credentials/sandbox block). Push manually using: git push origin main --tags'"
   },
   "dependencies": {

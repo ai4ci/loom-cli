@@ -13,61 +13,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # --- STAGE 1: COMPILE STANDALONE BINARIES & POST TO GITHUB ---
-  build-and-release:
-    name: Build Binaries & Release
-    runs-on: ubuntu-latest
-    if: ${{ matches(github.ref_name, '^v[0-9]+\.[0-9]+\.0$') }}
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v7
 
-      - name: Setup Bun Environment
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install Project Dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Stamp Version Number into Source
-        run: node scripts/stamp-version.cjs
-
-      - name: Compile Native Binaries
-        run: |
-          mkdir -p dist-binary
-          # NOTE: Bun will try to bundle JS code.
-          # For users using the standalone binary via GitHub, make sure to document
-          # that DuckDB/native bindings require external dependencies or Node.js fallback,
-          # OR use standard cross-compilation target setups.
-          bun build ./src/cli.ts --compile --target=bun-linux-x64 --outfile ./dist-binary/loom-linux-x64
-          bun build ./src/cli.ts --compile --target=bun-darwin-arm64 --outfile ./dist-binary/loom-darwin-arm64
-          bun build ./src/cli.ts --compile --target=bun-darwin-x64 --outfile ./dist-binary/loom-darwin-x64
-          bun build ./src/cli.ts --compile --target=bun-windows-x64 --outfile ./dist-binary/loom-windows-x64.exe
-
-      - name: Generate Github Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          files: |
-            dist-binary/loom-linux-x64
-            dist-binary/loom-darwin-arm64
-            dist-binary/loom-darwin-x64
-            dist-binary/loom-windows-x64.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # --- STAGE 2: PUBLISH STANDARD BUILD TO NPM ---
-  # only runs if previous step successful
   publish-npm:
     name: Stage for publication to npm
-    needs: build-and-release
     runs-on: ubuntu-latest
+    if: ${{ endsWith(github.ref_name, '.0') }}
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v7
