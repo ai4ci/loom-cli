@@ -1,6 +1,6 @@
 {
   "name": "loom",
-  "version": "0.10.14",
+  "version": "0.10.15",
   "description": "Model-driven markdown documentation graph with typed relations, DuckDB projections and source code linkage",
   "type": "module",
   "license": "MIT",
@@ -17,18 +17,14 @@
     "LICENSE"
   ],
   "scripts": {
-
     "prebuild": "node scripts/stamp-version.cjs",
     "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
     "typecheck": "tsc --noEmit",
     "test": "node --test 'test/**/*.test.ts'",
-
-    "build:binary": "npm run build && bun build ./src/cli.ts --compile --outfile ./bin/loom",
-
+    "build:binary": "npm run build && bun build ./src/cli.ts --compile --external=@duckdb/node-api --external=@duckdb/node-bindings --external=@xberg-io/tree-sitter-language-pack --outfile ./bin/loom",
     "preversion": "npm run typecheck && npm test",
     "version": "npm run build:binary && git add src/cli.ts",
     "postversion": "(git push origin main && git push origin main --tags) || echo 'Automatic push failed (credentials/sandbox block). Push manually using: git push origin main --tags'"
-
   },
   "dependencies": {
     "@duckdb/node-api": "^2.0.0-r.1",
