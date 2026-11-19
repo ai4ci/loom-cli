@@ -276,8 +276,11 @@ directory is created on demand with a `.gitignore` containing `db/`.
 `@base` + `@prefix` declarations, checked in; see architecture §2.2) and
 reports its path as `namespaces`.
 
-One table per instantiable class: `uri`, `id`, `path`, plus one column per
-attribute. Enumerations become native DuckDB ENUM types. Class-typed
+One table per instantiable class: `uri`, `id`, `path`, `body`, plus one
+column per attribute. `body` is the markdown prose with the protected link
+block stripped, so a document's text is retrievable by SQL (the first step
+towards transclusion). A class that declares its own `body` attribute keeps
+it and loses the built-in column. Enumerations become native DuckDB ENUM types. Class-typed
 attributes project as `STRUCT`s, lists as arrays. Edges land in an RDF-style
 triple store: `edge(subject, relation, object)`.
 
@@ -287,7 +290,8 @@ missing.
 ### `query <sql>`
 
 Run arbitrary SQL. Errors are `query/failed`; a missing database is
-`query/no-database`.
+`query/no-database`. Like `render` and `index`, `query` rescans the markdown
+first, so hand edits made since the last `rebuild` are visible.
 
 ```bash
 loom query "SELECT uri, title FROM issue WHERE status = 'open'"

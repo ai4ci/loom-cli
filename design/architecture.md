@@ -205,7 +205,8 @@ the legacy slashed forms. A uri whose path escapes its class root is
 
 The DuckDB database lives at `designRoot/.loom/db/<branch>/loom.duckdb` — one
 per git branch (sanitised; detached HEAD becomes `detached/<sha12>`). Schema:
-one table per instantiable class (columns `uri`, `id`, `path`, plus
+one table per instantiable class (columns `uri`, `id`, `path`, `body` —
+the markdown prose with the protected link block stripped — plus
 attributes — enums as native ENUM types, nested values as `STRUCT`s, lists as
 arrays), and `edge(subject, relation, object)` as a triple store. Embeddings
 (256-dim bag-of-features) are stored alongside for `similar`.

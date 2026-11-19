@@ -35,7 +35,7 @@ export interface CliRun {
 }
 
 // Near the top or bottom of src/cli.ts
-const LOOM_VERSION = "0.14.2"; // Will be updated automatically by build hooks
+const LOOM_VERSION = "0.14.3"; // Will be updated automatically by build hooks
 
 
 /** A command returns data to emit and, optionally, a non-zero exit code. */
@@ -267,6 +267,13 @@ async function rebuildCommand(ctx: LoadedContext): Promise<CommandOutput> {
 async function queryCommand(ctx: LoadedContext, sql: string): Promise<CommandOutput> {
   const { cfg } = ctx;
   if (!existsSync(absolute(cfg, databasePath(cfg)))) await rebuildCommand(ctx);
+  else {
+    // The files are the source of truth, and prose changes between runs; the
+    // same rescan render/index do, so a query never answers from stale rows.
+    const { schema, roots } = loadModel(cfg);
+    const { refresh } = await import("./duckdb.ts");
+    await refresh(loadGraph(cfg, schema, roots).graph);
+  }
   return { value: await query(cfg, sql) };
 }
 

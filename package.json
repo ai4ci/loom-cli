@@ -1,6 +1,6 @@
 {
   "name": "@ai4ci/loom-cli",
-  "version": "0.14.2",
+  "version": "0.14.3",
   "description": "Model-driven markdown documentation graph with typed relations, DuckDB projections and source code linkage",
   "type": "module",
   "license": "MIT",

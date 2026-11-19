@@ -256,6 +256,7 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
       "uri VARCHAR PRIMARY KEY",
       "id VARCHAR",
       "path VARCHAR",
+      ...(hasOwnBody(schema, className) ? [] : ["body VARCHAR"]),
       ...attributes.map((a) => `${quote(a.name)} ${columnType(schema, a)}`),
     ];
     await connection.run(`CREATE TABLE ${quote(className)} (${columns.join(", ")})`);
@@ -265,12 +266,7 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
       .sort((a, b) => a.uri.localeCompare(b.uri));
 
     for (const node of nodes) {
-      const values = [
-        `'${node.uri.replace(/'/g, "''")}'`,
-        `'${node.id.replace(/'/g, "''")}'`,
-        `'${node.path.replace(/'/g, "''")}'`,
-        ...attributes.map((a) => literal(schema, a, node.data[a.name])),
-      ];
+      const values = rowValues(schema, className, node, attributes);
       await connection.run(`INSERT INTO ${quote(className)} VALUES (${values.join(", ")})`);
     }
     tables.push({ name: className, rows: nodes.length });
@@ -333,12 +329,7 @@ export async function refresh(graph: Graph): Promise<void> {
         .filter((n) => n.className === className)
         .sort((a, b) => a.uri.localeCompare(b.uri));
       for (const node of nodes) {
-        const values = [
-          `'${node.uri.replace(/'/g, "''")}'`,
-          `'${node.id.replace(/'/g, "''")}'`,
-          `'${node.path.replace(/'/g, "''")}'`,
-          ...attributes.map((a) => literal(schema, a, node.data[a.name])),
-        ];
+        const values = rowValues(schema, className, node, attributes);
         await connection.run(`INSERT INTO ${quote(className)} VALUES (${values.join(", ")})`);
       }
     }
@@ -358,6 +349,32 @@ export async function refresh(graph: Graph): Promise<void> {
 }
 
 /** Strip the generated protected region so it doesn't pollute the embedding. */
+/**
+ * A class may declare an attribute called `body`; the model wins and the
+ * built-in prose column is not projected for that class.
+ * shortcut: no diagnostic for the shadowing, add one if it confuses anyone.
+ */
+function hasOwnBody(schema: SchemaIR, className: string): boolean {
+  return effectiveAttributes(schema, className).some((a) => a.name === "body");
+}
+
+/** One row: the built-in columns, the prose, then the declared attributes. */
+function rowValues(
+  schema: SchemaIR,
+  className: string,
+  node: Graph["instances"] extends Map<string, infer N> ? N : never,
+  attributes: Attribute[],
+): string[] {
+  const text = (value: string) => `'${value.replace(/'/g, "''")}'`;
+  return [
+    text(node.uri),
+    text(node.id),
+    text(node.path),
+    ...(hasOwnBody(schema, className) ? [] : [text(stripProtected(node.file.markdown))]),
+    ...attributes.map((a) => literal(schema, a, node.data[a.name])),
+  ];
+}
+
 function stripProtected(markdown: string): string {
   return markdown.replace(/<!-- loom:links start -->[\s\S]*?<!-- loom:links end -->/g, "").trim();
 }
