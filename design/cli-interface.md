@@ -278,8 +278,10 @@ reports its path as `namespaces`.
 
 One table per instantiable class: `uri`, `id`, `path`, `body`, plus one
 column per attribute. `body` is the markdown prose with the protected link
-block stripped, so a document's text is retrievable by SQL (the first step
-towards transclusion). A class that declares its own `body` attribute keeps
+block stripped and links in curie form, as `body get` returns it — a relative
+link only means anything from the file it was written in, and the point of the
+column is to move that text somewhere else (the first step towards
+transclusion). A class that declares its own `body` attribute keeps
 it and loses the built-in column. Enumerations become native DuckDB ENUM types. Class-typed
 attributes project as `STRUCT`s, lists as arrays. Edges land in an RDF-style
 triple store: `edge(subject, relation, object)`.

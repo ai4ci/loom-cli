@@ -43,6 +43,17 @@ test("the projected body excludes the protected link block", async () => {
   assert.doesNotMatch(String(rows(r.out)[0]?.["body"]), /loom:links|blocks:/);
 });
 
+test("links in the projected body are in curie form, not relative", async () => {
+  const root = repo({
+    "design/issue/b.md": instance("class: issue\ntitle: B"),
+  });
+  await run(["--cwd", root, "body", "set", "issue:a.md", "See [B](issue:b.md)."]);
+
+  const r = await run(["--cwd", root, "query", "SELECT body FROM issue WHERE uri = 'issue:a.md'"]);
+  assert.equal(r.code, 0, r.out + r.err);
+  assert.equal(rows(r.out)[0]?.["body"], "See [B](issue:b.md).");
+});
+
 test("an edited body is visible to the next query", async () => {
   const root = repo();
   await run(["--cwd", root, "rebuild"]);

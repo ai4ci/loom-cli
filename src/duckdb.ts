@@ -4,7 +4,8 @@ import path from "node:path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { absolute, type Config } from "./config.ts";
 import { LoomError, error } from "./diagnostics.ts";
-import type { Graph } from "./graph.ts";
+import { splitProse, toUris } from "./body.ts";
+import type { Graph, InstanceNode } from "./graph.ts";
 import { effectiveAttributes, isInstantiable } from "./model/schema.ts";
 import { isEnumeration, type Attribute, type SchemaIR } from "./model/types.ts";
 import { embedder, hashBody, type Embedder } from "./embeddings.ts";
@@ -266,7 +267,7 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
       .sort((a, b) => a.uri.localeCompare(b.uri));
 
     for (const node of nodes) {
-      const values = rowValues(schema, className, node, attributes);
+      const values = rowValues(graph, className, node, attributes);
       await connection.run(`INSERT INTO ${quote(className)} VALUES (${values.join(", ")})`);
     }
     tables.push({ name: className, rows: nodes.length });
@@ -329,7 +330,7 @@ export async function refresh(graph: Graph): Promise<void> {
         .filter((n) => n.className === className)
         .sort((a, b) => a.uri.localeCompare(b.uri));
       for (const node of nodes) {
-        const values = rowValues(schema, className, node, attributes);
+        const values = rowValues(graph, className, node, attributes);
         await connection.run(`INSERT INTO ${quote(className)} VALUES (${values.join(", ")})`);
       }
     }
@@ -358,20 +359,31 @@ function hasOwnBody(schema: SchemaIR, className: string): boolean {
   return effectiveAttributes(schema, className).some((a) => a.name === "body");
 }
 
-/** One row: the built-in columns, the prose, then the declared attributes. */
+/**
+ * One row: the built-in columns, the prose, then the declared attributes.
+ * Prose is projected in curie form, as `body get` returns it: a relative link
+ * only means anything from the file it was written in, and the point of the
+ * column is to move that text somewhere else.
+ */
 function rowValues(
-  schema: SchemaIR,
+  graph: Graph,
   className: string,
-  node: Graph["instances"] extends Map<string, infer N> ? N : never,
+  node: InstanceNode,
   attributes: Attribute[],
 ): string[] {
   const text = (value: string) => `'${value.replace(/'/g, "''")}'`;
+  const prose = () => toUris(
+    splitProse(node.file.markdown).prose.trim(),
+    node.path,
+    graph.roots,
+    graph.prefixes,
+  );
   return [
     text(node.uri),
     text(node.id),
     text(node.path),
-    ...(hasOwnBody(schema, className) ? [] : [text(stripProtected(node.file.markdown))]),
-    ...attributes.map((a) => literal(schema, a, node.data[a.name])),
+    ...(hasOwnBody(graph.schema, className) ? [] : [text(prose())]),
+    ...attributes.map((a) => literal(graph.schema, a, node.data[a.name])),
   ];
 }
 
