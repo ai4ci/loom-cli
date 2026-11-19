@@ -262,6 +262,9 @@ export function planChangeset(
   regenerateLinks(graph);
 
   const annotation = planSourceLinks(cfg, graph, sourceOps);
+  graph.pending = new Map(
+    annotation.writes.flatMap((w) => (w.content === null ? [] : [[w.path, w.content] as const])),
+  );
 
   const found = [...diagnostics, ...applied, ...annotation.diagnostics, ...validateGraph(graph)];
   if (found.some((d) => d.severity === "error")) return { writes: [], diagnostics: found, graph };
@@ -309,7 +312,9 @@ function planSourceLinks(
       ));
       continue;
     }
-    if (!graph.instances.has(op.to)) {
+    // Unlinking needs only the comment that is there; a target that has been
+    // deleted or moved is exactly when the link has to come out (issue #7).
+    if (op.op === "link" && !graph.instances.has(op.to)) {
       diagnostics.push(error(
         "changeset/not-found",
         `${op.op} refers to ${op.to}, which does not exist`,

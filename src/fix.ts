@@ -6,7 +6,7 @@ import { isSubclassOf } from "./model/schema.ts";
 import { detectLang, extractAnchors, resolveAnchor } from "./source.ts";
 import { resolvePath } from "./graph.ts";
 import { getLinksBlock, setLinksBlock, stringifyInstance } from "./document.ts";
-import { type Graph, type InstanceNode, renderLinks } from "./graph.ts";
+import { type Graph, type InstanceNode, renamedTarget, renderLinks } from "./graph.ts";
 import { effectiveRelations } from "./model/schema.ts";
 import { classRoot } from "./path-resolution.ts";
 import { canonicalise, formatUri, parseUri } from "./uri.ts";
@@ -19,9 +19,10 @@ import { canonicalise, formatUri, parseUri } from "./uri.ts";
 export function applyFixes(graph: Graph): string[] {
   const changed: string[] = [];
   const renames = inferredRenames(graph);
+  for (const [from, to] of inferredFileRenames(graph)) renames.set(from, to);
 
   for (const node of graph.instances.values()) {
-    let touched = rewriteRenamedAnchors(graph, node, renames);
+    let touched = rewriteRenamedTargets(graph, node, renames);
     touched = canonicaliseUris(graph, node) || touched;
     touched = regenerateLinks(graph, node) || touched;
     if (!touched) continue;
@@ -81,7 +82,21 @@ function inferredRenames(graph: Graph): Map<string, string> {
   return renames;
 }
 
-function rewriteRenamedAnchors(
+/**
+ * Targets whose file git says has moved, old uri to new (issue #8). Unlike
+ * anchor renames this needs no guesswork: git recorded the move.
+ */
+function inferredFileRenames(graph: Graph): Map<string, string> {
+  const renames = new Map<string, string>();
+  for (const edge of graph.edges) {
+    if (graph.instances.has(edge.to) || renames.has(edge.to)) continue;
+    const moved = renamedTarget(graph, edge.to);
+    if (moved !== null) renames.set(edge.to, moved);
+  }
+  return renames;
+}
+
+function rewriteRenamedTargets(
   graph: Graph,
   node: InstanceNode,
   renames: Map<string, string>,

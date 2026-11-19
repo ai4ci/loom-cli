@@ -20,7 +20,7 @@ import {
 } from "./model/schema.ts";
 import type { Cardinality, SchemaIR } from "./model/types.ts";
 import { classRoot, type ClassRoots, under } from "./path-resolution.ts";
-import { contentAtHead, inferRename } from "./drift.ts";
+import { contentAtHead, inferFileRename, inferRename } from "./drift.ts";
 import { similarity } from "./similarity.ts";
 import { canonicalise, formatUri, parseUri, resolveUri } from "./uri.ts";
 
@@ -52,6 +52,12 @@ export interface Graph {
   prefixes: Map<string, string>;
   instances: Map<string, InstanceNode>;
   edges: Edge[];
+  /**
+   * Source files the current plan will rewrite, keyed by repo-relative path.
+   * Validation reads these instead of the disk, so a changeset that removes a
+   * reverse-link comment is not failed by the comment it is removing.
+   */
+  pending?: Map<string, string>;
 }
 
 /**
@@ -203,6 +209,43 @@ function suggestNearest(
   return { fix: `did you mean ${ranked.map((c) => c.name).join(" | ")}?` };
 }
 
+/**
+ * The uri a link should now use, when the file it addresses is gone and git
+ * records where it went (issue #8). The anchor rides along: a moved file keeps
+ * its declarations, and a renamed declaration is tier 2's business.
+ */
+export function renamedTarget(graph: Graph, uri: string): string | null {
+  let parsed;
+  try {
+    parsed = parseUri(uri);
+  } catch {
+    return null;
+  }
+  const resolved = resolveUri(parsed, graph.roots, graph.prefixes);
+  if (resolved.external === true) return null;
+  if (existsSync(absolute(graph.cfg, resolved.path))) return null;
+
+  const moved = inferFileRename(graph.cfg, resolved.path);
+  if (moved === null) return null;
+  return formatUri(canonicalise(moved, graph.roots, parsed.anchor));
+}
+
+/** A missing target, reported as a rename when git knows of one. */
+function renamedOrMissing(
+  graph: Graph,
+  edge: Edge,
+  code: string,
+  message = `${edge.to} does not exist`,
+): Diagnostic {
+  const moved = renamedTarget(graph, edge.to);
+  if (moved === null) return error(code, message, { uri: edge.from });
+  return error(
+    "graph/renamed-file",
+    `${edge.to} has been moved to ${moved}`,
+    { uri: edge.from, fix: `rewrite as ${moved}` },
+  );
+}
+
 export function validateGraph(graph: Graph): Diagnostic[] {
   const { cfg, schema } = graph;
   const found: Diagnostic[] = [];
@@ -274,7 +317,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
 
     if (isSubclassOf(schema, targetClass, "resource")) {
       if (!existsSync(absolute(cfg, resolveUri(parseUri(edge.to), graph.roots).path))) {
-        found.push(error("graph/missing-resource", `${edge.to} does not exist`, { uri: edge.from }));
+        found.push(renamedOrMissing(graph, edge, "graph/missing-resource"));
       }
       continue;
     }
@@ -284,7 +327,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
       const res = resolveUri(parsed, graph.roots).path;
       const abs = absolute(cfg, res);
       if (!existsSync(abs)) {
-        found.push(error("graph/missing-source-file", `${edge.to} does not exist`, { uri: edge.from }));
+        found.push(renamedOrMissing(graph, edge, "graph/missing-source-file"));
       } else if (parsed.anchor) {
         const lang = detectLang(res);
         if (lang) {
@@ -323,10 +366,11 @@ export function validateGraph(graph: Graph): Diagnostic[] {
       continue;
     }
 
-    found.push(error(
+    found.push(renamedOrMissing(
+      graph,
+      edge,
       "graph/dangling-link",
       `"${edge.relation}" points at ${edge.to}, which has no instance file`,
-      { uri: edge.from },
     ));
   }
 
@@ -359,7 +403,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     if (root === "") continue;
     const absRoot = absolute(cfg, root);
     if (!existsSync(absRoot)) continue;
-    scanSourceTree(cfg, absRoot, (rel, lang, code) => {
+    scanSourceTree(cfg, absRoot, graph.pending, (rel, lang, code) => {
       if (visited.has(rel)) return;
       visited.add(rel);
       // Most specific src-family class whose root contains this file.
@@ -400,16 +444,17 @@ export function validateGraph(graph: Graph): Diagnostic[] {
 function scanSourceTree(
   cfg: Config,
   dir: string,
+  pending: Map<string, string> | undefined,
   visit: (repoRelative: string, lang: string, code: string) => void,
 ): void {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) scanSourceTree(cfg, full, visit);
+    if (entry.isDirectory()) scanSourceTree(cfg, full, pending, visit);
     else if (entry.isFile()) {
       const lang = detectLang(full);
       if (!lang) continue;
-      const code = readFileSync(full, "utf8");
       const rel = path.relative(cfg.repoRoot, full).split(path.sep).join("/");
+      const code = pending?.get(rel) ?? readFileSync(full, "utf8");
       visit(rel, lang, code);
     }
   }

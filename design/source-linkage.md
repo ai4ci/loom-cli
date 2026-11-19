@@ -127,8 +127,14 @@ Code moves; documents must follow. `validate` checks every source address:
    an anchor of the same kind with a near-identical body exists
    (`src/drift.ts` `inferRename`, comparing bodies at HEAD with a similarity
    threshold). `validate --fix` rewrites the uri everywhere.
-3. **Renamed file** — git rename detection at HEAD resolves the path;
-   `renamed-symbol` with the new path as `fix`.
+3. **Renamed file** (`graph/renamed-file`) — the file is gone and git knows
+   where it went: a staged rename in `git status`, or the rename recorded in
+   the commit that removed the path (`src/drift.ts` `inferFileRename`). The
+   anchor rides along, so `src:app.ts#runApp` becomes `src:main.ts#runApp`,
+   and `validate --fix` rewrites it. This is not inference: an unstaged `mv`
+   is invisible to git and stays `graph/missing-source-file`. The same lookup
+   covers moved documents and resources, so a `git mv` of an instance file is
+   reported as a rename rather than `graph/dangling-link`.
 
 Body fingerprints (a sidecar recording anchor bodies to detect content moves
 across files) remain deferred; name similarity plus git rename inference

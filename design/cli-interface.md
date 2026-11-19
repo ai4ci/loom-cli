@@ -227,7 +227,7 @@ Each sugar command is one changeset op; all accept `--dry-run`.
 | `create <uri> [key=value ...]` | `create` (values parsed as yaml scalars) |
 | `set <uri> <key>=<value> ...` | `set` |
 | `link <from> <rel> <to>` | `link` — instances, or `src` to a document |
-| `unlink <from> <rel> <to>` | `unlink` (removes reverse-link comments too) |
+| `unlink <from> <rel> <to>` | `unlink` (removes reverse-link comments too; the target need not still exist) |
 | `rename <from> <to>` | `rename` (rewrites every inbound uri) |
 | `delete <uri>` | `delete` |
 | `body set/append/patch` | `body` |
@@ -340,7 +340,7 @@ Codes are stable identifiers; match on these rather than on message text.
 
 **`graph/`** — `orphan-file`, `dangling-link`, `inbound-cardinality`,
 `missing-path`, `missing-resource`, `missing-source-file`, `missing-symbol`,
-`renamed-symbol`, `stale-links`, `non-canonical-uri`.
+`renamed-symbol`, `renamed-file`, `stale-links`, `non-canonical-uri`.
 
 **`changeset/`** — `unparseable`, `no-ops`, `malformed-op`, `unknown-op`,
 `missing-field`, `not-found`, `already-exists`, `not-instantiable`,
