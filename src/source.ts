@@ -35,6 +35,8 @@ export interface Anchor {
   bodySpan?: Span;
   /** Normalised parameter types, computed only when a name collides. */
   params?: string[];
+  /** Line-comment token of the embedded language, for a markdown chunk. */
+  commentToken?: string;
 }
 
 export interface ReverseLink {
@@ -61,7 +63,15 @@ interface TsNode {
   childByFieldName(name: string): TsNode | null;
 }
 
+/**
+ * R Markdown and Quarto are markdown with executable chunks; the pack has no
+ * grammar of their own, and the markdown one sees everything loom addresses
+ * (source-linkage §2.2).
+ */
+const MARKDOWN_EXTENSIONS = /\.(rmd|qmd)$/i;
+
 export function detectLang(filename: string): string | null {
+  if (MARKDOWN_EXTENSIONS.test(filename)) return "markdown";
   return pack.detectLanguageFromPath(filename);
 }
 
@@ -272,12 +282,69 @@ function fromR(code: string, out: Anchor[]): void {
   walk(root, "");
 }
 
+/** Line-comment token for the language a chunk is written in. */
+function chunkCommentToken(language: string): string {
+  return /^(r|python|py|julia|bash|sh|yaml|ruby|perl)$/i.test(language) ? "#"
+    : /^(sql|lua|haskell)$/i.test(language) ? "--"
+    : "//";
+}
+
+/**
+ * Markdown adapter: an executable chunk is the linkable unit of an R Markdown
+ * or Quarto document, named by its label — `{r setup}` or Quarto's
+ * `#| label: setup`. An unlabelled chunk has no stable address, so it is not
+ * an anchor; labelling it is how it becomes linkable.
+ */
+function fromMarkdown(code: string, out: Anchor[]): void {
+  const root = parse(code, "markdown");
+  if (!root) return;
+
+  walkNodes(root, (node) => {
+    if (node.kind() !== "fenced_code_block") return;
+
+    let info: TsNode | null = null;
+    let body: TsNode | null = null;
+    for (let i = 0; i < node.childCount(); i++) {
+      const child = node.child(i);
+      if (!child) continue;
+      if (child.kind() === "info_string") info = child;
+      if (child.kind() === "code_fence_content") body = child;
+    }
+    if (info === null || body === null) return;
+
+    // `{r setup, echo=FALSE}` — only a braced info string is a chunk; a plain
+    // ```r block is prose illustration, not code the document runs.
+    const braced = /^\{([^}]*)\}$/.exec(code.slice(info.startByte(), info.endByte()).trim());
+    if (braced === null) return;
+    const [language = "", inlineLabel] = braced[1]!.trim().split(/[\s,]+/);
+
+    const text = code.slice(body.startByte(), body.endByte());
+    const pipe = /^\s*#\|\s*label\s*:\s*(\S+)\s*$/m.exec(text);
+    const label = pipe?.[1] ?? (inlineLabel !== undefined && !inlineLabel.includes("=") ? inlineLabel : undefined);
+    if (label === undefined) return;
+
+    out.push({
+      name: label,
+      fullName: label,
+      kind: "Chunk",
+      line: node.startPosition().row + 1,
+      span: spanOf(node),
+      bodySpan: spanOf(body),
+      commentToken: chunkCommentToken(language),
+    });
+  });
+}
+
 export function extractAnchors(
   code: string,
   language: string,
   policy: AnchorPolicy = DEFAULT_ANCHOR_POLICY,
 ): Anchor[] {
   const anchors: Anchor[] = [];
+  if (language === "markdown") {
+    fromMarkdown(code, anchors);
+    return anchors;
+  }
   if (language === "r") {
     fromR(code, anchors);
   } else {
@@ -405,8 +472,12 @@ export function extractReverseLinks(
   language: string,
   policy: AnchorPolicy = DEFAULT_ANCHOR_POLICY,
 ): ReverseLink[] {
-  const result = pack.process(code, { language, comments: true });
   const anchors = extractAnchors(code, language, policy);
+  // Chunk contents are opaque text to the markdown grammar, so the comments
+  // inside them are read line by line instead.
+  if (language === "markdown") return reverseLinksInChunks(code, anchors);
+
+  const result = pack.process(code, { language, comments: true });
   const links: ReverseLink[] = [];
 
   for (const comment of result.comments ?? []) {
@@ -422,6 +493,31 @@ export function extractReverseLinks(
     };
     if (enclosing) link.enclosingSymbol = enclosing.fullName;
     links.push(link);
+  }
+
+  return links;
+}
+
+function reverseLinksInChunks(code: string, anchors: Anchor[]): ReverseLink[] {
+  const links: ReverseLink[] = [];
+  const lineOf = (offset: number) => code.slice(0, offset).split("\n").length;
+
+  for (const anchor of anchors) {
+    const start = anchor.bodySpan?.startByte;
+    if (start === undefined) continue;
+    let offset = start;
+    for (const line of code.slice(start, anchor.bodySpan?.endByte ?? start).split("\n")) {
+      const match = REVERSE_LINK_RE.exec(line);
+      if (match) {
+        links.push({
+          relation: match[1]!,
+          target: match[2]!,
+          line: lineOf(offset),
+          enclosingSymbol: anchor.fullName,
+        });
+      }
+      offset += line.length + 1;
+    }
   }
 
   return links;

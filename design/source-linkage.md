@@ -34,6 +34,7 @@ Which kinds are addressable is a policy:
 | Policy | Default | Meaning |
 |---|---|---|
 | `anchorKinds` | `Function, Method, Class, Struct, Interface, Enum, Trait` | kinds that become anchors |
+| — | `Chunk` | markdown chunks are anchors regardless of policy (§2.2) |
 | `transparentKinds` | `Impl, Module, Namespace` | kinds whose children pass through to the parent level |
 
 Defaults live in `src/source.ts` `DEFAULT_ANCHOR_POLICY`; a `.loom.yaml`
@@ -45,6 +46,16 @@ address resolving to several anchors is a hard error `source/ambiguous-anchor`
 
 `detectLang` maps file extensions via the language pack. Special cases:
 
+- **R Markdown and Quarto** (`.Rmd`, `.qmd`) — parsed with the markdown
+  grammar. The anchor is the executable chunk, kind `Chunk`, named by its
+  label: ````{r setup}``` or Quarto's `#| label: setup`. An unlabelled chunk
+  has no stable address and is not an anchor — labelling it is how it becomes
+  linkable — and a plain ````r``` fence is prose, not a chunk. A reverse-link
+  comment is written on the chunk's first line in the embedded language's
+  comment style (`#` for r/python, `//` otherwise); the markdown grammar
+  treats chunk bodies as opaque text, so those comments are read line by line.
+  The file as a whole is not annotatable (`source/not-annotatable`): there is
+  nowhere in prose a comment would mean anything.
 - **R** — tree-sitter names every R function `function`, so anchors are
   derived from a dedicated adapter: assignment forms (`f <-`, `f =`),
   `R6Class("name")`, `new_class("name")`; identifiers on the left of an

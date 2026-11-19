@@ -119,6 +119,11 @@ function insertionPoint(
 ): { offset: number; indent: string } | null {
   if (!anchor.bodySpan) return null;
 
+  // A markdown chunk's body is opaque text: the link goes on its first line.
+  if (anchor.kind === "Chunk") {
+    return { offset: anchor.bodySpan.startByte ?? 0, indent: "" };
+  }
+
   const body = nodeAt(root, anchor.bodySpan.startByte ?? -1, anchor.bodySpan.endByte ?? -1);
   if (body === null) return null;
 
@@ -235,7 +240,7 @@ export function planAnnotations(
       anchor = resolved.anchor;
     }
 
-    const token = commentToken(file.language);
+    const token = anchor?.commentToken ?? commentToken(file.language);
     const comment = `${token} ${request.relation}: ${request.to}`;
 
     // Is an equivalent link already present on this anchor?
@@ -264,6 +269,16 @@ export function planAnnotations(
     }
 
     if (existing !== undefined) continue; // idempotent
+
+    if (anchor === undefined && file.language === "markdown") {
+      // There is nowhere in prose to put a comment that means anything.
+      diagnostics.push(error(
+        "source/not-annotatable",
+        `${repoRelative} is markdown: a link attaches to a labelled chunk, not the file`,
+        { uri: request.from, fix: "name a chunk, as src:file.Rmd#label" },
+      ));
+      continue;
+    }
 
     if (anchor === undefined) {
       // File-level: after the leading comment block, which is the same rule
