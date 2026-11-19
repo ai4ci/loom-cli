@@ -12,29 +12,25 @@ the root of its documentation in the parent directory. `$LOOM_DEFAULT_ROOT` can
 be explicitly set to skip that detection. `repo:` means the git root unless
 `$LOOM_REPO_ROOT` overrides it (e.g. one loom per monorepo package).
 
+**This tool is experimental.** If things do not work as expected document the issue
+and ask the user to raise it as an issue or feature request: https://github.com/ai4ci/loom-cli/issues/
+
 ## 1. Installation & Environment
 
-### Project Installation
-In projects with `loom` in `devDependencies`:
+`loom` is a node.js cli tool that can be installed from npm:
+
+`npm install -g @ai4ci/loom-cli`
+
+**IMPORTANT** Do not confuse it with `npx loom` - that is a different project. If
+you cannot use `loom` by globally installing you will need to use `npx @ai4ci/loom-cli`.
+
+These instructions assume it is globally installed and available on the path.
+
 ```bash
-npm install
-npx loom --help
-```
+$ loom --help
+Usage: loom [options] [command]
 
-### Global or Standalone Link
-To build and link into another local project:
-```bash
-cd /path/to/loom
-npm run build
-bun link          # or npm link
-
-# In your target project:
-bun link loom     # or npm link loom
-
-# or run directly without linking:
-node /path/to/loom/dist/cli.js --help
-# or run directly from TypeScript (no build needed):
-bun /path/to/loom/src/cli.ts --help
+Model-driven markdown documentation graph
 ```
 
 ### Language Parser Prefetch
