@@ -65,6 +65,16 @@ object) link with the uri as label. External-prefix uris link to the expanded
 URL. A uri that does not resolve stays plain text — a visible fact, not a
 silently broken link.
 
+## 5. Commands
+
+- `loom render` — expand every marker under the design root in place.
+- `loom render --check` — no-write dry run for CI: exit 0 when everything is
+  fresh, exit 1 naming stale repo-relative files.
+- `loom render --debug` — also emit to stderr, per view:
+  `<file>: view <name>` then the resolved SQL indented two spaces (inline
+  markers are named `(inline)`). The database is rebuilt automatically when
+  missing.
+
 ## 6. Includes — transcluding a document
 
 ```markdown
@@ -103,13 +113,3 @@ The consequence is deliberate: rendering A expands its include of B but not
 B's include of C; rendering B expands C. One level per file per run, and
 `render` is idempotent — a cycle cannot grow a file. A `depth` option is the
 obvious stage 2.
-
-## 5. Commands
-
-- `loom render` — expand every marker under the design root in place.
-- `loom render --check` — no-write dry run for CI: exit 0 when everything is
-  fresh, exit 1 naming stale repo-relative files.
-- `loom render --debug` — also emit to stderr, per view:
-  `<file>: view <name>` then the resolved SQL indented two spaces (inline
-  markers are named `(inline)`). The database is rebuilt automatically when
-  missing.
