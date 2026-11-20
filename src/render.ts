@@ -4,7 +4,19 @@ import { type ViewAnnotation } from "./model/types.ts";
 import { loadModel } from "./model/load.ts";
 import { databasePath, query, rebuild, refresh } from "./duckdb.ts";
 import { type Graph, loadGraph, relativeLink, titleOf, toRepoRelative } from "./graph.ts";
-import { parseUri, resolveUri } from "./uri.ts";
+import {
+  type IncludeMarker,
+  type Marker,
+  type ViewMarker,
+  scanMarkers,
+  scanViewMarkers,
+  updateSection,
+} from "./markers.ts";
+import { codeRanges, inRanges } from "./markers.ts";
+import { toRelative } from "./body.ts";
+import { canonicalise, formatUri, parseUri, resolveUri } from "./uri.ts";
+
+export { scanMarkers, scanViewMarkers, type Marker, type ViewMarker, type IncludeMarker };
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -65,127 +77,10 @@ export function extractViewAnnotations(
   return views;
 }
 
-// ---------------------------------------------------------------------------
-// Inline marker scanning
-// ---------------------------------------------------------------------------
-
-export interface ViewMarker {
-  /** Raw text from the marker comment (name or inline SQL). */
-  view: string;
-  /** Parsed query-string parameters. */
-  params: Record<string, string>;
-  /** Byte offset where the opening `<!-- loom view:` starts. */
-  start: number;
-    /** Byte offset where the end marker ends (just after the opener if absent). */
-  end: number;
-}
-
-/**
- * Byte ranges covered by fenced code blocks and inline code spans. A marker
- * inside one is documentation of the syntax, not a view site: expanding it
- * would destroy prose in any file that documents loom itself.
- */
-function codeRanges(text: string): [number, number][] {
-  const ranges: [number, number][] = [];
-  // Fences: three or more backticks/tildes at line start, closed by a fence of
-  // at least the same length. Everything from the opening fence to the closing
-  // one (or EOF for an unclosed fence) is off limits.
-  const fence = /^ {0,3}(`{3,}|~{3,})[^\n]*$/gm;
-  let open: RegExpExecArray | null;
-  while ((open = fence.exec(text)) !== null) {
-    const char = open[1]![0]!;
-    const len = open[1]!.length;
-    const from = open.index + open[0].length;
-    // Global is load-bearing: exec() IGNORES lastIndex on a plain /m regex,
-    // and a bare closing fence matches its own opener — the search then
-    // rewound behind the opener and the outer loop spun forever on any
-    // untagged fence pair (downstream hang report, 0.10.12).
-    const close = new RegExp(`^ {0,3}${char === "`" ? "`" : "~"}{${len},}[ \t]*$`, "gm");
-    close.lastIndex = from;
-    const end = close.exec(text);
-    const stop = end === null ? text.length : end.index + end[0].length;
-    ranges.push([open.index, stop]);
-    fence.lastIndex = stop;
-  }
-  // Inline spans: a run of N backticks closed by exactly N. Overlap with the
-  // fence ranges is harmless.
-  const span = /(?<!`)(`+)(?!`)([\s\S]*?)(?<!`)\1(?!`)/g;
-  let spanMatch: RegExpExecArray | null;
-  while ((spanMatch = span.exec(text)) !== null) {
-    ranges.push([spanMatch.index, spanMatch.index + spanMatch[0].length]);
-  }
-  return ranges;
-}
-
-function inRanges(ranges: [number, number][], at: number): boolean {
-  return ranges.some(([from, to]) => at >= from && at < to);
-}
-
-/**
- * Find every `<!-- loom view: ... -->` marker in markdown text.
- * Returns markers in document order. Markers inside code fences or inline
- * code spans are skipped: they document the syntax rather than use it.
- */
-export function scanViewMarkers(text: string): ViewMarker[] {
-  const re = /<!--\s*loom\s+view:\s*(.+?)\s*-->/g;
-  const markers: ViewMarker[] = [];
-  const code = codeRanges(text);
-  let match: RegExpExecArray | null;
-
-  while ((match = re.exec(text)) !== null) {
-    if (inRanges(code, match.index)) continue;
-    const raw = match[1]!.trim();
-    // Terminators: bare `end`, or `<name> end` for the view that owns them.
-    if (raw === "end" || raw.endsWith(" end")) continue;
-    const start = match.index;
-
-    // Parse optional query-string parameters.
-    let view = raw;
-    let params: Record<string, string> = {};
-    const qsIdx = raw.indexOf("?");
-    if (qsIdx !== -1) {
-      view = raw.slice(0, qsIdx).trim();
-      const qs = raw.slice(qsIdx + 1);
-      for (const pair of qs.split("&")) {
-        const eq = pair.indexOf("=");
-        if (eq !== -1) {
-          params[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim();
-        }
-      }
-    }
-
-    // Find the terminator: `<name> end` if present after this opener, else
-    // the first bare `end`. An unterminated view is not an error while
-    // authoring — its section is empty (render inserts the content and the
-    // qualified end right after the opener), so prose below is never eaten.
-    const own = new RegExp(`<!--\\s*loom\\s+view:\\s*${escapeRegExp(view)}\\s+end\\s*-->`);
-    let end = match.index + match[0].length;
-    const rest = /<!--\s*loom\s+view:\s*(.+?)\s*-->/g;
-    rest.lastIndex = end;
-    let candidate: RegExpExecArray | null;
-    while ((candidate = rest.exec(text)) !== null) {
-      if (inRanges(code, candidate.index)) continue;
-      const raw2 = candidate[1]!.trim();
-      if (own.test(candidate[0]) || raw2 === "end") {
-        end = candidate.index + candidate[0].length;
-        break;
-      }
-    }
-
-    markers.push({ view, params, start, end });
-  }
-
-  return markers;
-}
 
 // ---------------------------------------------------------------------------
 // Parameter substitution
 // ---------------------------------------------------------------------------
-
-/** Escape a string for literal use inside a RegExp. */
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 function escapeSqlLiteral(value: string): string {
   return `'${value.replace(/\\'/g, "''").replace(/'/g, "''")}'`;
@@ -338,6 +233,104 @@ export async function renderView(
 }
 
 // ---------------------------------------------------------------------------
+// Includes — transcluding one document's prose into another
+// ---------------------------------------------------------------------------
+
+/** ATX heading lines outside fenced code. Setext headings are not supported. */
+function headings(text: string): { at: number; length: number; level: number; rest: string }[] {
+  const code = codeRanges(text);
+  const found: { at: number; length: number; level: number; rest: string }[] = [];
+  const re = /^( {0,3})(#{1,6})([ \t][^\n]*|)$/gm;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    if (inRanges(code, match.index)) continue;
+    found.push({
+      at: match.index,
+      length: match[0].length,
+      level: match[2]!.length,
+      rest: `${match[1] ?? ""}|${match[3] ?? ""}`,
+    });
+  }
+  return found;
+}
+
+/**
+ * Shift every heading so the shallowest sits at `to`. Relative depth and gaps
+ * survive. Past six hashes CommonMark stops seeing a heading and renders the
+ * line as text, which is the documented behaviour here: the author chose the
+ * level, and a paragraph is a visible symptom.
+ */
+export function shiftHeadings(text: string, to: number): string {
+  const found = headings(text);
+  if (found.length === 0) return text;
+
+  const shift = to - Math.min(...found.map((h) => h.level));
+  if (shift === 0) return text;
+
+  let out = "";
+  let at = 0;
+  for (const heading of found) {
+    const [indent = "", rest = ""] = heading.rest.split("|");
+    out += text.slice(at, heading.at);
+    out += `${indent}${"#".repeat(Math.max(1, heading.level + shift))}${rest}`;
+    at = heading.at + heading.length;
+  }
+  return out + text.slice(at);
+}
+
+/**
+ * Transclude a document's prose. The text comes from the projection, which
+ * holds source prose with every marker collapsed, so an include can never
+ * copy another document's generated output (design/inline-views.md §7).
+ */
+async function renderInclude(
+  cfg: Config,
+  marker: IncludeMarker,
+  link: LinkContext,
+  file: string,
+): Promise<string> {
+  const { graph } = link;
+  let uri: string;
+  try {
+    const parsed = parseUri(marker.uri);
+    uri = formatUri(canonicalise(resolveUri(parsed, graph.roots).path, graph.roots, parsed.anchor));
+  } catch {
+    throw new LoomError(error("render/bad-include", `"${marker.uri}" is not a uri (in ${file})`, {
+      fix: "write <!-- loom include: <uri> [h1..h6] [notitle] -->",
+    }));
+  }
+
+  const node = graph.instances.get(uri);
+  if (node === undefined) {
+    throw new LoomError(error("render/missing-include", `${uri} has no instance file (in ${file})`, {
+      fix: `create it, or correct the uri (\`loom ls ${parseUri(uri).scheme}:\` lists what exists)`,
+    }));
+  }
+
+  const result = await query(cfg, `SELECT body FROM ${quoteIdentifier(node.className)} WHERE uri = '${uri.replace(/'/g, "''")}'`);
+  const body = String((result.rows as { body?: unknown }[])[0]?.body ?? "");
+
+  let prose = body;
+  if (marker.level !== undefined) {
+    // With a title, the document's own headings live under it.
+    prose = shiftHeadings(prose, marker.level + (marker.title ? 1 : 0));
+  }
+
+  const title = marker.title ? node.data["title"] : undefined;
+  const heading = typeof title === "string" && title !== ""
+    ? `${"#".repeat(marker.level ?? 1)} ${title}\n\n`
+    : "";
+
+  // Curies become links relative to the file the prose now lives in.
+  return `${heading}${toRelative(prose, link.fromPath, graph.roots, graph.prefixes)}`.trimEnd();
+}
+
+/** DuckDB identifier quoting, for the class table an include reads from. */
+function quoteIdentifier(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+// ---------------------------------------------------------------------------
 // Full-file render
 // ---------------------------------------------------------------------------
 
@@ -388,21 +381,8 @@ function hasStat(p: string): boolean {
   try { statSync(p); return true; } catch { return false; }
 }
 
-function updateSection(text: string, marker: ViewMarker, renderedMd: string): string {
-  const head = text.slice(0, marker.start);
-  const markerEnd = text.indexOf("-->", marker.start);
-  const closeLen = "-->".length;
-  const afterMarker = markerEnd !== -1 ? markerEnd + closeLen : marker.start;
-  const tail = text.slice(marker.end);
-  const opening = text.slice(marker.start, afterMarker);
-  const section = renderedMd
-    ? `${opening}\n\n${renderedMd}\n`
-    : `${opening}\n`;
-  return `${head}${section}<!-- loom view: ${marker.view} end -->${tail}`;
-}
-
 /** True when a render would change the section in this file. */
-function sectionDiffers(text: string, marker: ViewMarker, renderedMd: string): boolean {
+function sectionDiffers(text: string, marker: Marker, renderedMd: string): boolean {
   return updateSection(text, marker, renderedMd) !== text;
 }
 
@@ -451,13 +431,20 @@ export async function renderAll(
   const updates: { file: string; content: string }[] = [];
   for (const file of files) {
     const text = readFileSync(file, "utf8");
-    const markers = scanViewMarkers(text);
+    const markers = scanMarkers(text);
     if (markers.length === 0) continue;
 
     const link = { graph, fromPath: toRepoRelative(cfg, file) };
     let updated = text;
     // Render right-to-left: earlier markers' offsets stay valid.
     for (const marker of [...markers].reverse()) {
+      if (marker.kind === "include") {
+        const markdown = await renderInclude(cfg, marker, link, toRepoRelative(cfg, file));
+        note(`${file}: include ${marker.raw}`);
+        updated = updateSection(updated, marker, markdown);
+        rendered.push({ file, view: `include ${marker.uri}` });
+        continue;
+      }
       const { markdown, debug } = await renderView(cfg, marker.view, marker.params, namedViews, link, toRepoRelative(cfg, file));
       note(`${file}: view ${debug.name}\n  ${debug.sql.replaceAll("\n", "\n  ")}`);
       updated = updateSection(updated, marker, markdown);
@@ -527,12 +514,17 @@ async function checkStale(
 
   for (const file of renderableMdFiles(cfg)) {
     const text = readFileSync(file, "utf8");
-    const markers = scanViewMarkers(text);
+    const markers = scanMarkers(text);
     if (markers.length === 0) continue;
 
     const link = { graph, fromPath: toRepoRelative(cfg, file) };
     let touched = false;
     for (const marker of markers) {
+      if (marker.kind === "include") {
+        const markdown = await renderInclude(cfg, marker, link, toRepoRelative(cfg, file));
+        if (sectionDiffers(text, marker, markdown)) touched = true;
+        continue;
+      }
       const { markdown, debug: info } = await renderView(cfg, marker.view, marker.params, namedViews, link, toRepoRelative(cfg, file));
       if (writeDebug !== undefined) {
         writeDebug(`${file}: view ${info.name}\n  ${info.sql.replaceAll("\n", "\n  ")}`);

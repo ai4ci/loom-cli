@@ -65,6 +65,45 @@ object) link with the uri as label. External-prefix uris link to the expanded
 URL. A uri that does not resolve stays plain text — a visible fact, not a
 silently broken link.
 
+## 6. Includes — transcluding a document
+
+```markdown
+<!-- loom include: slide:intro.md h3 -->
+...transcluded prose...
+<!-- loom include: slide:intro.md h3 end -->
+```
+
+`<uri> [h1..h6] [notitle]`. The uri names an instance; an unknown option word
+is `render/bad-include` and a uri with no instance file is
+`render/missing-include` — nothing is written either way.
+
+**Headings.** With no level the prose is transcluded verbatim. With `h<n>`:
+`notitle` shifts every heading so the shallowest sits at `n`, and without it
+the document's `title` is emitted as an `h<n>` and its own headings shift to
+`n+1`. Relative depth and gaps survive the shift. A document with no title
+degrades to the `notitle` form. Past six hashes CommonMark stops seeing a
+heading and renders the line as text; that is the behaviour, not an error —
+the author chose the level and a stray paragraph is a visible symptom.
+Setext headings (`===` underlines) are not supported. Headings inside fenced
+code in the transcluded prose are left alone.
+
+**Links.** The projection stores prose in curie form, so transcluded links are
+rewritten relative to the *including* file. The same conversion that puts uri
+cells in views on the page.
+
+## 7. One level, from the projection
+
+Includes and views expand from the database, never from another file's
+rendered output: `body` holds source prose with every marker section
+collapsed back to its bare opener (`collapseSections`, `src/markers.ts`). A
+transcluded marker therefore arrives as text, and the scanner skips markers
+nested inside another marker's section, so it stays text.
+
+The consequence is deliberate: rendering A expands its include of B but not
+B's include of C; rendering B expands C. One level per file per run, and
+`render` is idempotent — a cycle cannot grow a file. A `depth` option is the
+obvious stage 2.
+
 ## 5. Commands
 
 - `loom render` — expand every marker under the design root in place.

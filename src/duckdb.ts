@@ -5,6 +5,7 @@ import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { absolute, type Config } from "./config.ts";
 import { LoomError, error } from "./diagnostics.ts";
 import { splitProse, toUris } from "./body.ts";
+import { collapseSections } from "./markers.ts";
 import type { Graph, InstanceNode } from "./graph.ts";
 import { effectiveAttributes, isInstantiable } from "./model/schema.ts";
 import { isEnumeration, type Attribute, type SchemaIR } from "./model/types.ts";
@@ -372,8 +373,10 @@ function rowValues(
   attributes: Attribute[],
 ): string[] {
   const text = (value: string) => `'${value.replace(/'/g, "''")}'`;
+  // Collapsed: the database holds source prose, never generated output, so a
+  // transclusion cannot copy another document's expansion.
   const prose = () => toUris(
-    splitProse(node.file.markdown).prose.trim(),
+    collapseSections(splitProse(node.file.markdown).prose).trim(),
     node.path,
     graph.roots,
     graph.prefixes,

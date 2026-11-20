@@ -239,8 +239,10 @@ its innermost anchor at input time (never stored).
 
 ### `render [--check] [--debug]`
 
-Expand inline views (see `design/inline-views.md`): `<!-- loom view: ... -->`
-markers in markdown and `%% @view` definitions in the model.
+Expand inline views and includes (see `design/inline-views.md`):
+`<!-- loom view: ... -->` and `<!-- loom include: <uri> [h1..h6] [notitle] -->`
+markers in markdown, and `%% @view` definitions in the model. An include
+transcludes another document's prose from the projection, one level per run.
 
 - default: rewrite each marker's section in place with the query result. The
   section runs from the marker to its end marker (`<!-- loom view: <name>
@@ -328,7 +330,7 @@ Codes are stable identifiers; match on these rather than on message text.
 | `source/` | source addressing and reverse links | `dangling-reverse-link`, `ambiguous-anchor`, `unsupported-language`, `not-annotatable`, `verification-failed`, `not-found` |
 | `changeset/` | changeset parsing and application | see below |
 | `query/` | derived database | `no-database`, `failed`, `enum-type` |
-| `render/` | view expansion | `unknown-view` |
+| `render/` | view expansion | `unknown-view`, `bad-include`, `missing-include` |
 | `ls/` | discovery | `not-found`, `not-a-class`, `not-a-directory` |
 | `body/` | prose editing | `patch-failed` |
 
