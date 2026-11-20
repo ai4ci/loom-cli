@@ -2,9 +2,10 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { absolute, type Config } from "./config.ts";
 import { getLinksBlock, setLinksBlock, stringifyInstance, parseInstance } from "./document.ts";
-import { loadModel } from "./model/load.ts";
+import { loadModel, type LoadedModel } from "./model/load.ts";
 import type { SchemaIR } from "./model/types.ts";
-import { databasePath, query } from "./duckdb.ts";
+import { query, refresh } from "./duckdb.ts";
+import { loadGraph } from "./graph.ts";
 import { type ClassRoots } from "./path-resolution.ts";
 import { parseUri, resolveUri } from "./uri.ts";
 
@@ -185,38 +186,18 @@ export interface IndexCommandResult {
 }
 
 export async function indexCommand(
-  ctx: { cfg: Config; roots: ClassRoots },
+  ctx: { cfg: Config; roots: ClassRoots; model?: LoadedModel },
   options: { check?: boolean },
 ): Promise<IndexCommandResult> {
-  const { cfg, roots } = ctx;
-  const { schema } = loadModel(cfg);
+  const { cfg, roots, model = loadModel(cfg) } = ctx;
+  const { schema } = model;
+  await refresh(loadGraph(cfg, schema, roots).graph);
   if (options.check) {
-    // A projection behind the files is exactly the drift --check exists to
-    // catch, so rescan the markdown first.
-    if (existsSync(absolute(cfg, databasePath(cfg)))) {
-      const { loadGraph } = await import("./graph.ts");
-      const { refresh } = await import("./duckdb.ts");
-      const { graph } = loadGraph(cfg, schema, roots);
-      await refresh(graph);
-    }
     const stale = await checkIndexes(cfg, schema, roots);
     return {
       updated: [],
       unchanged: stale,
     };
-  }
-  // Rebuild if missing; otherwise rescan the markdown so the projection
-  // reflects hand edits (indexes read the projection).
-  if (!existsSync(absolute(cfg, databasePath(cfg)))) {
-    const { loadGraph } = await import("./graph.ts");
-    const { rebuild } = await import("./duckdb.ts");
-    const { graph } = loadGraph(cfg, schema, roots);
-    await rebuild(graph);
-  } else {
-    const { loadGraph } = await import("./graph.ts");
-    const { refresh } = await import("./duckdb.ts");
-    const { graph } = loadGraph(cfg, schema, roots);
-    await refresh(graph);
   }
   const updates = await regenerateIndexes(cfg, schema, roots);
   return {

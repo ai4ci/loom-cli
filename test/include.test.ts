@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 import { parse } from "yaml";
 import { run } from "../src/cli.ts";
 import { instance, makeRepo } from "./helpers.ts";
@@ -51,6 +52,9 @@ test("h3 emits the title as a heading and shifts the content below it", async ()
   assert.match(out, /### Slide A/);
   assert.match(out, /#### Heading two/);
   assert.match(out, /##### Deeper/);
+  assert.equal((await run(["--cwd", root, "render", "--check"])).code, 0);
+  assert.equal((await run(["--cwd", root, "render"])).code, 0);
+  assert.equal(read(root, "deck.md"), out);
 });
 
 test("notitle shifts the shallowest heading to the named level", async () => {
@@ -61,6 +65,37 @@ test("notitle shifts the shallowest heading to the named level", async () => {
   assert.doesNotMatch(out, /Slide A/);
   assert.match(out, /### Heading two/);
   assert.match(out, /#### Deeper/);
+  assert.equal((await run(["--cwd", root, "render"])).code, 0);
+  assert.equal(read(root, "deck.md"), out);
+});
+
+test("a self-include with heading options stays one level deep", async () => {
+  const root = repo({
+    "design/slide/a.md": instance("class: slide\ntitle: A", "Source text.\n\n<!-- loom include: slide:a.md h3 -->\n"),
+  });
+  const first = await run(["--cwd", root, "render"]);
+  assert.equal(first.code, 0, first.err);
+  const out = read(root, "design/slide/a.md");
+  assert.equal(out.match(/Source text\./g)?.length, 2);
+  assert.equal((await run(["--cwd", root, "render"])).code, 0);
+  assert.equal(read(root, "design/slide/a.md"), out);
+});
+
+test("includes share a DuckDB connection and rebase each occurrence's links", async (t) => {
+  const root = repo({
+    "deck.md": "<!-- loom include: slide:b.md -->\n\n<!-- loom include: slide:b.md -->\n",
+    "docs/deck.md": "<!-- loom include: slide:b.md -->\n\n<!-- loom include: slide:a.md -->\n",
+  });
+  assert.equal((await run(["--cwd", root, "rebuild"])).code, 0);
+  const connects = t.mock.method(DuckDBInstance.prototype, "connect");
+  const queries = t.mock.method(DuckDBConnection.prototype, "runAndReadAll");
+
+  const rendered = await run(["--cwd", root, "render"]);
+  assert.equal(rendered.code, 0, rendered.err);
+  assert.equal(connects.mock.callCount(), 2); // Refresh and all include lookups.
+  assert.equal(queries.mock.calls.filter(({ arguments: [sql] }) => sql.startsWith("SELECT body FROM")).length, 2);
+  assert.equal(read(root, "deck.md").match(/\[A\]\(design\/slide\/a\.md\)/g)?.length, 2);
+  assert.match(read(root, "docs/deck.md"), /\[A\]\(\.\.\/design\/slide\/a\.md\)/);
 });
 
 test("a document with no title degrades to content only", async () => {

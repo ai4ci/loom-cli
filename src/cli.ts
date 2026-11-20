@@ -10,7 +10,7 @@ import { readFileSync as readTextFile } from "node:fs";
 import { type Op, parseChangeset } from "./changeset.ts";
 import { findUri, listUri, locateLine } from "./browse.ts";
 import { unifiedDiff } from "./diff.ts";
-import { databasePath, query, rebuild } from "./duckdb.ts";
+import { databasePath, query, rebuild, refresh } from "./duckdb.ts";
 import { cosineSimilarity, embedder } from "./embeddings.ts";
 import { indexCommand } from "./index.ts";
 import { getLinksBlock, parseInstance } from "./document.ts";
@@ -20,7 +20,7 @@ import { commit, planChangeset } from "./mutate.ts";
 import { loadGraph, resolvePath, validateGraph } from "./graph.ts";
 import { renderCommand } from "./render.ts";
 import { validateInstance } from "./instance.ts";
-import { loadModel, writeNamespaces } from "./model/load.ts";
+import { loadModel, writeNamespaces, type LoadedModel } from "./model/load.ts";
 import { writeReport } from "./report.ts";
 import { serialise, type OutputFormat } from "./output.ts";
 import { canonicalise, formatUri, parseUri, resolveUri } from "./uri.ts";
@@ -35,7 +35,7 @@ export interface CliRun {
 }
 
 // Near the top or bottom of src/cli.ts
-const LOOM_VERSION = "0.15.1"; // Will be updated automatically by build hooks
+const LOOM_VERSION = "0.15.2"; // Will be updated automatically by build hooks
 
 
 /** A command returns data to emit and, optionally, a non-zero exit code. */
@@ -51,6 +51,7 @@ interface GlobalOptions {
 
 interface LoadedContext {
   cfg: Config;
+  model: LoadedModel;
   roots: ClassRoots;
   prefixes: Map<string, string>;
 }
@@ -58,7 +59,7 @@ interface LoadedContext {
 function loadContext(startDir?: string): LoadedContext {
   const cfg = loadConfig(startDir ?? process.cwd());
   const model = loadModel(cfg);
-  return { cfg, roots: model.roots, prefixes: model.prefixes };
+  return { cfg, model, roots: model.roots, prefixes: model.prefixes };
 }
 
 function resolveTarget(raw: string, ctx: LoadedContext) {
@@ -138,7 +139,7 @@ function modelCheckCommand(cfg: Config, override?: string): CommandOutput {
 
 function validateOneCommand(ctx: LoadedContext, raw: string, override?: string): CommandOutput {
   const { cfg, roots } = ctx;
-  const { schema } = loadModel(cfg, override);
+  const { schema } = override === undefined ? ctx.model : loadModel(cfg, override);
   const { canonical, path, file } = readInstance(raw, ctx);
 
   if (RESERVED_SCHEMES.has(canonical.scheme)) {
@@ -164,7 +165,7 @@ function validateAllCommand(
   options: { model?: string; fix?: boolean },
 ): CommandOutput {
   const { cfg } = ctx;
-  const { schema, roots } = loadModel(cfg, options.model);
+  const { schema, roots } = options.model === undefined ? ctx.model : loadModel(cfg, options.model);
 
   const check = () => {
     const { graph, diagnostics } = loadGraph(cfg, schema, roots);
@@ -221,7 +222,7 @@ function uriFields(op: Op): string[] {
 
 function applyOps(ctx: LoadedContext, ops: Op[], options: { dryRun?: boolean }): CommandOutput {
   const { cfg, roots } = ctx;
-  const { schema } = loadModel(cfg);
+  const { schema } = ctx.model;
 
   // Reject a path-shaped argument here rather than letting it reach the graph,
   // where a uri that is merely absent reads as "does not exist" — misleading
@@ -258,8 +259,7 @@ function applyOps(ctx: LoadedContext, ops: Op[], options: { dryRun?: boolean }):
 }
 
 async function rebuildCommand(ctx: LoadedContext): Promise<CommandOutput> {
-  const { cfg, roots } = ctx;
-  const model = loadModel(cfg);
+  const { cfg, model, roots } = ctx;
   const { graph } = loadGraph(cfg, model.schema, roots);
   return { value: { ...(await rebuild(graph)), namespaces: writeNamespaces(cfg, model) } };
 }
@@ -270,8 +270,7 @@ async function queryCommand(ctx: LoadedContext, sql: string): Promise<CommandOut
   else {
     // The files are the source of truth, and prose changes between runs; the
     // same rescan render/index do, so a query never answers from stale rows.
-    const { schema, roots } = loadModel(cfg);
-    const { refresh } = await import("./duckdb.ts");
+    const { schema, roots } = ctx.model;
     await refresh(loadGraph(cfg, schema, roots).graph);
   }
   return { value: await query(cfg, sql) };
@@ -287,7 +286,7 @@ async function similarCommand(
 ): Promise<CommandOutput> {
   const { cfg } = ctx;
   if (!existsSync(absolute(cfg, databasePath(cfg)))) await rebuildCommand(ctx);
-  const { schema, roots } = loadModel(cfg);
+  const { schema, roots } = ctx.model;
   const { graph } = loadGraph(cfg, schema, roots);
 
   const emb = embedder();

@@ -211,6 +211,17 @@ attributes — enums as native ENUM types, nested values as `STRUCT`s, lists as
 arrays), and `edge(subject, relation, object)` as a triple store. Embeddings
 (256-dim bag-of-features) are stored alongside for `similar`.
 
+`render`, `query`, and `index` read the current Markdown and compare a SHA-256
+hash of each source file with the value stored in DuckDB. A refresh inserts
+new documents, replaces changed rows and their outgoing edges, and removes
+rows and outgoing edges for deleted documents in one transaction. A projection
+version and model signature trigger a rebuild for older databases and changes
+to class definitions, relations, or URI resolution. Automatic rebuilds also
+run in a transaction so a failed rebuild leaves the previous projection intact.
+
+The CLI shares the parsed model within a command. Path diagnostics are computed
+from the current filesystem each time the CLI starts.
+
 ## 7. Source linkage
 
 See `design/source-linkage.md`.

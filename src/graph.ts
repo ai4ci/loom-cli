@@ -80,7 +80,8 @@ export function loadGraph(
 
     for (const absolutePath of markdownFilesUnder(cfg, root)) {
       const repoRelative = toRepoRelative(cfg, absolutePath);
-      const file = parseInstance(readFileSync(absolutePath, "utf8"));
+      const source = readFileSync(absolutePath, "utf8");
+      const file = parseInstance(source);
       const data = file.frontmatter?.toJS() as Record<string, unknown> | undefined;
 
       if (!data || typeof data !== "object" || Array.isArray(data)) {
@@ -101,7 +102,7 @@ export function loadGraph(
         path: repoRelative,
         data,
         file,
-        source: readFileSync(absolutePath, "utf8"),
+        source,
       });
     }
   }

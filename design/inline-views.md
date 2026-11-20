@@ -67,13 +67,14 @@ silently broken link.
 
 ## 5. Commands
 
-- `loom render` — expand every marker under the design root in place.
+- `loom render` — expand markers in the repository and write only changed Markdown files.
 - `loom render --check` — no-write dry run for CI: exit 0 when everything is
   fresh, exit 1 naming stale repo-relative files.
 - `loom render --debug` — also emit to stderr, per view:
   `<file>: view <name>` then the resolved SQL indented two spaces (inline
-  markers are named `(inline)`). The database is rebuilt automatically when
-  missing.
+  markers are named `(inline)`). Render refreshes the projection from changed
+  and deleted documents. It builds the projection when missing and rebuilds
+  when its version or model signature changes.
 
 ## 6. Includes — transcluding a document
 
@@ -100,6 +101,10 @@ code in the transcluded prose are left alone.
 **Links.** The projection stores prose in curie form, so transcluded links are
 rewritten relative to the *including* file. The same conversion that puts uri
 cells in views on the page.
+
+Each render shares one DuckDB connection for includes and fetches each source
+body once. Heading adjustments and link rebasing use the options and path at
+each include site.
 
 ## 7. One level, from the projection
 

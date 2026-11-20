@@ -295,7 +295,9 @@ missing.
 
 Run arbitrary SQL. Errors are `query/failed`; a missing database is
 `query/no-database`. Like `render` and `index`, `query` rescans the markdown
-first, so hand edits made since the last `rebuild` are visible.
+first, so hand edits made since the last `rebuild` are visible. Refresh uses
+source-file hashes to update changed documents and remove deleted ones. Older
+projections and changes to the projected model trigger an automatic rebuild.
 
 ```bash
 loom query "SELECT uri, title FROM issue WHERE status = 'open'"

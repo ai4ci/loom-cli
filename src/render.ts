@@ -1,8 +1,8 @@
 import { LoomError, type Diagnostic, error } from "./diagnostics.ts";
 import { IGNORED_DIRS, type Config, absolute } from "./config.ts";
 import { type ViewAnnotation } from "./model/types.ts";
-import { loadModel } from "./model/load.ts";
-import { databasePath, query, rebuild, refresh } from "./duckdb.ts";
+import { loadModel, type LoadedModel } from "./model/load.ts";
+import { query, refresh, withQueryConnection, type Query } from "./duckdb.ts";
 import { type Graph, loadGraph, relativeLink, titleOf, toRepoRelative } from "./graph.ts";
 import {
   type IncludeMarker,
@@ -284,7 +284,7 @@ export function shiftHeadings(text: string, to: number): string {
  * copy another document's generated output (design/inline-views.md §7).
  */
 async function renderInclude(
-  cfg: Config,
+  lookup: { query: Query; bodies: Map<string, string> },
   marker: IncludeMarker,
   link: LinkContext,
   file: string,
@@ -307,8 +307,12 @@ async function renderInclude(
     }));
   }
 
-  const result = await query(cfg, `SELECT body FROM ${quoteIdentifier(node.className)} WHERE uri = '${uri.replace(/'/g, "''")}'`);
-  const body = String((result.rows as { body?: unknown }[])[0]?.body ?? "");
+  let body = lookup.bodies.get(uri);
+  if (body === undefined) {
+    const result = await lookup.query(`SELECT body FROM ${quoteIdentifier(node.className)} WHERE uri = '${uri.replace(/'/g, "''")}'`);
+    body = String((result.rows as { body?: unknown }[])[0]?.body ?? "");
+    lookup.bodies.set(uri, body);
+  }
 
   let prose = body;
   if (marker.level !== undefined) {
@@ -391,30 +395,28 @@ export interface RenderResult {
   view: string;
 }
 
+interface RenderContext {
+  cfg: Config;
+  roots: ClassRoots;
+  model?: LoadedModel;
+}
+
+async function prepareRender({ cfg, roots, model = loadModel(cfg) }: RenderContext) {
+  const { graph } = loadGraph(cfg, model.schema, roots);
+  await refresh(graph);
+  return { graph, namedViews: new Map(model.views.map((view) => [view.name, view])) };
+}
+
 /**
  * Scan every markdown file under the repo root, find
  * `<!-- loom view: ... -->` markers, render them, and update files in place.
  */
 export async function renderAll(
-  ctx: { cfg: Config; roots: ClassRoots },
+  ctx: RenderContext,
   debug?: DebugSink,
 ): Promise<{ rendered: RenderResult[]; debug: string[] }> {
-  const { cfg, roots } = ctx;
-  const model = loadModel(cfg);
-  const { schema } = model;
-
-  // Rebuild DB if it doesn't exist yet; otherwise rescan the markdown so the
-  // projection reflects hand edits (render reads the projection, so --check
-  // would otherwise pass on stale data).
-  if (!hasStat(absolute(cfg, databasePath(cfg)))) {
-    const { graph } = loadGraph(cfg, schema, roots);
-    await rebuild(graph);
-  } else {
-    const { graph } = loadGraph(cfg, schema, roots);
-    await refresh(graph);
-  }
-
-  const namedViews = new Map(model.views.map((v) => [v.name, v]));
+  const { cfg } = ctx;
+  const { graph, namedViews } = await prepareRender(ctx);
   const files = renderableMdFiles(cfg);
   const rendered: RenderResult[] = [];
   const debugLines: string[] = [];
@@ -423,36 +425,36 @@ export async function renderAll(
     debug?.(line);
   };
 
-  // Loaded once so uri cells can link with real titles.
-  const { graph } = loadGraph(cfg, schema, roots);
-
   // Render every file in memory first: if any view fails, nothing is written
   // anywhere, so a failed render cannot leave a half-updated repo.
   const updates: { file: string; content: string }[] = [];
-  for (const file of files) {
-    const text = readFileSync(file, "utf8");
-    const markers = scanMarkers(text);
-    if (markers.length === 0) continue;
+  await withQueryConnection(cfg, async (query) => {
+    const lookup = { query, bodies: new Map<string, string>() };
+    for (const file of files) {
+      const text = readFileSync(file, "utf8");
+      const markers = scanMarkers(text);
+      if (markers.length === 0) continue;
 
-    const link = { graph, fromPath: toRepoRelative(cfg, file) };
-    let updated = text;
-    // Render right-to-left: earlier markers' offsets stay valid.
-    for (const marker of [...markers].reverse()) {
-      if (marker.kind === "include") {
-        const markdown = await renderInclude(cfg, marker, link, toRepoRelative(cfg, file));
-        note(`${file}: include ${marker.raw}`);
+      const link = { graph, fromPath: toRepoRelative(cfg, file) };
+      let updated = text;
+      // Render right-to-left: earlier markers' offsets stay valid.
+      for (const marker of [...markers].reverse()) {
+        if (marker.kind === "include") {
+          const markdown = await renderInclude(lookup, marker, link, link.fromPath);
+          note(`${file}: include ${marker.raw}`);
+          updated = updateSection(updated, marker, markdown);
+          rendered.push({ file, view: `include ${marker.uri}` });
+          continue;
+        }
+        const { markdown, debug } = await renderView(cfg, marker.view, marker.params, namedViews, link, link.fromPath);
+        note(`${file}: view ${debug.name}\n  ${debug.sql.replaceAll("\n", "\n  ")}`);
         updated = updateSection(updated, marker, markdown);
-        rendered.push({ file, view: `include ${marker.uri}` });
-        continue;
+        rendered.push({ file, view: marker.view });
       }
-      const { markdown, debug } = await renderView(cfg, marker.view, marker.params, namedViews, link, toRepoRelative(cfg, file));
-      note(`${file}: view ${debug.name}\n  ${debug.sql.replaceAll("\n", "\n  ")}`);
-      updated = updateSection(updated, marker, markdown);
-      rendered.push({ file, view: marker.view });
+      rendered.reverse();
+      if (updated !== text) updates.push({ file, content: updated });
     }
-    rendered.reverse();
-    updates.push({ file, content: updated });
-  }
+  });
   for (const update of updates) writeFileSync(update.file, update.content, "utf8");
 
   return { rendered, debug: debugLines };
@@ -474,7 +476,7 @@ export interface RenderCommandResult {
 export type DebugSink = (line: string) => void;
 
 export async function renderCommand(
-  ctx: { cfg: Config; roots: ClassRoots },
+  ctx: RenderContext,
   options: RenderCommandOptions = {},
   write?: { debug: DebugSink },
 ): Promise<RenderCommandResult> {
@@ -492,47 +494,37 @@ export async function renderCommand(
  * would change, so the caller can fail with the paths that are stale.
  */
 async function checkStale(
-  ctx: { cfg: Config; roots: ClassRoots },
+  ctx: RenderContext,
   writeDebug: DebugSink | undefined,
 ): Promise<string[]> {
-  const { cfg, roots } = ctx;
-  const model = loadModel(cfg);
-  const { schema } = model;
-
-  if (!hasStat(absolute(cfg, databasePath(cfg)))) {
-    const { graph } = loadGraph(cfg, schema, roots);
-    await rebuild(graph);
-  } else {
-    const { graph } = loadGraph(cfg, schema, roots);
-    await refresh(graph);
-  }
-
-  const namedViews = new Map(model.views.map((v) => [v.name, v]));
+  const { cfg } = ctx;
+  const { graph, namedViews } = await prepareRender(ctx);
   const stale: string[] = [];
 
-  const { graph } = loadGraph(cfg, schema, roots);
+  await withQueryConnection(cfg, async (query) => {
+    const lookup = { query, bodies: new Map<string, string>() };
+    for (const file of renderableMdFiles(cfg)) {
+      const text = readFileSync(file, "utf8");
+      const markers = scanMarkers(text);
+      if (markers.length === 0) continue;
 
-  for (const file of renderableMdFiles(cfg)) {
-    const text = readFileSync(file, "utf8");
-    const markers = scanMarkers(text);
-    if (markers.length === 0) continue;
-
-    const link = { graph, fromPath: toRepoRelative(cfg, file) };
-    let touched = false;
-    for (const marker of markers) {
-      if (marker.kind === "include") {
-        const markdown = await renderInclude(cfg, marker, link, toRepoRelative(cfg, file));
+      const link = { graph, fromPath: toRepoRelative(cfg, file) };
+      let touched = false;
+      for (const marker of markers) {
+        if (marker.kind === "include") {
+          const markdown = await renderInclude(lookup, marker, link, link.fromPath);
+          if (sectionDiffers(text, marker, markdown)) touched = true;
+          continue;
+        }
+        const { markdown, debug: info } = await renderView(cfg, marker.view, marker.params, namedViews, link, link.fromPath);
+        if (writeDebug !== undefined) {
+          writeDebug(`${file}: view ${info.name}\n  ${info.sql.replaceAll("\n", "\n  ")}`);
+        }
         if (sectionDiffers(text, marker, markdown)) touched = true;
-        continue;
       }
-      const { markdown, debug: info } = await renderView(cfg, marker.view, marker.params, namedViews, link, toRepoRelative(cfg, file));
-      if (writeDebug !== undefined) {
-        writeDebug(`${file}: view ${info.name}\n  ${info.sql.replaceAll("\n", "\n  ")}`);
-      }
-      if (sectionDiffers(text, marker, markdown)) touched = true;
+      if (touched) stale.push(file);
     }
-    if (touched) stale.push(file);
-  }
+  });
 
   return stale;
 }

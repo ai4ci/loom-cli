@@ -94,8 +94,10 @@ function includeUri(raw: string): string {
  */
 export function scanMarkers(text: string): Marker[] {
   const markers: Marker[] = [];
-  const code = codeRanges(text);
   const re = new RegExp(MARKER_RE.source, "g");
+  if (!re.test(text)) return markers;
+  re.lastIndex = 0;
+  const code = codeRanges(text);
   let match: RegExpExecArray | null;
 
   while ((match = re.exec(text)) !== null) {
@@ -107,7 +109,7 @@ export function scanMarkers(text: string): Marker[] {
 
     const name = kind === "view" ? viewName(raw) : includeUri(raw);
     const start = match.index;
-    const end = sectionEnd(text, code, kind, name, match.index + match[0].length);
+    const end = sectionEnd(text, code, kind, name, raw, match.index + match[0].length);
 
     markers.push(kind === "view"
       ? { kind, ...parseView(raw), start, end }
@@ -126,19 +128,22 @@ export function scanViewMarkers(text: string): ViewMarker[] {
 }
 
 /**
- * The terminator: `<name> end` if present after this opener, else the first
- * bare `end` of the same kind. An unterminated marker is not an error while
- * authoring — its section is empty (render inserts the content and the
- * qualified end right after the opener), so prose below is never eaten.
+ * Match the first bare or qualified terminator of the same kind. Includes
+ * repeat their full arguments, and URI-only closers still work. An opener
+ * without a terminator has an empty section so the prose below survives.
  */
 function sectionEnd(
   text: string,
   code: [number, number][],
   kind: string,
   name: string,
+  raw: string,
   from: number,
 ): number {
-  const own = new RegExp(`<!--\\s*loom[\\s:]+${kind}\\s*:\\s*${escapeRegExp(name)}\\s+end\\s*-->`);
+  const qualifier = kind === "include" && raw !== name
+    ? `(?:${escapeRegExp(raw)}|${escapeRegExp(name)})`
+    : escapeRegExp(name);
+  const own = new RegExp(`<!--\\s*loom[\\s:]+${kind}\\s*:\\s*${qualifier}\\s+end\\s*-->`);
   const rest = new RegExp(MARKER_RE.source, "g");
   rest.lastIndex = from;
   let candidate: RegExpExecArray | null;

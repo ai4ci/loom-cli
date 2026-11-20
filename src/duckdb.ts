@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
+import { DuckDBInstance, listValue, type DuckDBConnection } from "@duckdb/node-api";
 import { absolute, type Config } from "./config.ts";
 import { LoomError, error } from "./diagnostics.ts";
 import { splitProse, toUris } from "./body.ts";
@@ -199,6 +199,14 @@ export interface TableSummary {
   rows: number;
 }
 
+const PROJECTION_VERSION = 1;
+
+function projectionKey({ schema, roots, prefixes }: Graph): string {
+  const layout = [[...schema.classes], schema.relations, [...roots], [...prefixes]];
+  return hashBody(JSON.stringify([PROJECTION_VERSION, layout], (key, value: unknown) =>
+    key === "line" ? undefined : value));
+}
+
 // One instance per database file: separate DuckDBInstance objects on the
 // same file do not share WAL state reliably (a second instance could read a
 // stale snapshot mid-checkpoint of the first), and loom opens short-lived
@@ -222,13 +230,36 @@ async function connect(cfg: Config): Promise<DuckDBConnection> {
  * correct projection is to throw the database away and write it again.
  */
 export async function rebuild(graph: Graph): Promise<{ database: string; tables: TableSummary[] }> {
-  const { cfg, schema } = graph;
+  const { cfg } = graph;
   const target = absolute(cfg, databasePath(cfg));
+  const previous = instances.get(target);
+  if (previous !== undefined) (await previous).closeSync();
+  instances.delete(target);
   rmSync(target, { force: true });
   rmSync(`${target}.wal`, { force: true });
-  instances.delete(target);
 
   const connection = await connect(cfg);
+  try {
+    await connection.run("BEGIN TRANSACTION");
+    const tables = await createProjection(connection, graph);
+    await connection.run("COMMIT");
+    return { database: databasePath(cfg), tables };
+  } finally {
+    connection.closeSync();
+  }
+}
+
+async function createProjection(connection: DuckDBConnection, graph: Graph): Promise<TableSummary[]> {
+  await connection.run("CREATE SCHEMA loom_internal");
+  await connection.run("CREATE TABLE loom_internal.projection (signature VARCHAR)");
+  await connection.run("CREATE TABLE loom_internal.files (uri VARCHAR PRIMARY KEY, class_name VARCHAR, content_hash VARCHAR)");
+  const tables = await populateProjection(connection, graph);
+  await connection.run("INSERT INTO loom_internal.projection VALUES (?)", [projectionKey(graph)]);
+  return tables;
+}
+
+async function populateProjection(connection: DuckDBConnection, graph: Graph): Promise<TableSummary[]> {
+  const { schema } = graph;
   const tables: TableSummary[] = [];
   const emb = embedder();
 
@@ -238,7 +269,6 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
     try {
       await connection.run(`CREATE TYPE ${quote(name)} AS ENUM (${values})`);
     } catch (cause) {
-      connection.closeSync();
       // Almost always a clash with a built-in DuckDB type name (`date`, `blob`,
       // ...). The model is the fixable end, so say so rather than letting a
       // raw catalog error out.
@@ -258,7 +288,7 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
       "uri VARCHAR PRIMARY KEY",
       "id VARCHAR",
       "path VARCHAR",
-      ...(hasOwnBody(schema, className) ? [] : ["body VARCHAR"]),
+      ...(hasProseColumn(attributes) ? ["body VARCHAR"] : []),
       ...attributes.map((a) => `${quote(a.name)} ${columnType(schema, a)}`),
     ];
     await connection.run(`CREATE TABLE ${quote(className)} (${columns.join(", ")})`);
@@ -268,8 +298,7 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
       .sort((a, b) => a.uri.localeCompare(b.uri));
 
     for (const node of nodes) {
-      const values = rowValues(graph, className, node, attributes);
-      await connection.run(`INSERT INTO ${quote(className)} VALUES (${values.join(", ")})`);
+      await insertDocument(connection, graph, node, attributes, hashBody(node.source));
     }
     tables.push({ name: className, rows: nodes.length });
   }
@@ -278,10 +307,7 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
   const edges = [...graph.edges].sort((a, b) =>
     a.from.localeCompare(b.from) || a.relation.localeCompare(b.relation) || a.to.localeCompare(b.to));
   for (const edge of edges) {
-    const values = [edge.from, edge.relation, edge.to]
-      .map((v) => `'${v.replace(/'/g, "''")}'`)
-      .join(", ");
-    await connection.run(`INSERT INTO edge VALUES (${values})`);
+    await connection.run("INSERT INTO edge VALUES (?, ?, ?)", [edge.from, edge.relation, edge.to]);
   }
   tables.push({ name: "edge", rows: edges.length });
 
@@ -308,86 +334,126 @@ export async function rebuild(graph: Graph): Promise<{ database: string; tables:
   }
   tables.push({ name: "embedding", rows: rows.length });
 
-  connection.closeSync();
-  return { database: databasePath(cfg), tables };
+  return tables;
 }
 
-/**
- * Bring the projection in line with the files without a full rebuild: delete
- * every row the graph knows about, re-insert from the graph. Cheaper than
- * rebuild (no schema setup, embeddings preserved) and makes view/index --check
- * see hand edits (render/index read the projection; without this they would
- * pass on stale data).
- */
+/** Synchronise changed documents and their outbound edges in one transaction. */
 export async function refresh(graph: Graph): Promise<void> {
-  const { cfg, schema } = graph;
-  const connection = await connect(cfg);
+  const connection = await connect(graph.cfg);
   try {
-    for (const className of [...schema.classes.keys()].sort()) {
-      if (!isInstantiable(schema, className)) continue;
-      await connection.run(`DELETE FROM ${quote(className)} WHERE 1=1`);
-      const attributes = effectiveAttributes(schema, className);
-      const nodes = [...graph.instances.values()]
-        .filter((n) => n.className === className)
-        .sort((a, b) => a.uri.localeCompare(b.uri));
-      for (const node of nodes) {
-        const values = rowValues(graph, className, node, attributes);
-        await connection.run(`INSERT INTO ${quote(className)} VALUES (${values.join(", ")})`);
-      }
+    await connection.run("BEGIN TRANSACTION");
+    if (await projectionMatches(connection, graph)) {
+      await updateProjection(connection, graph);
+    } else {
+      await resetProjection(connection);
+      await createProjection(connection, graph);
     }
-    await connection.run("DELETE FROM edge WHERE 1=1");
-    const edges = [...graph.edges].sort((a, b) =>
-      a.from.localeCompare(b.from) || a.relation.localeCompare(b.relation) || a.to.localeCompare(b.to));
-    for (const edge of edges) {
-      const values = [edge.from, edge.relation, edge.to]
-        .map((v) => `'${v.replace(/'/g, "''")}'`)
-        .join(", ");
-      await connection.run(`INSERT INTO edge VALUES (${values})`);
-    }
+    await connection.run("COMMIT");
   } finally {
-    await connection.run("CHECKPOINT");
     connection.closeSync();
   }
 }
 
-/** Strip the generated protected region so it doesn't pollute the embedding. */
-/**
- * A class may declare an attribute called `body`; the model wins and the
- * built-in prose column is not projected for that class.
- * shortcut: no diagnostic for the shadowing, add one if it confuses anyone.
- */
-function hasOwnBody(schema: SchemaIR, className: string): boolean {
-  return effectiveAttributes(schema, className).some((a) => a.name === "body");
+/** Replace an obsolete projection inside the same transaction as its rebuild. */
+async function resetProjection(connection: DuckDBConnection): Promise<void> {
+  await connection.run("DROP SCHEMA IF EXISTS loom_internal CASCADE");
+  // A legacy database has no catalogue of projected classes or enums. The
+  // main schema in this disposable database contains the projection.
+  const objects = await connection.runAndReadAll(`
+    SELECT 'VIEW', view_name, 1 AS drop_order FROM duckdb_views()
+      WHERE database_name = current_database() AND schema_name = 'main' AND NOT internal
+    UNION ALL
+    SELECT 'TABLE', table_name, 2 FROM duckdb_tables()
+      WHERE database_name = current_database() AND schema_name = 'main' AND NOT internal
+    UNION ALL
+    SELECT 'TYPE', type_name, 3 FROM duckdb_types()
+      WHERE database_name = current_database() AND schema_name = 'main' AND NOT internal
+    ORDER BY drop_order`);
+  for (const [kind, name] of objects.getRows() as [string, string, number][]) {
+    // Drop views and tables before the types their columns use.
+    await connection.run(`DROP ${kind} IF EXISTS main.${quote(name)} CASCADE`);
+  }
 }
 
-/**
- * One row: the built-in columns, the prose, then the declared attributes.
- * Prose is projected in curie form, as `body get` returns it: a relative link
- * only means anything from the file it was written in, and the point of the
- * column is to move that text somewhere else.
- */
-function rowValues(
+async function projectionMatches(connection: DuckDBConnection, graph: Graph): Promise<boolean> {
+  const tables = await connection.runAndReadAll(
+    "SELECT 1 FROM duckdb_tables() WHERE database_name = current_database() " +
+    "AND schema_name = 'loom_internal' AND table_name = 'projection'",
+  );
+  if (tables.getRows().length === 0) return false;
+  const signature = await connection.runAndReadAll("SELECT signature FROM loom_internal.projection");
+  return signature.getRows()[0]?.[0] === projectionKey(graph);
+}
+
+async function updateProjection(connection: DuckDBConnection, graph: Graph): Promise<void> {
+  const existing = await connection.runAndReadAll("SELECT uri, class_name, content_hash FROM loom_internal.files");
+  const previous = new Map<string, { className: string; hash: string }>();
+  const removed = new Map<string, string[]>();
+  for (const [uri, className, hash] of existing.getRows() as [string, string, string][]) {
+    previous.set(uri, { className, hash });
+  }
+
+  const changed = new Map<string, { node: InstanceNode; hash: string }>();
+  for (const node of graph.instances.values()) {
+    const hash = hashBody(node.source);
+    if (previous.get(node.uri)?.hash !== hash) changed.set(node.uri, { node, hash });
+  }
+  for (const [uri, { className }] of previous) {
+    if (!graph.instances.has(uri) || changed.has(uri)) {
+      let uris = removed.get(className);
+      if (uris === undefined) removed.set(className, uris = []);
+      uris.push(uri);
+    }
+  }
+  if (changed.size === 0 && removed.size === 0) return;
+
+  const removedUris = [...removed.values()].flat();
+  if (removedUris.length > 0) {
+    const uris = listValue(removedUris);
+    await connection.run("DELETE FROM loom_internal.files WHERE uri IN (SELECT unnest(?::VARCHAR[]))", [uris]);
+    await connection.run("DELETE FROM edge WHERE subject IN (SELECT unnest(?::VARCHAR[]))", [uris]);
+    for (const [className, classUris] of removed) {
+      await connection.run(`DELETE FROM ${quote(className)} WHERE uri IN (SELECT unnest(?::VARCHAR[]))`, [listValue(classUris)]);
+    }
+  }
+  const classAttributes = new Map<string, Attribute[]>();
+  for (const { node, hash } of changed.values()) {
+    let attributes = classAttributes.get(node.className);
+    if (attributes === undefined) {
+      attributes = effectiveAttributes(graph.schema, node.className);
+      classAttributes.set(node.className, attributes);
+    }
+    await insertDocument(connection, graph, node, attributes, hash);
+  }
+  for (const edge of graph.edges) {
+    if (changed.has(edge.from)) {
+      await connection.run("INSERT INTO edge VALUES (?, ?, ?)", [edge.from, edge.relation, edge.to]);
+    }
+  }
+}
+
+async function insertDocument(
+  connection: DuckDBConnection,
   graph: Graph,
-  className: string,
   node: InstanceNode,
   attributes: Attribute[],
-): string[] {
-  const text = (value: string) => `'${value.replace(/'/g, "''")}'`;
-  // Collapsed: the database holds source prose, never generated output, so a
-  // transclusion cannot copy another document's expansion.
-  const prose = () => toUris(
-    collapseSections(splitProse(node.file.markdown).prose).trim(),
-    node.path,
-    graph.roots,
-    graph.prefixes,
-  );
-  return [
-    text(node.uri),
-    text(node.id),
-    text(node.path),
-    ...(hasOwnBody(graph.schema, className) ? [] : [text(prose())]),
-    ...attributes.map((a) => literal(graph.schema, a, node.data[a.name])),
-  ];
+  hash: string,
+): Promise<void> {
+  const values = [node.uri, node.id, node.path];
+  if (hasProseColumn(attributes)) {
+    // Includes use the source prose with generated sections collapsed. Store
+    // links in CURIE form so render can rebase them to the including document.
+    const prose = collapseSections(splitProse(node.file.markdown).prose).trim();
+    values.push(toUris(prose, node.path, graph.roots, graph.prefixes));
+  }
+  const columns = [...values.map(() => "?"), ...attributes.map((a) => literal(graph.schema, a, node.data[a.name]))];
+  await connection.run(`INSERT INTO ${quote(node.className)} VALUES (${columns.join(", ")})`, values);
+  await connection.run("INSERT INTO loom_internal.files VALUES (?, ?, ?)", [node.uri, node.className, hash]);
+}
+
+/** An explicitly declared body attribute takes precedence over built-in prose. */
+function hasProseColumn(attributes: Attribute[]): boolean {
+  return !attributes.some((attribute) => attribute.name === "body");
 }
 
 function stripProtected(markdown: string): string {
@@ -415,18 +481,30 @@ function plain(value: unknown): unknown {
   return value;
 }
 
-export async function query(cfg: Config, sql: string): Promise<{ rows: unknown[] }> {
-  if (!existsSync(absolute(cfg, databasePath(cfg)))) {
-    throw new LoomError(error("query/no-database", "no database; run `loom rebuild`"));
-  }
+export type Query = (sql: string) => Promise<{ rows: unknown[] }>;
 
-  const connection = await connect(cfg);
+export async function withQueryConnection<T>(cfg: Config, use: (query: Query) => Promise<T>): Promise<T> {
+  let connection: DuckDBConnection | undefined;
   try {
-    const result = await connection.runAndReadAll(sql);
-    return { rows: result.getRowObjects().map((row) => plain(row)) };
-  } catch (cause) {
-    throw new LoomError(error("query/failed", (cause as Error).message));
+    return await use(async (sql) => {
+      if (connection === undefined) {
+        if (!existsSync(absolute(cfg, databasePath(cfg)))) {
+          throw new LoomError(error("query/no-database", "no database; run `loom rebuild`"));
+        }
+        connection = await connect(cfg);
+      }
+      try {
+        const result = await connection.runAndReadAll(sql);
+        return { rows: result.getRowObjects().map((row) => plain(row)) };
+      } catch (cause) {
+        throw new LoomError(error("query/failed", (cause as Error).message));
+      }
+    });
   } finally {
-    connection.closeSync();
+    connection?.closeSync();
   }
+}
+
+export async function query(cfg: Config, sql: string): Promise<{ rows: unknown[] }> {
+  return withQueryConnection(cfg, (run) => run(sql));
 }
