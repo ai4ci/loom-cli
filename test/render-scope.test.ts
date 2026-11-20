@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import childProcess, { execFileSync, type SpawnSyncOptions } from "node:child_process";
+import { fstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import { run } from "../src/cli.ts";
 import { instance, makeRepo } from "./helpers.ts";
@@ -93,6 +94,49 @@ test("render skips markdown paths git ignores", async () => {
   const r = await run(["--cwd", root, "render"]);
   assert.equal(r.code, 0, r.err);
   assert.equal(readFileSync(path.join(root, "build/GENERATED.md"), "utf8"), marker);
+});
+
+test("render feeds git check-ignore through a file descriptor", async (t) => {
+  const root = gitRepo({
+    "design/document-model.mmd": MODEL,
+    "design/issue/a.md": instance("class: issue\ntitle: Alpha"),
+    "README.md": "<!-- loom view: backlog -->\n",
+  });
+  const spawn = childProcess.spawnSync;
+  const inputs: boolean[] = [];
+  const mock = t.mock.method(childProcess, "spawnSync", (command: string, args: readonly string[], options: SpawnSyncOptions) => {
+    if (command === "git" && args.includes("check-ignore")) {
+      const fd = Array.isArray(options.stdio) ? options.stdio[0] : undefined;
+      inputs.push(typeof fd === "number" && fstatSync(fd).isFile() && options.input === undefined);
+    }
+    return spawn(command, args, options);
+  });
+  syncBuiltinESMExports();
+  try {
+    assert.equal((await run(["--cwd", root, "render"])).code, 0);
+    assert.equal((await run(["--cwd", root, "render", "--check"])).code, 0);
+    assert.deepEqual(inputs, [true, true]);
+  } finally {
+    mock.mock.restore();
+    syncBuiltinESMExports();
+  }
+});
+
+test("render skips ignored Markdown filenames containing tabs and newlines", { skip: process.platform === "win32" }, async () => {
+  const marker = "<!-- loom view: backlog -->\n";
+  const root = gitRepo({
+    "design/document-model.mmd": MODEL,
+    "design/issue/a.md": instance("class: issue\ntitle: Alpha"),
+    ".gitignore": "generated/\n",
+    "README.md": marker,
+  });
+  const ignored = path.join(root, "generated", "output\tline\nbreak.md");
+  mkdirSync(path.dirname(ignored));
+  writeFileSync(ignored, marker);
+
+  assert.equal((await run(["--cwd", root, "render"])).code, 0);
+  assert.equal(readFileSync(ignored, "utf8"), marker);
+  assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /Alpha/);
 });
 
 // Defect 3: an unknown named view is an error, not file content.

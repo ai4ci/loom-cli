@@ -68,6 +68,8 @@ silently broken link.
 ## 5. Commands
 
 - `loom render` — expand markers in the repository and write only changed Markdown files.
+  Git checks the candidate paths in one batch from a temporary file, using
+  NUL separators to preserve filenames containing whitespace.
 - `loom render --check` — no-write dry run for CI: exit 0 when everything is
   fresh, exit 1 naming stale repo-relative files.
 - `loom render --debug` — also emit to stderr, per view:

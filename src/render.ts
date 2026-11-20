@@ -17,8 +17,9 @@ import { toRelative } from "./body.ts";
 import { canonicalise, formatUri, parseUri, resolveUri } from "./uri.ts";
 
 export { scanMarkers, scanViewMarkers, type Marker, type ViewMarker, type IncludeMarker };
-import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ClassRoots } from "./path-resolution.ts";
 
@@ -357,6 +358,27 @@ function mdFiles(root: string): string[] {
   return files;
 }
 
+function checkIgnoredPaths(repoRoot: string, paths: string[]) {
+  const input = Buffer.from(`${paths.join("\0")}\0`);
+  const dir = mkdtempSync(path.join(tmpdir(), "loom-ignore-"));
+  let fd: number | undefined;
+  try {
+    const file = path.join(dir, "paths");
+    writeFileSync(file, input);
+    // A regular file avoids the synchronous stdin pipe that can stall in
+    // agent tool sessions. Git reads the whole list in one invocation.
+    fd = openSync(file, "r");
+    return spawnSync("git", ["-C", repoRoot, "check-ignore", "--stdin", "-z"], {
+      stdio: [fd, "pipe", "ignore"],
+      encoding: "utf8",
+      maxBuffer: Math.max(1024 * 1024, input.length),
+    });
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 /**
  * Markdown files render may write to: everything under the repo root except
  * ignored trees and paths git ignores. Generated output (a `build/` dir,
@@ -368,13 +390,10 @@ function renderableMdFiles(cfg: Config): string[] {
   if (files.length === 0) return files;
   let ignored: Set<string>;
   try {
-    const child = spawnSync("git", ["-C", cfg.repoRoot, "check-ignore", "--stdin"], {
-      input: files.map((f) => toRepoRelative(cfg, f)).join("\n"),
-      encoding: "utf8",
-    });
+    const child = checkIgnoredPaths(cfg.repoRoot, files.map((file) => toRepoRelative(cfg, file)));
     // Exit 0 means some paths matched, 1 means none did, 128 means no repo.
     if (child.status !== 0 && child.status !== 1) return files;
-    ignored = new Set(child.stdout.split("\n").filter((line) => line !== ""));
+    ignored = new Set(child.stdout.split("\0"));
   } catch {
     return files;
   }
