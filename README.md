@@ -17,8 +17,9 @@ Loom turns an ordinary repository of Markdown files into a typed, validated, and
 - **Markdown-Native Source of Truth**: Files remain clean Markdown with YAML frontmatter. Human-readable in GitHub, Obsidian, or VS Code.
 - **Agent-Ready Typing & Invariants**: Enforces attributes, required fields, enumerations, inheritance, and edge cardinalities (`1`, `0..1`, `0..*`, `1..*`) defined in standard Mermaid diagrams.
 - **Atomic Multi-File Changesets**: Validate the entire graph in memory before writing a single byte to disk. Roll back completely on errors.
-- **Deep Source Code Linkage**: Bidirectional links between Markdown documents and code declarations (`src:path/file.ts#Class.method`). Automatically writes reverse-link comments directly into function/class bodies and detects renames across git commits.
+- **Deep Source Code Linkage**: Bidirectional links between Markdown documents and code declarations (`src:path/file.ts#Class.method`), including labelled R Markdown and Quarto chunks (`src:analysis.Rmd#setup`). Automatically writes reverse-link comments directly into function/class bodies and detects both renamed symbols and files git records as moved.
 - **Embedded DuckDB SQL Engine**: Projects document attributes into native DuckDB tables and edges into an RDF-style triple store (`edge(subject, relation, object)`). Run arbitrary analytical SQL queries across your documentation.
+- **Document Assembly**: `<!-- loom include: slide:intro.md h3 -->` transcludes another document's prose, shifting its headings to fit and relinking it to its new home — decks, reports and handbooks assembled out of the graph.
 - **Human Navigation & Indexes**: Automatically generates relative Markdown links and backlinks inside protected comments (`<!-- loom:links start -->...<!-- loom:links end -->`). Generate filtered index dashboards or SQL-driven views on demand.
 - **Built-in Agent Skills**: Ships with agent skills (`using-loom-cli`, `creating-a-loom-workflow`) so AI coding agents can immediately discover, operate, and extend loom workflows.
 
@@ -149,13 +150,14 @@ loom --json <command> ...
 - `loom apply <changeset.yaml> [--dry-run]`: Execute an atomic multi-operation batch.
 
 ### SQL Queries & Indexes
-- `loom render [--check] [--debug]`: Refresh inline views (`<!-- loom view: ... -->` markers and model-defined `%% @view`s) in place. `--check` is a no-write dry run for CI: exit 1 naming stale files. `--debug` prints the resolved SQL per view.
+- `loom render [--check] [--debug]`: Refresh inline views (`<!-- loom view: ... -->` markers and model-defined `%% @view`s) and includes (`<!-- loom include: <uri> [h1..h6] [notitle] -->`, which transcludes another document's prose, shifting its headings and relinking its prose to the including file) in place. `--check` is a no-write dry run for CI: exit 1 naming stale files. `--debug` prints the resolved SQL per view.
 - `loom find <uri> [--depth n] [--kind kind] [--linked]/[--unlinked]`: Recursive counterpart of `ls` — walk directories, files and linkable anchors below a uri, unlimited depth by default.
 - `loom rebuild`: Rebuild the embedded DuckDB projection at `design/.loom/db/<branch>/loom.duckdb` — one database file per git branch, so model changes on a branch never collide with `main`.
 - `loom query "<sql>"`: Run arbitrary SQL over document tables or the edge triple store.
   ```bash
   loom query "SELECT uri, title FROM issue WHERE status = 'open'"
   loom query "SELECT subject, object FROM edge WHERE relation = 'blocks'"
+  loom query "SELECT uri, body FROM issue"   # body = the markdown prose
   ```
 - `loom index [--check]`: Regenerate all Markdown index views (`class: index`). `--check` exits with non-zero in CI if indexes are out of date.
 

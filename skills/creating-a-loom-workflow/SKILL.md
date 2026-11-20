@@ -253,6 +253,31 @@ named `%% @view` when the query is reused across pages; use inline SQL for
 one-offs. An open-ended issue list (`SELECT uri, title FROM issue`) is fine
 for a dashboard, but day-to-day boards want the filter.
 
+### Assembling documents from documents
+
+Where a view renders *query results*, an include transcludes another
+document's *prose*:
+
+```markdown
+<!-- loom include: slide:intro.md h3 -->
+<!-- loom include: slide:intro.md h3 end -->
+```
+
+`h3` emits the document's `title` as `### Title` and shifts its own headings
+below it; `h3 notitle` shifts the shallowest heading to `h3` and emits no
+title; no level transcludes verbatim. Links in the transcluded prose are
+rewritten relative to the including file.
+
+Reach for this when the workflow produces a document assembled out of
+instances — a slide deck of `slide:` documents, a release note built from
+`change:` entries, a handbook of `policy:` sections. Design the class so each
+instance is a self-contained section with one `title`, and the assembly file
+becomes a list of include markers.
+
+Expansion is one level per run and always from the database, so an include
+cannot copy another document's generated output and a cycle cannot grow a
+file. `SELECT body FROM <class>` is the same prose if you need it in SQL.
+
 ### Legacy `view:` format
 
 If there are old style index files with `view:` frontmatter rather than in model

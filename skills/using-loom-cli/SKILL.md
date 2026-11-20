@@ -1,6 +1,6 @@
 ---
 name: using-loom-cli
-description: How to install, invoke, and use the loom CLI to inspect, validate, mutate, link, and query document graphs. Use whenever working in a project governed by loom, when creating or modifying design documents, linking source code to design instances, querying graph state via SQL, maintaining navigational indexes, or troubleshooting graph diagnostics.
+description: How to install, invoke, and use the loom CLI to inspect, validate, mutate, link, and query document graphs. Use whenever working in a project governed by loom, when creating or modifying design documents, linking source code (including R Markdown and Quarto chunks) to design instances, querying graph state via SQL, transcluding one document into another with loom include markers, maintaining navigational indexes, or troubleshooting graph diagnostics.
 ---
 
 # Using the Loom CLI
@@ -35,6 +35,15 @@ Model-driven markdown documentation graph
 
 ### Language Parser Prefetch
 `loom` uses Tree-Sitter grammars for code parsing and anchor resolution. Grammars download **lazily**, on the first parse of a file in that language, so normally you need do nothing.
+
+**R Markdown and Quarto** (`.Rmd`, `.qmd`) are addressed through the markdown
+grammar, and the linkable anchor is the executable chunk, named by its label:
+````{r setup}``` or Quarto's `#| label: setup`, addressed as
+`src:analysis.Rmd#setup`. An **unlabelled chunk has no address** — label it to
+make it linkable — and a plain ````r``` fence is prose, not a chunk. A
+reverse-link comment is written on the chunk's first line in the embedded
+language's comment style (`#` for r and python). The file as a whole cannot be
+annotated: name a chunk.
 
 On offline or sandboxed setups that lazy download fails, so warm the cache first by naming the languages the repository contains. At least one language is required — there is no default set:
 ```bash
@@ -117,6 +126,7 @@ loom ls issue:                       # List all instances of class 'issue'
 loom ls src:                         # List files in source directory (src: is wherever the model's `%% @prefix src:` points)
 loom ls src:auth.ts                  # List linkable symbols/anchors in file
 loom ls src:auth.ts --kind Method   # Filter symbols by kind
+loom ls src:analysis.Rmd             # R Markdown / Quarto: the labelled chunks
 
 # Recursive discovery over the whole tree (find) — unlimited depth by default
 loom find src:                        # Dirs, files and every anchor, sorted
@@ -156,7 +166,8 @@ loom link src:auth.ts#login implements issue:new-feature.md
 # Or link source code targeting an anchor from a line number:
 loom link src:auth.ts --line 42 implements issue:new-feature.md
 
-# Remove link
+# Remove link (the far end need not still exist: unlinking is how a link to a
+# deleted or moved file is cleaned up)
 loom unlink issue:new-feature.md blocks issue:old-feature.md
 loom unlink src:auth.ts#login implements issue:new-feature.md
 
@@ -350,6 +361,36 @@ do not resolve (missing files, non-uris) stay plain text.
 
 `render` automatically rebuilds the DuckDB database if it does not exist.
 
+### Includes (Transcluding One Document Into Another)
+
+`loom render` also expands `<!-- loom include: <uri> [h1..h6] [notitle] -->`,
+which pastes another document's prose into this one — the building block for
+assembling a deck, a report or a handbook out of the graph.
+
+```markdown
+<!-- loom include: slide:intro.md h3 -->
+<!-- loom include: slide:intro.md h3 end -->
+```
+
+- **No level**: transcluded verbatim.
+- **`h3`**: the document's `title` is emitted as `### Title` and its own
+  headings shift to `h4` and below.
+- **`h3 notitle`**: no title; the shallowest heading in the document becomes
+  `h3`. A document with no `title` attribute degrades to this form.
+- Relative depth and gaps survive the shift. Past six hashes CommonMark stops
+  seeing a heading and renders the line as text — the author picked the level.
+- Links in the transcluded prose are rewritten relative to the *including*
+  file, so they work from where the text now lives.
+- An unknown option word is `render/bad-include`; a uri with no instance file
+  is `render/missing-include`. Nothing is written in either case.
+
+**One level per run.** Includes and views expand from the database, which
+holds source prose with every marker collapsed back to its bare opener — so a
+transclusion never copies another document's generated output. If A includes B
+and B includes C, rendering A expands B but not C; rendering B expands C. A
+cycle therefore cannot grow a file, and `render` stays idempotent. A marker
+arriving inside transcluded prose is text, and stays text.
+
 ### Querying with SQL (DuckDB)
 The graph and relations project into DuckDB:
 ```bash
@@ -360,7 +401,21 @@ loom rebuild
 # Query concrete class tables or edge triples
 loom query "SELECT uri, title, status FROM issue WHERE status = 'open'"
 loom query "SELECT subject, relation, object FROM edge WHERE relation = 'blocks'"
+
+# Every class table also has a `body` column: the markdown prose
+loom query "SELECT uri, body FROM issue WHERE status = 'open'"
 ```
+
+`query` rescans the markdown first, so hand edits since the last `rebuild`
+are always visible.
+
+#### The `body` column
+Each class table carries `uri`, `id`, `path` and `body` alongside the
+declared attributes. `body` is the prose: no frontmatter, no protected link
+block, marker sections collapsed to their bare openers, and **links in curie
+form** (`[A](issue:a.md)`, not the relative link on disk) so the text can be
+moved to another file. A class that declares its own `body` attribute keeps
+it and loses the built-in column.
 
 #### Class-typed attributes project as STRUCTs
 Nested values (e.g. `reporter: { name, email }`) become DuckDB `STRUCT(...)`
@@ -416,7 +471,10 @@ loom similar issue:fix-login.md
 | `graph/non-canonical-uri` | A URI has unnecessary path segments or wrong format. | Run `loom validate --fix`. |
 | `graph/renamed-symbol` | Source symbol anchor broken, but matches a renamed symbol since `HEAD`. | Run `loom validate --fix` to rewrite. |
 | `graph/missing-symbol` | Source anchor `#symbol` not found in file. | Use `loom ls src:path` or suggestion in diagnostic `fix` to correct name. |
-| `graph/missing-source-file` | Target file in `src:` URI does not exist. | Check file path or remove link. |
+| `graph/missing-source-file` | Target file in `src:` URI does not exist. | Check file path, or `loom unlink` the link (the target need not exist). |
+| `graph/renamed-file` | The file is gone and git records where it moved to (a staged rename, or the commit that removed the path). | Run `loom validate --fix` to rewrite the uri, anchor and all. An unstaged `mv` is invisible to git and reports as missing instead. |
+| `render/bad-include` | An include marker has an option word that is not `h1`..`h6` or `notitle`. | Fix the marker. Nothing was written. |
+| `render/missing-include` | An include names a uri with no instance file. | Create it, or correct the uri (`loom ls <class>:`). |
 | `graph/dangling-link` | Referenced design URI does not exist. | Create missing document or remove edge. |
 | `graph/inbound-cardinality` | A required relation is missing or exceeds cardinality (e.g. `1`, `0..1`). | Adjust edges with `link` or `unlink`. |
 | `source/ambiguous-anchor` | Symbol name appears multiple times in file (e.g. nested scope or overload). | Use fully-qualified anchor path (e.g. `Class.method` or `func(int,string)`). |
